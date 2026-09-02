@@ -9,7 +9,6 @@ out/
 build/
 
 # env files
-.env
 .env*.local
 
 # vercel
@@ -31,10 +30,13 @@ playwright/.cache/
 # local tool configs
 .obsidian/
 .claude/
-.atl/
-.DS_Store
-.opencode/
 .agents/
+.opencode/
+.atl/
+.config/
+.env*
+.DS_Store
+opencode.json
 
 # local scratch/worktree dirs (agent orchestration)
 .worktrees/
