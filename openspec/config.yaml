@@ -1,0 +1,51 @@
+schema: spec-driven
+artifact_store: hybrid
+baseline: baseline-from-current-implementation
+
+context: |
+  medica-app is a Next.js App Router + TypeScript app for a dental clinic.
+  It exposes a WhatsApp inbound agent (Meta WhatsApp Cloud API) deployed on Vercel.
+  The agent is dual-mode: it answers static approved knowledge (whatsapp_knowledge_entries)
+  and performs dynamic appointment booking against the agenda (business_hours - appointments).
+  Supabase/Postgres is the source of truth for agenda, patients, services, providers,
+  knowledge, and WhatsApp conversation data. Migrations are the source of truth for schema and RLS.
+  The inbound WhatsApp pipeline reuses (copy + adapt) the TravelHub inbound agent code.
+
+testing:
+  strict_tdd: true
+  detected: 2026-08-27
+  commands:
+    typecheck: npx tsc --noEmit
+    lint: npm run lint
+    unit: npm run test
+    e2e: npm run test:e2e
+    build: npm run build
+  layers:
+    unit: Vitest
+    integration: Supabase service-role data layer tests where applicable
+
+rules:
+  proposal:
+    - Include rollback plan for risky changes.
+    - Do not modify travelhub-app; copy + adapt only.
+  specs:
+    - Use RFC 2119 keywords: MUST, SHALL, SHOULD, MAY.
+    - Every requirement MUST include at least one Given/When/Then scenario.
+    - Specs describe observable behavior, not implementation internals.
+  design:
+    - The LLM proposes; the backend validates and executes. Never invert this.
+    - Availability is always computed from the DB, never from the model.
+  tasks:
+    - Group tasks by verification phase and keep them reviewable.
+  apply:
+    tdd: true
+    test_command: npm run test
+    guidelines:
+      - External integrations MUST degrade gracefully when keys are missing.
+      - Booking writes MUST be atomic (exclusion constraint per provider).
+  verify:
+    test_command: npm run test
+    build_command: npm run build
+    coverage_threshold: 0
+  archive:
+    - Preserve archived change folders as audit trail.

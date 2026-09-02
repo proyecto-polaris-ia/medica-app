@@ -1,0 +1,44 @@
+# dependencies
+node_modules/
+
+# next.js
+.next/
+out/
+
+# production
+build/
+
+# env files
+.env
+.env*.local
+
+# vercel
+.vercel
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+
+# vitest
+test-results/
+
+# playwright
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
+
+# local tool configs
+.obsidian/
+.claude/
+.atl/
+.DS_Store
+.opencode/
+.agents/
+
+# local scratch/worktree dirs (agent orchestration)
+.worktrees/
+.nodeterm/
+
+# local agent memory
+.engram/
