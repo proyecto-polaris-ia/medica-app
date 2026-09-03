@@ -21,6 +21,8 @@ export function ResultStep({
   onDecline: () => void;
 }) {
   if (confirmation) {
+    const startAt = new Date(confirmation.startAt as string);
+    const endAt = new Date(confirmation.endAt as string);
     return (
       <div className="rounded-lg bg-green-50 p-6 text-center">
         <h3 className="text-lg font-semibold text-green-800">
@@ -30,7 +32,7 @@ export function ResultStep({
           {confirmation.patientName as string}
         </p>
         <p className="text-green-700">
-          {confirmation.startAt as string} – {confirmation.endAt as string}
+          {timeFormatter.format(startAt)} – {timeFormatter.format(endAt)}
         </p>
       </div>
     );

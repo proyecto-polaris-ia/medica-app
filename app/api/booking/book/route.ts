@@ -37,7 +37,7 @@ export async function POST(request: Request): Promise<Response> {
     const fullName =
       typeof body.fullName === 'string' ? body.fullName : undefined;
 
-    const patient = await resolvePatient({ phone });
+    const patient = await resolvePatient({ phone, fullName });
 
     const result = await bookAppointment({
       patientId: patient.id,

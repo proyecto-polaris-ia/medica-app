@@ -79,7 +79,12 @@ export default function AppointmentsPage() {
       const providerData = await providerRes.json();
       const serviceData = await serviceRes.json();
       setAppointments(apptData.appointments);
-      setPatients(patientData.patients);
+      setPatients(
+        (patientData.patients ?? []).map((p: { id: string; fullName: string }) => ({
+          id: p.id,
+          name: p.fullName,
+        }))
+      );
       setProviders(providerData.providers);
       setServices(serviceData.services);
     } catch (err) {
