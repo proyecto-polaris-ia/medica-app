@@ -17,10 +17,23 @@ vi.mock('../_lib/flag', () => ({
   isBookingUiEnabled: vi.fn(),
 }));
 
+vi.mock('@/lib/supabase/auth', () => ({
+  requireUser: vi.fn(),
+  UnauthorizedError: class extends Error {
+    constructor() {
+      super('Unauthorized');
+      this.name = 'UnauthorizedError';
+    }
+  },
+}));
+
 import { bookAppointment } from '@/lib/booking/booking';
 import { findNextAvailable } from '@/lib/booking/next-available';
 import { resolvePatient } from '@/lib/booking/patient-resolution';
 import { isBookingUiEnabled } from '../_lib/flag';
+import { requireUser, UnauthorizedError } from '@/lib/supabase/auth';
+
+const USER = { id: 'user-1', email: 'a@b.c' };
 
 const validBody = {
   serviceId: '550e8400-e29b-41d4-a716-446655440000',
@@ -34,6 +47,24 @@ const validBody = {
 describe('POST /api/booking/book', () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    (requireUser as ReturnType<typeof vi.fn>).mockResolvedValue(USER);
+  });
+
+  it('returns 401 when there is no session', async () => {
+    (isBookingUiEnabled as ReturnType<typeof vi.fn>).mockReturnValue(true);
+    (requireUser as ReturnType<typeof vi.fn>).mockRejectedValue(
+      new UnauthorizedError()
+    );
+
+    const res = await POST(
+      new Request('http://localhost/api/booking/book', {
+        method: 'POST',
+        body: JSON.stringify(validBody),
+      })
+    );
+
+    expect(res.status).toBe(401);
+    expect(resolvePatient).not.toHaveBeenCalled();
   });
 
   it('returns 404 when the booking UI flag is off', async () => {
