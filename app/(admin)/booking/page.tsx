@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation';
 import { BookingWizard } from '@/components/booking/BookingWizard';
-import { isBookingUiEnabled } from '../api/booking/_lib/flag';
+import { isBookingUiEnabled } from '../../api/booking/_lib/flag';
 
 export default function BookingPage() {
   if (!isBookingUiEnabled()) {

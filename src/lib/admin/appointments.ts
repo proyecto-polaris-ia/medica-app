@@ -1,0 +1,153 @@
+import { getSupabaseAdmin } from '@/lib/supabase/server';
+import type { Appointment, AppointmentInput } from './types';
+import {
+  parseAppointmentStatus,
+  parseIsoDate,
+  parseUuid,
+  ValidationError,
+} from './validate';
+import { ConflictError, NotFoundError } from './errors';
+
+const SELECT_COLUMNS =
+  'id, patient_id, service_id, provider_id, start_at, end_at, status, created_at, updated_at';
+
+function mapRow(row: Record<string, unknown>): Appointment {
+  return {
+    id: row.id as string,
+    patientId: (row.patient_id as string | null) ?? null,
+    serviceId: row.service_id as string,
+    providerId: row.provider_id as string,
+    startAt: row.start_at as string,
+    endAt: row.end_at as string,
+    status: row.status as Appointment['status'],
+    createdAt: row.created_at as string,
+    updatedAt: row.updated_at as string,
+  };
+}
+
+export async function listAppointments(): Promise<Appointment[]> {
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from('appointments')
+    .select(SELECT_COLUMNS)
+    .order('start_at', { ascending: false });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return (data ?? []).map(mapRow);
+}
+
+function validateAppointmentInput(input: AppointmentInput): {
+  patient_id?: string | null;
+  service_id: string;
+  provider_id: string;
+  start_at: string;
+  end_at: string;
+  status: Appointment['status'];
+} {
+  const startAt = parseIsoDate(input.startAt, 'startAt');
+  const endAt = parseIsoDate(input.endAt, 'endAt');
+  if (endAt <= startAt) {
+    throw new ValidationError('endAt', 'endAt must be after startAt');
+  }
+
+  return {
+    patient_id: input.patientId === undefined ? null : input.patientId,
+    service_id: parseUuid(input.serviceId, 'serviceId'),
+    provider_id: parseUuid(input.providerId, 'providerId'),
+    start_at: startAt.toISOString(),
+    end_at: endAt.toISOString(),
+    status: parseAppointmentStatus(
+      input.status ?? 'requested',
+      'status'
+    ),
+  };
+}
+
+function isPostgresError(
+  error: unknown
+): error is { code: string; message: string } {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    typeof (error as { code: string }).code === 'string'
+  );
+}
+
+export async function createAppointment(
+  input: AppointmentInput
+): Promise<Appointment> {
+  const payload = validateAppointmentInput(input);
+  const supabase = getSupabaseAdmin();
+
+  try {
+    const { data, error } = await supabase
+      .from('appointments')
+      .insert(payload)
+      .select(SELECT_COLUMNS)
+      .single();
+
+    if (error || !data) {
+      throw new Error(error?.message ?? 'Failed to create appointment');
+    }
+
+    return mapRow(data);
+  } catch (error) {
+    if (isPostgresError(error) && error.code === '23P01') {
+      throw new ConflictError(
+        'The selected time slot overlaps with an existing appointment for this provider.'
+      );
+    }
+    throw error;
+  }
+}
+
+export async function updateAppointment(
+  id: string,
+  input: AppointmentInput
+): Promise<Appointment> {
+  const parsedId = parseUuid(id, 'id');
+  const payload = validateAppointmentInput(input);
+  const supabase = getSupabaseAdmin();
+
+  try {
+    const { data, error } = await supabase
+      .from('appointments')
+      .update(payload)
+      .eq('id', parsedId)
+      .select(SELECT_COLUMNS)
+      .single();
+
+    if (error) {
+      throw new Error(error.message);
+    }
+    if (!data) {
+      throw new NotFoundError('Appointment');
+    }
+
+    return mapRow(data);
+  } catch (error) {
+    if (isPostgresError(error) && error.code === '23P01') {
+      throw new ConflictError(
+        'The selected time slot overlaps with an existing appointment for this provider.'
+      );
+    }
+    throw error;
+  }
+}
+
+export async function deleteAppointment(id: string): Promise<void> {
+  const parsedId = parseUuid(id, 'id');
+  const supabase = getSupabaseAdmin();
+  const { error } = await supabase
+    .from('appointments')
+    .delete()
+    .eq('id', parsedId);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+}

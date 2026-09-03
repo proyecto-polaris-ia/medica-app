@@ -9,12 +9,42 @@ vi.mock('../_lib/flag', () => ({
   isBookingUiEnabled: vi.fn(),
 }));
 
+vi.mock('@/lib/supabase/auth', () => ({
+  requireUser: vi.fn(),
+  UnauthorizedError: class extends Error {
+    constructor() {
+      super('Unauthorized');
+      this.name = 'UnauthorizedError';
+    }
+  },
+}));
+
 import { getFreeSlots } from '@/lib/booking/availability';
 import { isBookingUiEnabled } from '../_lib/flag';
+import { requireUser, UnauthorizedError } from '@/lib/supabase/auth';
+
+const USER = { id: 'user-1', email: 'a@b.c' };
 
 describe('GET /api/booking/slots', () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    (requireUser as ReturnType<typeof vi.fn>).mockResolvedValue(USER);
+  });
+
+  it('returns 401 when there is no session', async () => {
+    (isBookingUiEnabled as ReturnType<typeof vi.fn>).mockReturnValue(true);
+    (requireUser as ReturnType<typeof vi.fn>).mockRejectedValue(
+      new UnauthorizedError()
+    );
+
+    const res = await GET(
+      new Request(
+        'http://localhost/api/booking/slots?providerId=550e8400-e29b-41d4-a716-446655440000&serviceId=550e8400-e29b-41d4-a716-446655440001&date=2026-09-10'
+      )
+    );
+
+    expect(res.status).toBe(401);
+    expect(getFreeSlots).not.toHaveBeenCalled();
   });
 
   it('returns 404 when the booking UI flag is off', async () => {
