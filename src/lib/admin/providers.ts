@@ -28,6 +28,25 @@ export async function listProviders(): Promise<Provider[]> {
   return (data ?? []).map(mapRow);
 }
 
+export async function getProvider(id: string): Promise<Provider> {
+  const parsedId = parseUuid(id, 'id');
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from('providers')
+    .select(SELECT_COLUMNS)
+    .eq('id', parsedId)
+    .single();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+  if (!data) {
+    throw new NotFoundError('Provider');
+  }
+
+  return mapRow(data);
+}
+
 function validateProviderInput(input: ProviderInput): { name: string } {
   return {
     name: parseNonEmptyString(input.name, 'name'),

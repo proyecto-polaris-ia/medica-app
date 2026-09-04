@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { DataTable } from '@/components/admin/DataTable';
 import { EmptyState } from '@/components/admin/EmptyState';
 import { ErrorState } from '@/components/admin/ErrorState';
@@ -52,6 +54,9 @@ function fromLocalInput(value: string): string {
 }
 
 export default function AppointmentsPage() {
+  const searchParams = useSearchParams();
+  const providerFilter = searchParams.get('providerId') ?? undefined;
+
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [patients, setPatients] = useState<Reference[]>([]);
   const [providers, setProviders] = useState<Reference[]>([]);
@@ -177,6 +182,10 @@ export default function AppointmentsPage() {
     return new Date(iso).toLocaleString('es-MX');
   }
 
+  const visibleAppointments = providerFilter
+    ? appointments.filter((a) => a.providerId === providerFilter)
+    : appointments;
+
   return (
     <div>
       <div className="mb-6 flex items-center justify-between">
@@ -189,12 +198,27 @@ export default function AppointmentsPage() {
         </button>
       </div>
 
+      {providerFilter && (
+        <div className="mb-4 flex items-center justify-between rounded-md bg-blue-50 px-4 py-2 text-sm text-blue-800">
+          <span>Filtrando por proveedor</span>
+          <Link href="/appointments" className="font-medium underline">
+            Quitar filtro
+          </Link>
+        </div>
+      )}
+
       {loading && <LoadingState />}
       {error && <ErrorState message={error} onRetry={loadData} />}
-      {!loading && !error && appointments.length === 0 && (
-        <EmptyState message="No hay citas registradas." />
+      {!loading && !error && visibleAppointments.length === 0 && (
+        <EmptyState
+          message={
+            providerFilter
+              ? 'No hay citas registradas para este proveedor.'
+              : 'No hay citas registradas.'
+          }
+        />
       )}
-      {!loading && !error && appointments.length > 0 && (
+      {!loading && !error && visibleAppointments.length > 0 && (
         <DataTable
           columns={[
             { header: 'Paciente', cell: (a) => refName(patients, a.patientId ?? '') || 'Sin paciente' },
@@ -204,7 +228,7 @@ export default function AppointmentsPage() {
             { header: 'Fin', cell: (a) => formatDate(a.endAt) },
             { header: 'Estado', cell: (a) => a.status },
           ]}
-          rows={appointments}
+          rows={visibleAppointments}
           onEdit={openEdit}
           onDelete={handleDelete}
         />

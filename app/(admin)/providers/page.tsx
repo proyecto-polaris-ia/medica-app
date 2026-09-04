@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { DataTable } from '@/components/admin/DataTable';
 import { EmptyState } from '@/components/admin/EmptyState';
 import { ErrorState } from '@/components/admin/ErrorState';
@@ -17,6 +18,7 @@ type Provider = {
 const emptyProvider = { name: '' };
 
 export default function ProvidersPage() {
+  const router = useRouter();
   const [providers, setProviders] = useState<Provider[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -102,6 +104,10 @@ export default function ProvidersPage() {
     }
   }
 
+  function handleView(provider: Provider) {
+    router.push(`/providers/${provider.id}`);
+  }
+
   return (
     <div>
       <div className="mb-6 flex items-center justify-between">
@@ -125,6 +131,7 @@ export default function ProvidersPage() {
           rows={providers}
           onEdit={openEdit}
           onDelete={handleDelete}
+          onView={handleView}
         />
       )}
 
