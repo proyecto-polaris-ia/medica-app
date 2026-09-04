@@ -39,6 +39,50 @@ export async function listAppointments(): Promise<Appointment[]> {
   return (data ?? []).map(mapRow);
 }
 
+const MAX_RANGE_DAYS = 62;
+const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+
+function validateDateRange(
+  startAtIso: string,
+  endAtIso: string,
+  startField = 'start',
+  endField = 'end'
+): { startAt: Date; endAt: Date } {
+  const startAt = parseIsoDate(startAtIso, startField);
+  const endAt = parseIsoDate(endAtIso, endField);
+
+  if (endAt <= startAt) {
+    throw new ValidationError(endField, `${endField} must be after ${startField}`);
+  }
+
+  const spanDays = (endAt.getTime() - startAt.getTime()) / ONE_DAY_MS;
+  if (spanDays > MAX_RANGE_DAYS) {
+    throw new ValidationError(endField, 'Range cannot exceed 62 days');
+  }
+
+  return { startAt, endAt };
+}
+
+export async function listAppointmentsRange(
+  startAtIso: string,
+  endAtIso: string
+): Promise<Appointment[]> {
+  const { startAt, endAt } = validateDateRange(startAtIso, endAtIso);
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from('appointments')
+    .select(SELECT_COLUMNS)
+    .gte('start_at', startAt.toISOString())
+    .lt('start_at', endAt.toISOString())
+    .order('start_at', { ascending: true });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return (data ?? []).map(mapRow);
+}
+
 function validateAppointmentInput(input: AppointmentInput): {
   patient_id?: string | null;
   service_id: string;

@@ -2,16 +2,25 @@ import { requireUser } from '../_lib/auth';
 import {
   createAppointment,
   listAppointments,
+  listAppointmentsRange,
 } from '@/lib/admin/appointments';
 import type { AppointmentStatus } from '@/lib/admin/types';
 import { parseJsonBody, handleAdminRequest } from '../_lib/responses';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET(_request: Request): Promise<Response> {
+export async function GET(request: Request): Promise<Response> {
   return handleAdminRequest(async () => {
     await requireUser();
-    const appointments = await listAppointments();
+    const { searchParams } = new URL(request.url);
+    const start = searchParams.get('start');
+    const end = searchParams.get('end');
+
+    const appointments =
+      start && end
+        ? await listAppointmentsRange(start, end)
+        : await listAppointments();
+
     return Response.json({ appointments });
   });
 }

@@ -7,15 +7,14 @@ import { EmptyState } from '@/components/admin/EmptyState';
 import { ErrorState } from '@/components/admin/ErrorState';
 import { FormModal } from '@/components/admin/FormModal';
 import { LoadingState } from '@/components/admin/LoadingState';
+import type { Provider } from '@/lib/admin/types';
+import { FALLBACK_COLOR } from '@/lib/admin/timezone';
 
-type Provider = {
-  id: string;
-  name: string;
-  createdAt: string;
-  updatedAt: string;
-};
+const emptyProvider = { name: '', color: '' };
 
-const emptyProvider = { name: '' };
+function isValidHex(value: string): boolean {
+  return /^#[0-9a-fA-F]{6}$/.test(value);
+}
 
 export default function ProvidersPage() {
   const router = useRouter();
@@ -54,7 +53,7 @@ export default function ProvidersPage() {
 
   function openEdit(provider: Provider) {
     setEditing(provider);
-    setForm({ name: provider.name });
+    setForm({ name: provider.name, color: provider.color ?? '' });
     setIsModalOpen(true);
   }
 
@@ -71,10 +70,14 @@ export default function ProvidersPage() {
         ? `/api/admin/providers/${editing.id}`
         : '/api/admin/providers';
       const method = editing ? 'PATCH' : 'POST';
+      const payload = {
+        name: form.name,
+        color: form.color || null,
+      };
       const res = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
+        body: JSON.stringify(payload),
       });
 
       if (!res.ok) {
@@ -108,6 +111,11 @@ export default function ProvidersPage() {
     router.push(`/providers/${provider.id}`);
   }
 
+  const colorPreview = isValidHex(form.color) ? form.color : FALLBACK_COLOR;
+  const colorHint = form.color && !isValidHex(form.color)
+    ? 'Formato inválido. Se guardará sin color.'
+    : '';
+
   return (
     <div>
       <div className="mb-6 flex items-center justify-between">
@@ -127,7 +135,19 @@ export default function ProvidersPage() {
       )}
       {!loading && !error && providers.length > 0 && (
         <DataTable
-          columns={[{ header: 'Nombre', cell: (p) => p.name }]}
+          columns={[
+            { header: 'Nombre', cell: (p) => p.name },
+            {
+              header: 'Color',
+              cell: (p) => (
+                <span
+                  className="inline-block h-4 w-4 rounded-full border border-gray-300"
+                  style={{ backgroundColor: p.color || FALLBACK_COLOR }}
+                  aria-label={p.color ? `Color ${p.color}` : 'Sin color'}
+                />
+              ),
+            },
+          ]}
           rows={providers}
           onEdit={openEdit}
           onDelete={handleDelete}
@@ -150,9 +170,31 @@ export default function ProvidersPage() {
             <input
               type="text"
               value={form.name}
-              onChange={(e) => setForm({ name: e.target.value })}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
               className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2"
             />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700">
+              Color (hex)
+            </label>
+            <div className="mt-1 flex items-center gap-3">
+              <input
+                type="text"
+                value={form.color}
+                placeholder="#1f77b4"
+                onChange={(e) => setForm({ ...form, color: e.target.value })}
+                className="block w-full rounded-md border border-gray-300 px-3 py-2"
+              />
+              <span
+                className="inline-block h-8 w-8 shrink-0 rounded-full border border-gray-300"
+                style={{ backgroundColor: colorPreview }}
+                aria-label="Vista previa del color"
+              />
+            </div>
+            {colorHint && (
+              <p className="mt-1 text-xs text-amber-600">{colorHint}</p>
+            )}
           </div>
         </FormModal>
       )}

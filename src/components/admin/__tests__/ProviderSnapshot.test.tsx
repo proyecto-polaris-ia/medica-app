@@ -5,7 +5,7 @@ import type { ProviderSnapshot as SnapshotType } from '@/lib/admin/types';
 
 function buildSnapshot(overrides?: Partial<SnapshotType>): SnapshotType {
   return {
-    provider: { id: '1', name: 'Dra. García', createdAt: '', updatedAt: '' },
+    provider: { id: '1', name: 'Dra. García', color: null, createdAt: '', updatedAt: '' },
     upcoming: [],
     today: [],
     recentClients: [],

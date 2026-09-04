@@ -16,12 +16,14 @@ export type PatientInput = {
 export type Provider = {
   id: string;
   name: string;
+  color: string | null;
   createdAt: string;
   updatedAt: string;
 };
 
 export type ProviderInput = {
   name: string;
+  color?: string | null;
 };
 
 export type Service = {

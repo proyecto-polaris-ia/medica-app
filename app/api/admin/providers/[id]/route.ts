@@ -27,6 +27,7 @@ export async function PATCH(
     const body = await parseJsonBody(request);
     const provider = await updateProvider(id, {
       name: body.name as string,
+      color: body.color as string | null | undefined,
     });
     return Response.json({ provider });
   });
