@@ -1,14 +1,15 @@
 import { getSupabaseAdmin } from '@/lib/supabase/server';
 import type { Provider, ProviderInput } from './types';
-import { parseNonEmptyString, parseUuid } from './validate';
+import { parseHexColor, parseNonEmptyString, parseUuid } from './validate';
 import { NotFoundError } from './errors';
 
-const SELECT_COLUMNS = 'id, name, created_at, updated_at';
+const SELECT_COLUMNS = 'id, name, color, created_at, updated_at';
 
 function mapRow(row: Record<string, unknown>): Provider {
   return {
     id: row.id as string,
     name: row.name as string,
+    color: (row.color as string | null) ?? null,
     createdAt: row.created_at as string,
     updatedAt: row.updated_at as string,
   };
@@ -28,9 +29,10 @@ export async function listProviders(): Promise<Provider[]> {
   return (data ?? []).map(mapRow);
 }
 
-function validateProviderInput(input: ProviderInput): { name: string } {
+function validateProviderInput(input: ProviderInput): { name: string; color: string | null } {
   return {
     name: parseNonEmptyString(input.name, 'name'),
+    color: parseHexColor(input.color),
   };
 }
 

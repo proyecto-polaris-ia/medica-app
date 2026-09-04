@@ -16,6 +16,7 @@ vi.mock('@/lib/supabase/auth', () => ({
 
 vi.mock('@/lib/admin/appointments', () => ({
   listAppointments: vi.fn(),
+  listAppointmentsRange: vi.fn(),
   createAppointment: vi.fn(),
 }));
 
@@ -23,6 +24,7 @@ import { requireUser } from '@/lib/supabase/auth';
 import {
   createAppointment,
   listAppointments,
+  listAppointmentsRange,
 } from '@/lib/admin/appointments';
 
 const USER = { id: 'user-1', email: 'a@b.c' };
@@ -55,6 +57,38 @@ describe('/api/admin/appointments', () => {
     const body = await res.json();
     expect(res.status).toBe(200);
     expect(body.appointments).toHaveLength(1);
+    expect(listAppointmentsRange).not.toHaveBeenCalled();
+  });
+
+  it('GET lists appointments in range when start and end are provided', async () => {
+    (listAppointmentsRange as ReturnType<typeof vi.fn>).mockResolvedValue([
+      { id: 'appt-1', serviceId: SERVICE_ID, providerId: PROVIDER_ID },
+    ]);
+    const res = await GET(
+      new Request(
+        'http://localhost/api/admin/appointments?start=2026-06-01T06:00:00.000Z&end=2026-07-01T06:00:00.000Z'
+      )
+    );
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    expect(body.appointments).toHaveLength(1);
+    expect(listAppointmentsRange).toHaveBeenCalledWith(
+      '2026-06-01T06:00:00.000Z',
+      '2026-07-01T06:00:00.000Z'
+    );
+    expect(listAppointments).not.toHaveBeenCalled();
+  });
+
+  it('GET returns 400 for an invalid range', async () => {
+    (listAppointmentsRange as ReturnType<typeof vi.fn>).mockRejectedValue(
+      new ValidationError('end', 'end must be after start')
+    );
+    const res = await GET(
+      new Request(
+        'http://localhost/api/admin/appointments?start=2026-06-10T06:00:00.000Z&end=2026-06-09T06:00:00.000Z'
+      )
+    );
+    expect(res.status).toBe(400);
   });
 
   it('POST creates an appointment', async () => {

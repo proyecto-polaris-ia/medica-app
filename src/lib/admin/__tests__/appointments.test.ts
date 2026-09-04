@@ -4,6 +4,7 @@ import {
   createAppointment,
   deleteAppointment,
   listAppointments,
+  listAppointmentsRange,
   updateAppointment,
 } from '../appointments';
 import { ConflictError } from '../errors';
@@ -25,6 +26,8 @@ describe('appointments service', () => {
   const mockDelete = vi.fn();
   const mockOrder = vi.fn();
   const mockEq = vi.fn();
+  const mockGte = vi.fn();
+  const mockLt = vi.fn();
   const mockSingle = vi.fn();
 
   function buildQuery() {
@@ -35,6 +38,8 @@ describe('appointments service', () => {
       delete: mockDelete.mockReturnThis(),
       order: mockOrder.mockReturnThis(),
       eq: mockEq.mockReturnThis(),
+      gte: mockGte.mockReturnThis(),
+      lt: mockLt.mockReturnThis(),
       single: mockSingle,
     };
   }
@@ -165,5 +170,58 @@ describe('appointments service', () => {
     await deleteAppointment(APPOINTMENT_ID);
 
     expect(mockEq).toHaveBeenCalledWith('id', APPOINTMENT_ID);
+  });
+
+  it('lists appointments within a date range', async () => {
+    mockOrder.mockResolvedValue({
+      data: [{
+        id: APPOINTMENT_ID,
+        patient_id: PATIENT_ID,
+        service_id: SERVICE_ID,
+        provider_id: PROVIDER_ID,
+        start_at: '2026-06-10T14:00:00.000Z',
+        end_at: '2026-06-10T14:30:00.000Z',
+        status: 'confirmed',
+        created_at: '2026-06-01T10:00:00Z',
+        updated_at: '2026-06-01T10:00:00Z',
+      }],
+      error: null,
+    });
+
+    const appointments = await listAppointmentsRange(
+      '2026-06-01T06:00:00.000Z',
+      '2026-07-01T06:00:00.000Z'
+    );
+
+    expect(mockGte).toHaveBeenCalledWith('start_at', '2026-06-01T06:00:00.000Z');
+    expect(mockLt).toHaveBeenCalledWith('start_at', '2026-07-01T06:00:00.000Z');
+    expect(mockOrder).toHaveBeenCalledWith('start_at', { ascending: true });
+    expect(appointments).toHaveLength(1);
+    expect(appointments[0].startAt).toBe('2026-06-10T14:00:00.000Z');
+  });
+
+  it('rejects a range where end is before or equal to start', async () => {
+    await expect(
+      listAppointmentsRange(
+        '2026-06-10T06:00:00.000Z',
+        '2026-06-10T06:00:00.000Z'
+      )
+    ).rejects.toThrow(ValidationError);
+
+    await expect(
+      listAppointmentsRange(
+        '2026-06-10T06:00:00.000Z',
+        '2026-06-09T06:00:00.000Z'
+      )
+    ).rejects.toThrow(ValidationError);
+  });
+
+  it('rejects a range span greater than 62 days', async () => {
+    await expect(
+      listAppointmentsRange(
+        '2026-06-01T06:00:00.000Z',
+        '2026-08-15T06:00:00.000Z'
+      )
+    ).rejects.toThrow(ValidationError);
   });
 });
