@@ -1,0 +1,5 @@
+import { getWccEscalationsQueue } from '@/lib/wcc-escalations';
+import { formatRelativeTime } from '@/lib/date-format';
+import { WccEmptyState, WccNotice } from '../components';
+export const dynamic='force-dynamic';
+export default async function Page(){const data=await getWccEscalationsQueue(); return <main><h2 className="text-xl font-bold">Escalaciones</h2>{data.isConfiguredButUnavailable&&<WccNotice tone="warning">No se pudieron leer las escalaciones.</WccNotice>}{data.escalations.length?<div className="mt-4 space-y-3">{data.escalations.map(e=><article key={e.id} className="rounded-2xl border bg-white p-5"><div className="flex flex-wrap items-center gap-2 text-sm"><strong>{e.priority}</strong><span>·</span><span>{e.status}</span><span>·</span><span>{formatRelativeTime(e.openedAt)}</span></div><p className="mt-2 text-sm text-gray-700">{e.summary??e.reason}</p><p className="mt-2 text-xs text-gray-500">{e.contact?.displayName??e.contact?.phoneE164}</p></article>)}</div>:<WccEmptyState title="Sin escalaciones" description="Los casos que requieran atención humana aparecerán aquí."/>}</main>}
