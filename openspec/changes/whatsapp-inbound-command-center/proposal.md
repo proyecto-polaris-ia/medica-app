@@ -15,4 +15,4 @@ Port the WhatsApp inbound agent and WhatsApp Command Center from TravelHub into 
 - No patient-facing authentication for WhatsApp users.
 
 ## Rollback
-Remove the WhatsApp route, WCC admin route, copied/adapted WhatsApp libraries, and migration `0005_whatsapp_inbound_command_center.sql` before deployment, or roll back the migration in the database if already applied.
+Remove the WhatsApp route, WCC admin route, copied/adapted WhatsApp libraries, and migration `0006_whatsapp_inbound_command_center.sql` before deployment, or roll back the migration in the database if already applied.
