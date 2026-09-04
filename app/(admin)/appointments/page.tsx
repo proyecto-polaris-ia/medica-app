@@ -1,6 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { DataTable } from '@/components/admin/DataTable';
 import { EmptyState } from '@/components/admin/EmptyState';
 import { ErrorState } from '@/components/admin/ErrorState';
@@ -54,6 +56,9 @@ function fromLocalInput(value: string): string {
 }
 
 export default function AppointmentsPage() {
+  const searchParams = useSearchParams();
+  const providerFilter = searchParams?.get('providerId') ?? undefined;
+
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [patients, setPatients] = useState<Reference[]>([]);
   const [providers, setProviders] = useState<Provider[]>([]);
@@ -223,6 +228,10 @@ export default function AppointmentsPage() {
     return new Date(iso).toLocaleString('es-MX');
   }
 
+  const visibleAppointments = providerFilter
+    ? appointments.filter((a) => a.providerId === providerFilter)
+    : appointments;
+
   return (
     <div>
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -263,6 +272,15 @@ export default function AppointmentsPage() {
         </div>
       </div>
 
+      {providerFilter && (
+        <div className="mb-4 flex items-center justify-between rounded-md bg-blue-50 px-4 py-2 text-sm text-blue-800">
+          <span>Filtrando por proveedor</span>
+          <Link href="/appointments" className="font-medium underline">
+            Quitar filtro
+          </Link>
+        </div>
+      )}
+
       {view === 'calendar' && (
         <div className="mb-4 flex items-center justify-between">
           <CalendarNav
@@ -276,11 +294,16 @@ export default function AppointmentsPage() {
 
       {loading && <LoadingState />}
       {error && <ErrorState message={error} onRetry={loadData} />}
-
-      {!loading && !error && view === 'list' && appointments.length === 0 && (
-        <EmptyState message="No hay citas registradas." />
+      {!loading && !error && view === 'list' && visibleAppointments.length === 0 && (
+        <EmptyState
+          message={
+            providerFilter
+              ? 'No hay citas registradas para este proveedor.'
+              : 'No hay citas registradas.'
+          }
+        />
       )}
-      {!loading && !error && view === 'list' && appointments.length > 0 && (
+      {!loading && !error && view === 'list' && visibleAppointments.length > 0 && (
         <DataTable
           columns={[
             { header: 'Paciente', cell: (a) => refName(patients, a.patientId ?? '') || 'Sin paciente' },
@@ -290,7 +313,7 @@ export default function AppointmentsPage() {
             { header: 'Fin', cell: (a) => formatDate(a.endAt) },
             { header: 'Estado', cell: (a) => a.status },
           ]}
-          rows={appointments}
+          rows={visibleAppointments}
           onEdit={openEdit}
           onDelete={handleDelete}
         />

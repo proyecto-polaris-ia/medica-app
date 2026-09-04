@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { DataTable } from '@/components/admin/DataTable';
 import { EmptyState } from '@/components/admin/EmptyState';
 import { ErrorState } from '@/components/admin/ErrorState';
@@ -16,6 +17,7 @@ function isValidHex(value: string): boolean {
 }
 
 export default function ProvidersPage() {
+  const router = useRouter();
   const [providers, setProviders] = useState<Provider[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -105,6 +107,10 @@ export default function ProvidersPage() {
     }
   }
 
+  function handleView(provider: Provider) {
+    router.push(`/providers/${provider.id}`);
+  }
+
   const colorPreview = isValidHex(form.color) ? form.color : FALLBACK_COLOR;
   const colorHint = form.color && !isValidHex(form.color)
     ? 'Formato inválido. Se guardará sin color.'
@@ -145,6 +151,7 @@ export default function ProvidersPage() {
           rows={providers}
           onEdit={openEdit}
           onDelete={handleDelete}
+          onView={handleView}
         />
       )}
 

@@ -3,10 +3,12 @@ import { getSupabaseAdmin } from '@/lib/supabase/server';
 import {
   createProvider,
   deleteProvider,
+  getProvider,
   listProviders,
   updateProvider,
 } from '../providers';
 import { ValidationError } from '../validate';
+import { NotFoundError } from '../errors';
 
 vi.mock('@/lib/supabase/server', () => ({
   getSupabaseAdmin: vi.fn(),
@@ -122,5 +124,34 @@ describe('providers service', () => {
     await deleteProvider(PROVIDER_ID);
 
     expect(mockEq).toHaveBeenCalledWith('id', PROVIDER_ID);
+  });
+
+  describe('getProvider', () => {
+    it('returns a provider by id', async () => {
+      mockSingle.mockResolvedValue({
+        data: { id: PROVIDER_ID, name: 'Dra. Ana', created_at: '2026-09-01T10:00:00Z', updated_at: '2026-09-01T10:00:00Z' },
+        error: null,
+      });
+
+      const provider = await getProvider(PROVIDER_ID);
+
+      expect(provider).toEqual({
+        id: PROVIDER_ID,
+        name: 'Dra. Ana',
+        color: null,
+        createdAt: '2026-09-01T10:00:00Z',
+        updatedAt: '2026-09-01T10:00:00Z',
+      });
+    });
+
+    it('throws NotFoundError when provider does not exist', async () => {
+      mockSingle.mockResolvedValue({ data: null, error: null });
+
+      await expect(getProvider(PROVIDER_ID)).rejects.toThrow(NotFoundError);
+    });
+
+    it('throws ValidationError for a malformed id', async () => {
+      await expect(getProvider('not-a-uuid')).rejects.toThrow(ValidationError);
+    });
   });
 });

@@ -5,6 +5,8 @@ import {
   deleteAppointment,
   listAppointments,
   listAppointmentsRange,
+  listByProviderRange,
+  listUpcomingByProvider,
   updateAppointment,
 } from '../appointments';
 import { ConflictError } from '../errors';
@@ -27,7 +29,9 @@ describe('appointments service', () => {
   const mockOrder = vi.fn();
   const mockEq = vi.fn();
   const mockGte = vi.fn();
+  const mockGt = vi.fn();
   const mockLt = vi.fn();
+  const mockLimit = vi.fn();
   const mockSingle = vi.fn();
 
   function buildQuery() {
@@ -39,7 +43,9 @@ describe('appointments service', () => {
       order: mockOrder.mockReturnThis(),
       eq: mockEq.mockReturnThis(),
       gte: mockGte.mockReturnThis(),
+      gt: mockGt.mockReturnThis(),
       lt: mockLt.mockReturnThis(),
+      limit: mockLimit.mockReturnThis(),
       single: mockSingle,
     };
   }
@@ -170,6 +176,93 @@ describe('appointments service', () => {
     await deleteAppointment(APPOINTMENT_ID);
 
     expect(mockEq).toHaveBeenCalledWith('id', APPOINTMENT_ID);
+  });
+
+  describe('listUpcomingByProvider', () => {
+    it('returns future appointments sorted ascending with patient/service names', async () => {
+      mockLimit.mockResolvedValue({
+        data: [
+          {
+            id: '660e8400-e29b-41d4-a716-446655440001',
+            patient_id: PATIENT_ID,
+            service_id: SERVICE_ID,
+            provider_id: PROVIDER_ID,
+            start_at: '2026-09-05T14:00:00.000Z',
+            end_at: '2026-09-05T14:30:00.000Z',
+            status: 'confirmed',
+            created_at: '2026-09-01T10:00:00Z',
+            updated_at: '2026-09-01T10:00:00Z',
+            patients: { id: PATIENT_ID, full_name: 'Juan Pérez' },
+            services: { id: SERVICE_ID, name: 'Limpieza' },
+          },
+          {
+            id: '660e8400-e29b-41d4-a716-446655440000',
+            patient_id: PATIENT_ID,
+            service_id: SERVICE_ID,
+            provider_id: PROVIDER_ID,
+            start_at: '2026-09-10T14:00:00.000Z',
+            end_at: '2026-09-10T14:30:00.000Z',
+            status: 'confirmed',
+            created_at: '2026-09-01T10:00:00Z',
+            updated_at: '2026-09-01T10:00:00Z',
+            patients: { id: PATIENT_ID, full_name: 'Juan Pérez' },
+            services: { id: SERVICE_ID, name: 'Limpieza' },
+          },
+        ],
+        error: null,
+      });
+
+      const now = new Date('2026-09-01T10:00:00.000Z');
+      const appointments = await listUpcomingByProvider(PROVIDER_ID, now);
+
+      expect(mockGt).toHaveBeenCalledWith('start_at', now.toISOString());
+      expect(mockOrder).toHaveBeenCalledWith('start_at', { ascending: true });
+      expect(appointments).toHaveLength(2);
+      expect(appointments[0].startAt).toBe('2026-09-05T14:00:00.000Z');
+      expect(appointments[1].startAt).toBe('2026-09-10T14:00:00.000Z');
+      expect(appointments[0].patientName).toBe('Juan Pérez');
+      expect(appointments[0].serviceName).toBe('Limpieza');
+    });
+
+    it('respects a custom limit', async () => {
+      mockLimit.mockResolvedValue({ data: [], error: null });
+
+      await listUpcomingByProvider(PROVIDER_ID, new Date(), 3);
+
+      expect(mockLimit).toHaveBeenCalledWith(3);
+    });
+  });
+
+  describe('listByProviderRange', () => {
+    it('returns appointments within the half-open range and maps embeds', async () => {
+      mockOrder.mockResolvedValue({
+        data: [
+          {
+            id: '660e8400-e29b-41d4-a716-446655440002',
+            patient_id: PATIENT_ID,
+            service_id: SERVICE_ID,
+            provider_id: PROVIDER_ID,
+            start_at: '2026-09-03T14:00:00.000Z',
+            end_at: '2026-09-03T14:30:00.000Z',
+            status: 'attended',
+            created_at: '2026-09-01T10:00:00Z',
+            updated_at: '2026-09-01T10:00:00Z',
+            patients: { id: PATIENT_ID, full_name: 'Juan Pérez' },
+            services: { id: SERVICE_ID, name: 'Limpieza' },
+          },
+        ],
+        error: null,
+      });
+
+      const start = new Date('2026-09-03T06:00:00.000Z');
+      const end = new Date('2026-09-04T06:00:00.000Z');
+      const appointments = await listByProviderRange(PROVIDER_ID, start, end);
+
+      expect(mockGte).toHaveBeenCalledWith('start_at', start.toISOString());
+      expect(mockLt).toHaveBeenCalledWith('start_at', end.toISOString());
+      expect(appointments).toHaveLength(1);
+      expect(appointments[0].status).toBe('attended');
+    });
   });
 
   it('lists appointments within a date range', async () => {
