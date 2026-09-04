@@ -1,0 +1,3 @@
+import { updateKnowledgeStatusAction } from './actions';
+import type { WhatsAppKnowledgeEntry } from '@/types';
+export function KnowledgeStatusForm({ entry }: { entry: WhatsAppKnowledgeEntry }) { return <form action={updateKnowledgeStatusAction.bind(null, entry.id)} className="flex gap-2"><select name="status" defaultValue={entry.status} className="rounded-lg border p-2 text-sm"><option value="draft">draft</option><option value="approved">approved</option><option value="archived">archived</option></select><button className="rounded-lg border px-3 py-2 text-sm">Actualizar estado</button></form> }
