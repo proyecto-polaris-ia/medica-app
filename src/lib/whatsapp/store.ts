@@ -1,12 +1,19 @@
 import { getSupabaseAdmin } from '@/lib/supabase/server';
 import type { WhatsAppInboundAgentDecision } from '@/lib/ai/whatsapp-inbound-agent';
 import type { NormalizedWhatsAppInboundEvent, NormalizedWhatsAppStatusEvent, WhatsAppDeliveryStatus } from './normalize';
+import type { FlowState } from '@/lib/flows/types';
 
 export type JsonPayload = Record<string, unknown>;
 export type WhatsAppIngestionResult = { received: number; inserted: number; duplicates: number };
 export type WhatsAppStatusPersistenceResult = { received: number; inserted: number; duplicates: number; matched: number; updated: number };
 export type PersistedWhatsAppInboundEvent = { inserted: boolean; contactId: string; conversationId: string; messageId: string };
-export type WhatsAppConversationContext = { bookingContext?: JsonPayload | null; lastIntent?: string | null; recentMessages?: Array<{ role: 'user' | 'assistant'; content: string }>; summary?: string | null };
+export type WhatsAppConversationContext = { 
+  bookingContext?: JsonPayload | null; 
+  lastIntent?: string | null; 
+  recentMessages?: Array<{ role: 'user' | 'assistant'; content: string }>; 
+  summary?: string | null;
+  flowState?: FlowState | null;
+};
 
 export class WhatsAppStoreConfigurationError extends Error {
   constructor(message = 'WhatsApp webhook persistence is not configured') { super(message); this.name = 'WhatsAppStoreConfigurationError'; }
@@ -29,6 +36,7 @@ export type WhatsAppStore = {
   persistStatusEvents(events: NormalizedWhatsAppStatusEvent[]): Promise<WhatsAppStatusPersistenceResult>;
   loadConversationHistory(conversationId: string, limit?: number): Promise<Array<{ role: 'user' | 'assistant'; content: string }>>;
   updateConversationSummary(input: { conversationId: string; summary: string }): Promise<void>;
+  updateConversationFlowState(input: { conversationId: string; flowState: FlowState | null }): Promise<void>;
 };
 
 function db() {
@@ -87,9 +95,14 @@ async function touchConversation(client: DbClient, conversationId: string, event
 }
 
 export async function loadWhatsAppConversationContext(conversationId: string): Promise<WhatsAppConversationContext> {
-  const result = await db().from('whatsapp_conversations').select('booking_context, last_intent, summary').eq('id', conversationId).maybeSingle();
+  const result = await db().from('whatsapp_conversations').select('booking_context, last_intent, summary, flow_state').eq('id', conversationId).maybeSingle();
   throwIfError(result.error, 'Could not load WhatsApp conversation context');
-  return { bookingContext: (result.data?.booking_context as JsonPayload | null | undefined) ?? null, lastIntent: result.data?.last_intent as string | null | undefined, summary: result.data?.summary as string | null | undefined };
+  return { 
+    bookingContext: (result.data?.booking_context as JsonPayload | null | undefined) ?? null, 
+    lastIntent: result.data?.last_intent as string | null | undefined, 
+    summary: result.data?.summary as string | null | undefined,
+    flowState: (result.data?.flow_state as FlowState | null | undefined) ?? null,
+  };
 }
 
 export async function createWhatsAppIntent(input: { persisted: PersistedWhatsAppInboundEvent; decision: WhatsAppStoreDecision }) {
@@ -168,4 +181,9 @@ export async function loadWhatsAppConversationHistory(conversationId: string, li
 export async function updateWhatsAppConversationSummary(input: { conversationId: string; summary: string }): Promise<void> {
   const result = await db().from('whatsapp_conversations').update({ summary: input.summary.slice(0, 500) }).eq('id', input.conversationId);
   throwIfError(result.error, 'Could not update WhatsApp conversation summary');
+}
+
+export async function updateWhatsAppConversationFlowState(input: { conversationId: string; flowState: FlowState | null }): Promise<void> {
+  const result = await db().from('whatsapp_conversations').update({ flow_state: input.flowState as unknown as JsonPayload }).eq('id', input.conversationId);
+  throwIfError(result.error, 'Could not update WhatsApp conversation flow state');
 }

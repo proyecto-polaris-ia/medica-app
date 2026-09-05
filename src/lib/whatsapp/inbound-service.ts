@@ -26,11 +26,13 @@ import {
   persistWhatsAppStatusEvents,
   updateWhatsAppConversationStatus,
   updateWhatsAppConversationSummary,
+  updateWhatsAppConversationFlowState,
   type JsonPayload,
   type PersistedWhatsAppInboundEvent,
   type WhatsAppStatusPersistenceResult,
   type WhatsAppStore,
 } from './store';
+import { orchestrate, type OrchestratorContext, type OrchestratorResult } from './orchestrator';
 
 export type WhatsAppInboundServiceResult = { received: number; processed: number; duplicates: number; autoAnswered: number; booked: number; escalated: number; sendFailures: number; events: WhatsAppInboundEventResult[] };
 export type WhatsAppWebhookProcessingResult = WhatsAppInboundServiceResult & { statusCallbacks: WhatsAppStatusPersistenceResult };
@@ -61,7 +63,13 @@ const defaultStore: WhatsAppStore = {
   markInboundMessageProcessed: markWhatsAppInboundMessageProcessed,
   persistStatusEvents: persistWhatsAppStatusEvents,
   updateConversationSummary: updateWhatsAppConversationSummary,
+  updateConversationFlowState: updateWhatsAppConversationFlowState,
 };
+
+// Feature flag para activar Flow Engine
+function isFlowEngineEnabled(): boolean {
+  return process.env.WHATSAPP_FLOW_ENGINE_ENABLED === 'true';
+}
 
 function unsupportedDecision(event: NormalizedWhatsAppInboundEvent): WhatsAppInboundAgentDecision {
   return { intent: 'handoff', summary: `Mensaje ${event.messageType} recibido por WhatsApp`, confidence: 1, decision: 'needs_human', escalationReason: 'El mensaje no es texto y requiere revisión humana.', responseText: 'Gracias por escribirnos. Por ahora solo puedo procesar mensajes de texto; una persona del consultorio revisará tu mensaje y te dará seguimiento.', citedKnowledgeIds: [], citedToolCallIds: [] };
@@ -239,6 +247,122 @@ export async function processWhatsAppInboundEvent(event: NormalizedWhatsAppInbou
 
   const conversation = await store.loadConversationContext(persisted.conversationId);
   const recentMessages = await store.loadConversationHistory(persisted.conversationId);
+
+  // Routing: Flow Engine vs Legacy
+  if (isFlowEngineEnabled()) {
+    return await processWithFlowEngine(event, persisted, conversation, recentMessages, store, sendText, options);
+  }
+
+  // Legacy path (backward compatible)
+  return await processWithLegacy(event, persisted, conversation, recentMessages, store, sendText, options);
+}
+
+/**
+ * Procesa mensaje con Flow Engine (nuevo path determinístico)
+ */
+async function processWithFlowEngine(
+  event: NormalizedWhatsAppInboundEvent,
+  persisted: PersistedWhatsAppInboundEvent,
+  conversation: Awaited<ReturnType<typeof loadWhatsAppConversationContext>>,
+  recentMessages: Array<{ role: 'user' | 'assistant'; content: string }>,
+  store: WhatsAppStore,
+  sendText: typeof sendWhatsAppTextMessage,
+  options: WhatsAppInboundServiceOptions
+): Promise<WhatsAppInboundEventResult> {
+  const knowledgeEntries = options.knowledgeEntries ?? [];
+  
+  const orchestratorContext: OrchestratorContext = {
+    store,
+    persisted,
+    event,
+    conversation: {
+      id: persisted.conversationId,
+      flowState: conversation.flowState ?? undefined,
+      bookingContext: conversation.bookingContext,
+      lastIntent: conversation.lastIntent,
+      recentMessages,
+      summary: conversation.summary,
+    },
+    knowledgeEntries,
+    agentProvider: options.agentProvider,
+  };
+
+  const result: OrchestratorResult = await orchestrate(orchestratorContext);
+
+  // Persistir estado del flujo si cambió
+  if (result.flowState) {
+    await store.updateConversationFlowState({ 
+      conversationId: persisted.conversationId, 
+      flowState: result.flowState 
+    });
+  }
+
+  // Construir decisión para compatibilidad
+  const finalDecision: WhatsAppInboundAgentDecision = {
+    ...result.decision,
+    responseText: result.responseText,
+  };
+
+  // Enviar respuesta
+  const body = result.responseText;
+  const customerSend = await sendAndPersist({ 
+    store, 
+    persisted, 
+    to: event.fromPhone, 
+    body, 
+    purpose: result.needsHuman ? 'customer_escalation' : (result.booked ? 'booking' : 'auto_answer'), 
+    sendText 
+  });
+
+  // Manejar escalación si es necesario
+  let humanAlertSend: WhatsAppSendResult | undefined;
+  if (result.needsHuman) {
+    await store.updateConversationStatus({ 
+      conversationId: persisted.conversationId, 
+      status: 'escalated', 
+      lastIntent: finalDecision.intent 
+    });
+    const humanPhone = options.humanAlertPhone ?? process.env.WHATSAPP_HUMAN_ALERT_PHONE;
+    if (humanPhone) {
+      humanAlertSend = await sendAndPersist({ 
+        store, 
+        persisted, 
+        to: humanPhone, 
+        body: `Escalación: ${event.body}`, 
+        purpose: 'human_alert', 
+        sendText 
+      });
+    }
+    await store.markInboundMessageProcessed({ messageId: persisted.messageId, status: 'escalated' });
+  } else {
+    await store.markInboundMessageProcessed({ messageId: persisted.messageId, status: 'responded' });
+  }
+
+  // Actualizar resumen de conversación
+  const summary = buildConversationSummary(conversation.summary, event.body, finalDecision.summary);
+  await store.updateConversationSummary({ conversationId: persisted.conversationId, summary });
+
+  return {
+    providerMessageId: event.providerMessageId,
+    action: result.needsHuman ? 'needs_human' : (result.booked ? 'tool_action' : 'auto_answer'),
+    decision: finalDecision,
+    customerSend,
+    humanAlertSend,
+  };
+}
+
+/**
+ * Procesa mensaje con lógica legacy (backward compatible)
+ */
+async function processWithLegacy(
+  event: NormalizedWhatsAppInboundEvent,
+  persisted: PersistedWhatsAppInboundEvent,
+  conversation: Awaited<ReturnType<typeof loadWhatsAppConversationContext>>,
+  recentMessages: Array<{ role: 'user' | 'assistant'; content: string }>,
+  store: WhatsAppStore,
+  sendText: typeof sendWhatsAppTextMessage,
+  options: WhatsAppInboundServiceOptions
+): Promise<WhatsAppInboundEventResult> {
   const catalog = await defaultBookingContext();
   const bookingCatalog = {
     services: catalog.services.map((s) => ({ id: s.id, name: s.name })),
