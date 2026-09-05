@@ -27,6 +27,7 @@ export default async function AdminLayout({
     { href: '/services', label: 'Servicios' },
     { href: '/business-hours', label: 'Horarios' },
     { href: '/appointments/new', label: 'Reservar cita' },
+    { href: '/whatsapp-command-center', label: 'WhatsApp' },
   ];
 
   return (
