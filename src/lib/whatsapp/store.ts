@@ -6,7 +6,7 @@ export type JsonPayload = Record<string, unknown>;
 export type WhatsAppIngestionResult = { received: number; inserted: number; duplicates: number };
 export type WhatsAppStatusPersistenceResult = { received: number; inserted: number; duplicates: number; matched: number; updated: number };
 export type PersistedWhatsAppInboundEvent = { inserted: boolean; contactId: string; conversationId: string; messageId: string };
-export type WhatsAppConversationContext = { bookingContext?: JsonPayload | null; lastIntent?: string | null };
+export type WhatsAppConversationContext = { bookingContext?: JsonPayload | null; lastIntent?: string | null; recentMessages?: Array<{ role: 'user' | 'assistant'; content: string }> };
 
 export class WhatsAppStoreConfigurationError extends Error {
   constructor(message = 'WhatsApp webhook persistence is not configured') { super(message); this.name = 'WhatsAppStoreConfigurationError'; }
@@ -27,6 +27,7 @@ export type WhatsAppStore = {
   updateConversationStatus(input: { conversationId: string; status: string; lastIntent?: string | null; bookingContext?: JsonPayload | null }): Promise<void>;
   markInboundMessageProcessed(input: { messageId: string; status: 'processed' | 'responded' | 'escalated' | 'failed' }): Promise<void>;
   persistStatusEvents(events: NormalizedWhatsAppStatusEvent[]): Promise<WhatsAppStatusPersistenceResult>;
+  loadConversationHistory(conversationId: string, limit?: number): Promise<Array<{ role: 'user' | 'assistant'; content: string }>>;
 };
 
 function db() {
@@ -151,4 +152,14 @@ export async function persistWhatsAppStatusEvents(events: NormalizedWhatsAppStat
     }
   }
   return result;
+}
+
+export async function loadWhatsAppConversationHistory(conversationId: string, limit = 20): Promise<Array<{ role: 'user' | 'assistant'; content: string }>> {
+  const result = await db().from('whatsapp_messages').select('direction, body').eq('conversation_id', conversationId).eq('message_type', 'text').not('body', 'is', null).order('occurred_at', { ascending: false }).limit(limit);
+  throwIfError(result.error, 'Could not load WhatsApp conversation history');
+  if (!result.data || result.data.length === 0) return [];
+  return result.data.reverse().map((row) => ({
+    role: row.direction === 'inbound' ? 'user' as const : 'assistant' as const,
+    content: row.body as string,
+  }));
 }
