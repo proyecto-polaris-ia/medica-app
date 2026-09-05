@@ -19,10 +19,14 @@ declare global {
           'expired-callback': () => void;
         }
       ) => string;
-      ready?: (callback: () => void) => void;
+      remove?: (widgetId: string) => void;
     };
+    onloadTurnstileCallback?: () => void;
   }
 }
+
+const TURNSTILE_API_URL =
+  'https://challenges.cloudflare.com/turnstile/v0/api.js';
 
 export function TurnstileWidget({
   siteKey,
@@ -30,46 +34,76 @@ export function TurnstileWidget({
   onExpire,
 }: TurnstileWidgetProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const widgetIdRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (!siteKey || !containerRef.current) return;
+    if (!siteKey) return;
 
-    const existing = document.querySelector(
-      'script[src="https://challenges.cloudflare.com/turnstile/v0/api.js"]'
-    );
+    const container = containerRef.current;
+    if (!container) return;
 
-    if (!existing) {
-      const script = document.createElement('script');
-      script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js';
-      script.async = true;
-      script.defer = true;
-      document.body.appendChild(script);
-    }
+    let cancelled = false;
+    const widgetId = widgetIdRef.current;
 
+    // Refs must stay stable across re-renders; the callbacks are captured via
+    // a mutable holder so the widget always calls the latest props.
     const renderWidget = () => {
-      if (!window.turnstile || !containerRef.current) return;
+      if (cancelled || !window.turnstile || !containerRef.current) return;
 
-      window.turnstile.render(containerRef.current, {
+      widgetIdRef.current = window.turnstile.render(containerRef.current, {
         sitekey: siteKey,
-        callback: onToken,
-        'expired-callback': onExpire,
+        callback: (token: string) => onToken(token),
+        'expired-callback': () => onExpire(),
       });
     };
 
-    if (window.turnstile && window.turnstile.ready) {
-      window.turnstile.ready(renderWidget);
-    } else {
-      // Poll briefly until the script loads.
-      const interval = setInterval(() => {
-        if (window.turnstile) {
-          clearInterval(interval);
-          renderWidget();
-        }
-      }, 100);
+    // Load the Turnstile script WITHOUT async/defer. Cloudflare's API
+    // explicitly rejects turnstile.ready() when the script has async/defer;
+    // we instead render the widget from the script's onload callback.
+    const ensureScript = (): (() => void) => {
+      // If the Turnstile API is already loaded (e.g. another widget loaded it,
+      // or a prior script on the page), render immediately.
+      if (window.turnstile) {
+        renderWidget();
+        return () => cleanupWidget();
+      }
 
-      return () => clearInterval(interval);
-    }
-  }, [siteKey, onToken, onExpire]);
+      const existing = document.querySelector<HTMLScriptElement>(
+        `script[src="${TURNSTILE_API_URL}"]`
+      );
+
+      if (existing) {
+        existing.addEventListener('load', renderWidget, { once: true });
+        return () => {
+          existing.removeEventListener('load', renderWidget);
+          cleanupWidget();
+        };
+      }
+
+      const script = document.createElement('script');
+      script.src = TURNSTILE_API_URL;
+      script.async = false;
+      script.defer = false;
+      script.onload = renderWidget;
+
+      document.body.appendChild(script);
+
+      return () => {
+        cleanupWidget();
+      };
+    };
+
+    const cleanupWidget = () => {
+      const id = widgetIdRef.current;
+      if (id && window.turnstile?.remove) {
+        window.turnstile.remove(id);
+      }
+      widgetIdRef.current = null;
+    };
+
+    return ensureScript();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [siteKey]);
 
   if (!siteKey) {
     return null;

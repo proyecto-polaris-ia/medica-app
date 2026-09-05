@@ -172,18 +172,20 @@ describe('BookingWizard integration', () => {
     const adminFetch = vi.fn(async (url: string | URL) => {
       const path = url.toString();
 
-      if (path.includes('/api/admin/booking/services')) {
+      // Catalog endpoints are shared/public regardless of mode.
+      if (path.includes('/api/booking/services')) {
         return Response.json({ services: [service] });
       }
 
-      if (path.includes('/api/admin/booking/providers')) {
+      if (path.includes('/api/booking/providers')) {
         return Response.json({ providers: [provider] });
       }
 
-      if (path.includes('/api/admin/booking/slots')) {
+      if (path.includes('/api/booking/slots')) {
         return Response.json({ slots: [slot] });
       }
 
+      // The write (book) is the only admin-specific call in internal mode.
       if (path.includes('/api/admin/booking/book')) {
         return Response.json(
           {
