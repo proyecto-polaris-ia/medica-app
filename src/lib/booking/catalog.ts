@@ -41,3 +41,22 @@ export async function listProviders(): Promise<Provider[]> {
     name: row.name,
   }));
 }
+
+function normalizeForMatch(text: string): string {
+  return text
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+}
+
+export async function resolveServiceByName(nameQuery: string): Promise<Service | null> {
+  const services = await listServices();
+  const normalized = normalizeForMatch(nameQuery);
+  return services.find((s) => normalizeForMatch(s.name).includes(normalized)) ?? null;
+}
+
+export async function resolveProviderByName(nameQuery: string): Promise<Provider | null> {
+  const providers = await listProviders();
+  const normalized = normalizeForMatch(nameQuery);
+  return providers.find((p) => normalizeForMatch(p.name).includes(normalized)) ?? null;
+}

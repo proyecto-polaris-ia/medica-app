@@ -37,6 +37,8 @@ export type WhatsAppToolAction = {
   args: {
     serviceId?: string;
     providerId?: string;
+    serviceName?: string;
+    providerName?: string;
     localDate?: string;
     startAt?: string;
     endAt?: string;
@@ -50,11 +52,17 @@ export type WhatsAppRecentMessage = {
   content: string;
 };
 
+export type WhatsAppBookingCatalog = {
+  services: Array<{ id: string; name: string }>;
+  providers: Array<{ id: string; name: string }>;
+};
+
 export type WhatsAppInboundAgentInput = {
   messageText: string;
   contact?: { id?: string; phone?: string; profileName?: string };
   conversation?: { id?: string; bookingContext?: Record<string, unknown> | null; lastIntent?: string | null; recentMessages?: WhatsAppRecentMessage[] };
   dynamicToolResults?: WhatsAppDynamicToolResult[];
+  bookingCatalog?: WhatsAppBookingCatalog;
 };
 
 export type WhatsAppInboundAgentProviderInput = WhatsAppInboundAgentInput & { knowledgeEntries: WhatsAppKnowledgeEntry[] };

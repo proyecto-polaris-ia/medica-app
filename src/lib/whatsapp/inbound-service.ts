@@ -2,7 +2,7 @@ import { bookAppointment } from '@/lib/booking/booking';
 import { getFreeSlots } from '@/lib/booking/availability';
 import { findNextAvailable } from '@/lib/booking/next-available';
 import { resolvePatient } from '@/lib/booking/patient-resolution';
-import { listProviders, listServices } from '@/lib/booking/catalog';
+import { listProviders, listServices, resolveProviderByName, resolveServiceByName } from '@/lib/booking/catalog';
 import {
   decideWhatsAppInboundMessage,
   type WhatsAppDynamicToolResult,
@@ -98,12 +98,24 @@ async function runBookingTool(action: WhatsAppToolAction, event: NormalizedWhats
   const priorServiceId = typeof context?.serviceId === 'string' ? context.serviceId : undefined;
   const priorProviderId = typeof context?.providerId === 'string' ? context.providerId : undefined;
   const selected = typeof action.args.selectedCandidateIndex === 'number' ? readCandidate(context, action.args.selectedCandidateIndex) : null;
-  const serviceId = action.args.serviceId ?? selected?.serviceId ?? priorServiceId;
-  const providerId = action.args.providerId ?? selected?.providerId ?? priorProviderId;
+
+  let serviceId = action.args.serviceId ?? selected?.serviceId ?? priorServiceId;
+  let providerId = action.args.providerId ?? selected?.providerId ?? priorProviderId;
+
+  if (!serviceId && action.args.serviceName) {
+    const resolved = await resolveServiceByName(action.args.serviceName);
+    if (resolved) serviceId = resolved.id;
+  }
+  if (!providerId && action.args.providerName) {
+    const resolved = await resolveProviderByName(action.args.providerName);
+    if (resolved) providerId = resolved.id;
+  }
 
   if (!serviceId || !providerId) {
     const catalog = await defaultBookingContext();
-    return { responseText: 'Claro, te ayudo a revisar disponibilidad. Por favor indícame el servicio y el doctor con el que quieres agendar.', bookingContext: { ...context, ...catalog, step: 'needs_booking_details' }, toolResults: [{ id: 'booking:catalog', tool: 'booking_catalog', status: 'blocked', reason: 'Faltan serviceId o providerId.' }], booked: false };
+    const servicesList = catalog.services.map((s) => `- ${s.name}`).join('\n');
+    const providersList = catalog.providers.map((p) => `- ${p.name}`).join('\n');
+    return { responseText: `Claro, te ayudo a agendar. Por favor indícame:\n\n*Servicios disponibles:*\n${servicesList}\n\n*Doctores disponibles:*\n${providersList}`, bookingContext: { ...context, ...catalog, step: 'needs_booking_details' }, toolResults: [{ id: 'booking:catalog', tool: 'booking_catalog', status: 'blocked', reason: 'Faltan serviceId o providerId.' }], booked: false };
   }
 
   if (action.name === 'book_appointment') {
@@ -151,7 +163,12 @@ export async function processWhatsAppInboundEvent(event: NormalizedWhatsAppInbou
 
   const conversation = await store.loadConversationContext(persisted.conversationId);
   const recentMessages = await store.loadConversationHistory(persisted.conversationId);
-  const decision = event.messageType === 'text' && event.body ? await (options.agent ?? decideWhatsAppInboundMessage)({ messageText: event.body, contact: { id: persisted.contactId, phone: event.fromPhone, profileName: event.profileName }, conversation: { id: persisted.conversationId, bookingContext: conversation.bookingContext, lastIntent: conversation.lastIntent, recentMessages } }, { provider: options.agentProvider, knowledgeEntries: options.knowledgeEntries, observabilityContext: options.observabilityContext }) : unsupportedDecision(event);
+  const catalog = await defaultBookingContext();
+  const bookingCatalog = {
+    services: catalog.services.map((s) => ({ id: s.id, name: s.name })),
+    providers: catalog.providers.map((p) => ({ id: p.id, name: p.name })),
+  };
+  const decision = event.messageType === 'text' && event.body ? await (options.agent ?? decideWhatsAppInboundMessage)({ messageText: event.body, contact: { id: persisted.contactId, phone: event.fromPhone, profileName: event.profileName }, conversation: { id: persisted.conversationId, bookingContext: conversation.bookingContext, lastIntent: conversation.lastIntent, recentMessages }, bookingCatalog }, { provider: options.agentProvider, knowledgeEntries: options.knowledgeEntries, observabilityContext: options.observabilityContext }) : unsupportedDecision(event);
 
   let finalDecision = decision;
   let action: WhatsAppInboundEventResult['action'] = decision.decision;
