@@ -26,7 +26,7 @@ export default async function AdminLayout({
     { href: '/providers', label: 'Proveedores' },
     { href: '/services', label: 'Servicios' },
     { href: '/business-hours', label: 'Horarios' },
-    { href: '/booking', label: 'Reservar cita' },
+    { href: '/appointments/new', label: 'Reservar cita' },
   ];
 
   return (

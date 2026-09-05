@@ -1,7 +1,10 @@
 import { bookAppointment } from '@/lib/booking/booking';
 import { findNextAvailable } from '@/lib/booking/next-available';
 import { resolvePatient } from '@/lib/booking/patient-resolution';
-import { requireUser, UnauthorizedError } from '@/lib/supabase/auth';
+import {
+  TurnstileUnavailableError,
+  verifyTurnstile,
+} from '@/lib/booking/turnstile';
 import { isBookingUiEnabled } from '../_lib/flag';
 import {
   parseIsoDate,
@@ -28,7 +31,21 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   try {
-    await requireUser();
+    if ('patientId' in body) {
+      throw new ValidationError('patientId', 'patientId is not allowed');
+    }
+
+    const captchaToken =
+      typeof body.captchaToken === 'string' ? body.captchaToken : undefined;
+    if (!captchaToken) {
+      throw new ValidationError('captchaToken', 'captchaToken is required');
+    }
+
+    const verified = await verifyTurnstile(captchaToken);
+    if (!verified) {
+      throw new ValidationError('captchaToken', 'Invalid captchaToken');
+    }
+
     const serviceId = parseUuid(body.serviceId, 'serviceId');
     const providerId = parseUuid(body.providerId, 'providerId');
     const startAt = parseIsoDate(body.startAt, 'startAt');
@@ -83,14 +100,17 @@ export async function POST(request: Request): Promise<Response> {
       { status: 201 }
     );
   } catch (error) {
-    if (error instanceof UnauthorizedError) {
-      return Response.json({ error: 'unauthorized' }, { status: 401 });
-    }
-
     if (error instanceof ValidationError) {
       return Response.json(
         { error: 'invalid_request', field: error.field },
         { status: 400 }
+      );
+    }
+
+    if (error instanceof TurnstileUnavailableError) {
+      return Response.json(
+        { error: 'turnstile_unavailable' },
+        { status: 503 }
       );
     }
 

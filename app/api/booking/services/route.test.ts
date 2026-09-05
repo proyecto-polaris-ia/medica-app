@@ -31,18 +31,6 @@ describe('GET /api/booking/services', () => {
     (requireUser as ReturnType<typeof vi.fn>).mockResolvedValue(USER);
   });
 
-  it('returns 401 when there is no session', async () => {
-    (isBookingUiEnabled as ReturnType<typeof vi.fn>).mockReturnValue(true);
-    (requireUser as ReturnType<typeof vi.fn>).mockRejectedValue(
-      new UnauthorizedError()
-    );
-
-    const res = await GET(new Request('http://localhost/api/booking/services'));
-
-    expect(res.status).toBe(401);
-    expect(listServices).not.toHaveBeenCalled();
-  });
-
   it('returns 404 when the booking UI flag is off', async () => {
     (isBookingUiEnabled as ReturnType<typeof vi.fn>).mockReturnValue(false);
 
@@ -54,6 +42,24 @@ describe('GET /api/booking/services', () => {
 
   it('returns the catalog when the flag is on', async () => {
     (isBookingUiEnabled as ReturnType<typeof vi.fn>).mockReturnValue(true);
+    (listServices as ReturnType<typeof vi.fn>).mockResolvedValue([
+      { id: 'svc-1', name: 'Consulta', durationMinutes: 30 },
+    ]);
+
+    const res = await GET(new Request('http://localhost/api/booking/services'));
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body).toEqual({
+      services: [{ id: 'svc-1', name: 'Consulta', durationMinutes: 30 }],
+    });
+  });
+
+  it('returns the catalog for an anonymous caller', async () => {
+    (isBookingUiEnabled as ReturnType<typeof vi.fn>).mockReturnValue(true);
+    (requireUser as ReturnType<typeof vi.fn>).mockRejectedValue(
+      new UnauthorizedError()
+    );
     (listServices as ReturnType<typeof vi.fn>).mockResolvedValue([
       { id: 'svc-1', name: 'Consulta', durationMinutes: 30 },
     ]);

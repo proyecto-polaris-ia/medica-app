@@ -1,7 +1,10 @@
 'use client';
 
 import { useState } from 'react';
+import { PatientSearch } from './PatientSearch';
 import { StateBlock } from './StateBlock';
+import { TurnstileWidget } from './TurnstileWidget';
+import type { Patient } from '@/lib/admin/types';
 import type { Provider, Service, Slot } from './wizard-state';
 
 const timeFormatter = new Intl.DateTimeFormat('es-MX', {
@@ -10,7 +13,15 @@ const timeFormatter = new Intl.DateTimeFormat('es-MX', {
   timeStyle: 'short',
 });
 
+export type ConfirmPatient = {
+  phone: string;
+  fullName: string;
+  patientId?: string;
+  captchaToken?: string;
+};
+
 export function ConfirmStep({
+  mode,
   service,
   provider,
   slot,
@@ -18,19 +29,35 @@ export function ConfirmStep({
   onBack,
   loading,
   error,
+  siteKey,
 }: {
+  mode: 'public' | 'internal';
   service: Service;
   provider: Provider;
   slot: Slot;
-  onConfirm: (patient: { phone: string; fullName: string }) => void;
+  onConfirm: (patient: ConfirmPatient) => void;
   onBack: () => void;
   loading: boolean;
   error: string | null;
+  siteKey?: string;
 }) {
   const [phone, setPhone] = useState('');
   const [fullName, setFullName] = useState('');
+  const [patientId, setPatientId] = useState<string | null>(null);
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
 
   const isValidPhone = /^\+[1-9]\d{7,14}$/.test(phone);
+
+  const canSubmit =
+    isValidPhone &&
+    fullName.trim().length > 0 &&
+    (mode === 'internal' || captchaToken !== null);
+
+  const handleSelectPatient = (patient: Patient) => {
+    setPatientId(patient.id);
+    setPhone(patient.phoneE164);
+    setFullName(patient.fullName);
+  };
 
   return (
     <div className="space-y-4">
@@ -49,6 +76,10 @@ export function ConfirmStep({
         </p>
       </div>
 
+      {mode === 'internal' && (
+        <PatientSearch onSelect={handleSelectPatient} />
+      )}
+
       <label className="block">
         <span className="text-sm font-medium text-gray-700">
           Teléfono (WhatsApp)
@@ -58,7 +89,8 @@ export function ConfirmStep({
           value={phone}
           onChange={(e) => setPhone(e.target.value)}
           placeholder="+5215512345678"
-          className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2"
+          disabled={patientId !== null}
+          className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 disabled:bg-gray-100"
         />
       </label>
 
@@ -71,9 +103,27 @@ export function ConfirmStep({
           value={fullName}
           onChange={(e) => setFullName(e.target.value)}
           placeholder="María García"
-          className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2"
+          disabled={patientId !== null}
+          className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 disabled:bg-gray-100"
         />
       </label>
+
+      {mode === 'public' && (
+        <>
+          {!siteKey ? (
+            <StateBlock
+              state="error"
+              message="La reserva en línea no está habilitada en este momento."
+            />
+          ) : (
+            <TurnstileWidget
+              siteKey={siteKey}
+              onToken={setCaptchaToken}
+              onExpire={() => setCaptchaToken(null)}
+            />
+          )}
+        </>
+      )}
 
       {error && <StateBlock state="error" message={error} />}
 
@@ -88,8 +138,15 @@ export function ConfirmStep({
         </button>
         <button
           type="button"
-          onClick={() => onConfirm({ phone, fullName })}
-          disabled={!isValidPhone || loading}
+          onClick={() =>
+            onConfirm({
+              phone,
+              fullName,
+              ...(patientId ? { patientId } : {}),
+              ...(captchaToken ? { captchaToken } : {}),
+            })
+          }
+          disabled={!canSubmit || loading}
           className="rounded-lg bg-blue-600 px-4 py-2 font-medium text-white hover:bg-blue-700 disabled:bg-gray-300"
         >
           {loading ? 'Reservando…' : 'Confirmar reserva'}

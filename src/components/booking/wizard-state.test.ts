@@ -23,6 +23,13 @@ describe('initState', () => {
     expect(state.slot).toBeNull();
     expect(state.phase).toBe('idle');
   });
+
+  it('initializes patientId and captchaToken as null', () => {
+    const state = initState();
+
+    expect(state.patientId).toBeNull();
+    expect(state.captchaToken).toBeNull();
+  });
 });
 
 describe('canAdvanceTo', () => {
@@ -153,5 +160,51 @@ describe('reset', () => {
     expect(reset.provider).toBeNull();
     expect(reset.slot).toBeNull();
     expect(reset.conflict).toBeNull();
+  });
+
+  it('clears patientId and captchaToken on reset', () => {
+    const filled: WizardState = {
+      ...initState(),
+      patientId: 'pat-1',
+      captchaToken: 'token-1',
+    };
+
+    const reset = wizardReducer(filled, { type: 'RESET' });
+
+    expect(reset.patientId).toBeNull();
+    expect(reset.captchaToken).toBeNull();
+  });
+});
+
+describe('internal mode state', () => {
+  it('sets the selected patient id', () => {
+    const state = wizardReducer(initState(), {
+      type: 'SET_PATIENT_ID',
+      patientId: 'pat-1',
+    });
+
+    expect(state.patientId).toBe('pat-1');
+  });
+});
+
+describe('public mode state', () => {
+  it('sets the captcha token', () => {
+    const state = wizardReducer(initState(), {
+      type: 'SET_CAPTCHA',
+      token: 'captcha-token',
+    });
+
+    expect(state.captchaToken).toBe('captcha-token');
+  });
+
+  it('clears the captcha token on expire', () => {
+    const filled = wizardReducer(initState(), {
+      type: 'SET_CAPTCHA',
+      token: 'captcha-token',
+    });
+
+    const state = wizardReducer(filled, { type: 'SET_CAPTCHA', token: null });
+
+    expect(state.captchaToken).toBeNull();
   });
 });

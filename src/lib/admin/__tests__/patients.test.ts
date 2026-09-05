@@ -4,6 +4,7 @@ import {
   createPatient,
   deletePatient,
   listPatients,
+  searchPatients,
   updatePatient,
 } from '../patients';
 import { ValidationError } from '../validate';
@@ -21,6 +22,8 @@ describe('patients service', () => {
   const mockDelete = vi.fn();
   const mockOrder = vi.fn();
   const mockEq = vi.fn();
+  const mockIlike = vi.fn();
+  const mockOr = vi.fn();
   const mockSingle = vi.fn();
 
   function buildQuery() {
@@ -31,6 +34,8 @@ describe('patients service', () => {
       delete: mockDelete.mockReturnThis(),
       order: mockOrder.mockReturnThis(),
       eq: mockEq.mockReturnThis(),
+      ilike: mockIlike.mockReturnThis(),
+      or: mockOr.mockReturnThis(),
       single: mockSingle,
     };
   }
@@ -182,6 +187,53 @@ describe('patients service', () => {
 
     it('throws ValidationError for an invalid id', async () => {
       await expect(deletePatient('bad-id')).rejects.toThrow(ValidationError);
+    });
+  });
+
+  describe('searchPatients', () => {
+    it('returns an empty array for an empty query', async () => {
+      const patients = await searchPatients('');
+
+      expect(patients).toEqual([]);
+      expect(mockSelect).not.toHaveBeenCalled();
+    });
+
+    it('filters by full_name (ilike) or phone_e164 (contains)', async () => {
+      mockOrder.mockResolvedValue({
+        data: [
+          {
+            id: PATIENT_ID,
+            full_name: 'María García',
+            phone_e164: '+5215512345678',
+            notes: null,
+            created_at: '2026-09-01T10:00:00Z',
+            updated_at: '2026-09-01T10:00:00Z',
+          },
+        ],
+        error: null,
+      });
+
+      const patients = await searchPatients('maria');
+
+      expect(mockOr).toHaveBeenCalledWith(
+        'full_name.ilike.%maria%,phone_e164.ilike.%maria%'
+      );
+      expect(patients).toEqual([
+        {
+          id: PATIENT_ID,
+          fullName: 'María García',
+          phoneE164: '+5215512345678',
+          notes: null,
+          createdAt: '2026-09-01T10:00:00Z',
+          updatedAt: '2026-09-01T10:00:00Z',
+        },
+      ]);
+    });
+
+    it('throws when the query fails', async () => {
+      mockOrder.mockResolvedValue({ data: null, error: { message: 'down' } });
+
+      await expect(searchPatients('ana')).rejects.toThrow('down');
     });
   });
 });
