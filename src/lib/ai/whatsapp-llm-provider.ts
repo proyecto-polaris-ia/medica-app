@@ -165,8 +165,15 @@ export function createWhatsAppLLMProvider(config: WhatsAppLLMProviderConfig = {}
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), Number.isFinite(timeoutMs) ? timeoutMs : DEFAULT_TIMEOUT_MS);
 
+    const recentMessages = input.conversation?.recentMessages ?? [];
+    const historyMessages: ChatCompletionMessage[] = recentMessages.map((msg) => ({
+      role: msg.role as "system" | "user",
+      content: msg.content,
+    }));
+
     const messages: ChatCompletionMessage[] = [
       { role: "system", content: buildSystemPrompt() },
+      ...historyMessages,
       { role: "user", content: buildUserPrompt(input) },
     ];
 

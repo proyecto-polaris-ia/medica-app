@@ -20,6 +20,7 @@ import {
   createWhatsAppEscalation,
   insertWhatsAppOutboundMessage,
   loadWhatsAppConversationContext,
+  loadWhatsAppConversationHistory,
   markWhatsAppInboundMessageProcessed,
   persistWhatsAppInboundEvent,
   persistWhatsAppStatusEvents,
@@ -47,6 +48,7 @@ export type WhatsAppInboundServiceOptions = {
 const defaultStore: WhatsAppStore = {
   persistInboundEvent: persistWhatsAppInboundEvent,
   loadConversationContext: loadWhatsAppConversationContext,
+  loadConversationHistory: loadWhatsAppConversationHistory,
   createIntent: async (input) => {
     const { createWhatsAppIntent } = await import('./store');
     return createWhatsAppIntent(input);
@@ -148,7 +150,8 @@ export async function processWhatsAppInboundEvent(event: NormalizedWhatsAppInbou
   }
 
   const conversation = await store.loadConversationContext(persisted.conversationId);
-  const decision = event.messageType === 'text' && event.body ? await (options.agent ?? decideWhatsAppInboundMessage)({ messageText: event.body, contact: { id: persisted.contactId, phone: event.fromPhone, profileName: event.profileName }, conversation: { id: persisted.conversationId, bookingContext: conversation.bookingContext, lastIntent: conversation.lastIntent } }, { provider: options.agentProvider, knowledgeEntries: options.knowledgeEntries, observabilityContext: options.observabilityContext }) : unsupportedDecision(event);
+  const recentMessages = await store.loadConversationHistory(persisted.conversationId);
+  const decision = event.messageType === 'text' && event.body ? await (options.agent ?? decideWhatsAppInboundMessage)({ messageText: event.body, contact: { id: persisted.contactId, phone: event.fromPhone, profileName: event.profileName }, conversation: { id: persisted.conversationId, bookingContext: conversation.bookingContext, lastIntent: conversation.lastIntent, recentMessages } }, { provider: options.agentProvider, knowledgeEntries: options.knowledgeEntries, observabilityContext: options.observabilityContext }) : unsupportedDecision(event);
 
   let finalDecision = decision;
   let action: WhatsAppInboundEventResult['action'] = decision.decision;

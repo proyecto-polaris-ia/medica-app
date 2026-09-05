@@ -45,10 +45,15 @@ export type WhatsAppToolAction = {
   };
 };
 
+export type WhatsAppRecentMessage = {
+  role: 'user' | 'assistant';
+  content: string;
+};
+
 export type WhatsAppInboundAgentInput = {
   messageText: string;
   contact?: { id?: string; phone?: string; profileName?: string };
-  conversation?: { id?: string; bookingContext?: Record<string, unknown> | null; lastIntent?: string | null };
+  conversation?: { id?: string; bookingContext?: Record<string, unknown> | null; lastIntent?: string | null; recentMessages?: WhatsAppRecentMessage[] };
   dynamicToolResults?: WhatsAppDynamicToolResult[];
 };
 
