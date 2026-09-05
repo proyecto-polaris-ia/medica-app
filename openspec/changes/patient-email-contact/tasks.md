@@ -33,7 +33,7 @@ Todas las tareas están completas. La corrección de evidencia agregó pruebas y
 ## Phase 1: Esquema y resolución
 
 - [x] 1.1 **RED:** ampliar `src/lib/booking/__tests__/patient-resolution.test.ts` para normalización, email-only, ambos contactos, `patientId`, ninguno, conflicto cruzado, enriquecimiento de `NULL` y carrera concurrente con relectura `23505/0 filas`.
-- [x] 1.2 **GREEN:** crear `supabase/migrations/0007_patient_email_contact.sql` y `supabase/migrations/down/0007_patient_email_contact.down.sql`; actualizar `src/types.ts` y `src/lib/booking/patient-resolution.ts` con checks, índice, tipos nullable, UPDATE condicional y conflicto tipado.
+- [x] 1.2 **GREEN:** crear `supabase/migrations/0011_patient_email_contact.sql` y `supabase/migrations/down/0011_patient_email_contact.down.sql`; actualizar `src/types.ts` y `src/lib/booking/patient-resolution.ts` con checks, índice, tipos nullable, UPDATE condicional y conflicto tipado.
 - [x] 1.3 **REFACTOR:** centralizar canonicalización de correo/contactos y conservar llamadas phone-only de WhatsApp.
 
 ## Phase 2: Booking interno
