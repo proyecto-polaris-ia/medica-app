@@ -127,7 +127,142 @@ mensaje → normalize → persist → preflight
 - **Idempotencia:** `whatsapp_message_id` único (ya resuelto en el copiado).
 - **Webhook rápido:** el procesamiento pesado/LLM no debe bloquear el `200 OK`.
 
-## 8. Variables de entorno
+## 8. Flow Engine (arquitectura de flujos conversacionales)
+
+### 8.1 Problema resuelto
+
+El agente anterior dependía completamente del LLM para:
+1. Clasificar el intent
+2. Decidir el siguiente paso del flujo
+3. Generar la respuesta
+
+Esto causaba inconsistencias: el agente perdía el hilo de la conversación, no seguía un proceso definido para agendar citas, y escalaba a humano innecesariamente.
+
+### 8.2 Arquitectura de tres capas
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    WhatsApp Orchestrator                     │
+│  (Routing basado en intent: flows vs handlers directos)     │
+└─────────────────────────────────────────────────────────────┘
+                              │
+        ┌─────────────────────┼─────────────────────┐
+        ▼                     ▼                     ▼
+┌───────────────┐    ┌───────────────┐    ┌───────────────┐
+│  Flow Engine  │    │   Knowledge   │    │  Escalation   │
+│ (determinist) │    │   Handler     │    │   Handler     │
+│               │    │   (LLM)       │    │   (direct)    │
+└───────────────┘    └───────────────┘    └───────────────┘
+        │
+        ▼
+┌───────────────┐
+│ Flow Actions  │
+│ (getSlots,    │
+│  book, etc)   │
+└───────────────┘
+```
+
+### 8.3 Componentes
+
+| Componente | Archivo | Responsabilidad |
+|------------|---------|-----------------|
+| **Flow Engine** | `src/lib/flows/flow-engine.ts` | Motor determinístico que ejecuta flujos conversacionales |
+| **Flow Definitions** | `src/lib/flows/definitions/*.flow.ts` | Configuración declarativa de flujos |
+| **Types** | `src/lib/flows/types.ts` | Definiciones de tipos (FlowState, FlowResult, etc.) |
+| **Orchestrator** | `src/lib/whatsapp/orchestrator.ts` | Routing basado en intent, ejecuta acciones de negocio |
+
+### 8.4 Routing de intents
+
+| Intent | Handler | Usa Flow Engine? |
+|--------|---------|------------------|
+| `inquiry` | Knowledge Handler (LLM directo) | ❌ No |
+| `book_appointment` | Flow Engine | ✅ Sí |
+| `check_availability` | Flow Engine | ✅ Sí |
+| `support` | Escalation Handler (directo) | ❌ No |
+| `unknown` | Fallback | ❌ No |
+
+### 8.5 Flujo de booking (book_appointment)
+
+```
+collect_date → collect_service → collect_provider → check_availability 
+    → select_slot → confirm_booking → collect_notes → complete
+```
+
+**Estados:**
+1. `collect_date` — Pregunta por la fecha
+2. `collect_service` — Pregunta por el servicio
+3. `collect_provider` — Pregunta por el doctor
+4. `check_availability` — Consulta horarios disponibles (acción: `getFreeSlots`)
+5. `select_slot` — Usuario selecciona horario
+6. `confirm_booking` — Confirma y agenda (acción: `bookAppointment`)
+7. `collect_notes` — Pregunta por notas adicionales
+8. `complete` — Flujo terminado
+
+### 8.6 Persistencia de estado
+
+El estado del flujo se persiste en `whatsapp_conversations.flow_state` (jsonb):
+
+```typescript
+type FlowState = {
+  name: string;           // nombre del estado actual
+  entities: ExtractedEntities;  // entidades recolectadas
+  candidates?: Array<{...}>;    // slots disponibles (si aplica)
+  metadata?: Record<string, unknown>;  // datos adicionales
+};
+```
+
+### 8.7 Feature flag
+
+```bash
+WHATSAPP_FLOW_ENGINE_ENABLED=true
+```
+
+- `true`: Usa Flow Engine (determinístico)
+- `false` o no definido: Usa path legacy (LLM decide todo)
+
+Permite rollback inmediato sin redeploy.
+
+### 8.8 Ventajas
+
+| Característica | Beneficio |
+|----------------|-----------|
+| **Determinístico** | El flujo no depende del LLM |
+| **Escalable** | Agregar flujos es agregar configuración |
+| **Testeable** | Flows son código puro, fácil de testear |
+| **Mantenible** | Separación clara entre lógica y lenguaje |
+| **Auditable** | Cada transición de estado queda registrada |
+| **Backward compatible** | Puede coexistir con path legacy |
+
+### 8.9 Agregar un nuevo flujo
+
+1. Crear definición en `src/lib/flows/definitions/nuevo-flow.flow.ts`
+2. Registrar en `flowRegistry`
+3. Agregar routing en `orchestrator.ts`
+4. Agregar tests unitarios
+
+Ejemplo de definición:
+```typescript
+export const rescheduleFlow: FlowDefinition = {
+  name: 'reschedule_appointment',
+  initialState: 'find_appointment',
+  states: {
+    find_appointment: {
+      required: ['appointmentId'],
+      prompt: '¿Cuál cita quieres reprogramar?',
+      transitions: { found: 'select_new_date' },
+    },
+    // ... más estados
+  },
+};
+```
+
+### 8.10 Variables de entorno adicionales
+
+```
+WHATSAPP_FLOW_ENGINE_ENABLED=  # true para activar Flow Engine
+```
+
+## 9. Variables de entorno
 
 ```
 NEXT_PUBLIC_SUPABASE_URL=
@@ -142,6 +277,7 @@ WHATSAPP_AGENT_LLM_API_KEY=
 WHATSAPP_AGENT_LLM_MODEL=
 WHATSAPP_AGENT_LLM_BASE_URL=
 WHATSAPP_AGENT_LLM_API_STYLE=
+WHATSAPP_FLOW_ENGINE_ENABLED=
 ```
 
 Todas server-side; ninguna con prefijo `NEXT_PUBLIC_` salvo las dos primeras.

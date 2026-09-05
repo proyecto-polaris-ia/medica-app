@@ -238,6 +238,26 @@ a booking tool execution, or human escalation.
 - THEN the system MUST create an open human escalation record
 - AND it MUST attempt a customer follow-up WhatsApp message
 
+### Requirement: Flow Engine integration
+The system MUST support deterministic flow execution for multi-step conversations
+when the Flow Engine is enabled via feature flag.
+
+#### Scenario: Flow Engine processes booking intent
+- GIVEN `WHATSAPP_FLOW_ENGINE_ENABLED=true`
+- AND a message is classified as `book_appointment`
+- WHEN the orchestrator processes the message
+- THEN the Flow Engine MUST handle the conversation flow
+- AND the flow state MUST be persisted in `whatsapp_conversations.flow_state`
+- AND the flow MUST follow the defined states (see `flow-engine` spec)
+
+#### Scenario: Legacy path when Flow Engine disabled
+- GIVEN `WHATSAPP_FLOW_ENGINE_ENABLED=false` or not set
+- WHEN a message is processed
+- THEN the legacy LLM-based path MUST be used
+- AND backward compatibility MUST be maintained
+
+**See also**: `flow-engine` spec for detailed Flow Engine requirements.
+
 ### Requirement: Orchestration idempotency
 The system MUST NOT duplicate outbound sends or side effects for a provider
 message id that was already persisted and processed.
