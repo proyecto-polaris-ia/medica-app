@@ -16,6 +16,28 @@ describe('whatsapp inbound dental agent', () => {
     expect(decision.citedKnowledgeIds).toEqual(['k1']);
   });
 
+  it('falls back to approved knowledge when the LLM provider fails technically', async () => {
+    const decision = await decideWhatsAppInboundMessage(
+      { messageText: '¿Cuál es su horario?' },
+      {
+        knowledgeEntries: knowledge,
+        provider: () => ({
+          intent: 'unknown',
+          summary: '¿Cuál es su horario?',
+          confidence: 0,
+          decision: 'needs_human',
+          escalationReason: 'El proveedor LLM falló: This operation was aborted',
+          citedKnowledgeIds: [],
+          citedToolCallIds: [],
+        }),
+      }
+    );
+
+    expect(decision.decision).toBe('auto_answer');
+    expect(decision.responseText).toBe('Atendemos de lunes a viernes con cita.');
+    expect(decision.citedKnowledgeIds).toEqual(['k1']);
+  });
+
   it('returns a booking tool action for appointment messages', async () => {
     const decision = await decideWhatsAppInboundMessage({ messageText: 'Quiero agendar una cita' }, { knowledgeEntries: [] });
     expect(decision.decision).toBe('tool_action');

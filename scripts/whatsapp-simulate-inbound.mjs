@@ -2,7 +2,7 @@
 import { readFileSync, existsSync } from "node:fs";
 import { createHmac, randomUUID } from "node:crypto";
 
-const DEFAULT_WEBHOOK_URL = "http://localhost:3000/api/whatsapp/webhook";
+const DEFAULT_WEBHOOK_URL = "http://medica-app.vercel.app/api/whatsapp/webhook";
 
 function signBody(rawBody, appSecret) {
   return `sha256=${createHmac("sha256", appSecret).update(rawBody, "utf8").digest("hex")}`;

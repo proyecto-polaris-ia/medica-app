@@ -184,7 +184,10 @@ export async function decideWhatsAppInboundMessage(input: WhatsAppInboundAgentIn
       recordWhatsAppAiEvent({ context: options.observabilityContext, type: 'ai.provider.started', outcome: 'success' });
       const parsed = parseProviderOutput(await provider({ ...input, knowledgeEntries }));
       if (parsed) {
-        const safe = enforceDecisionSafety(parsed, knowledgeEntries);
+        const knowledgeFallback = parsed.decision === 'needs_human' && parsed.escalationReason?.includes('El proveedor LLM falló')
+          ? localKnowledgeAnswer(input.messageText, knowledgeEntries)
+          : null;
+        const safe = enforceDecisionSafety(knowledgeFallback ?? parsed, knowledgeEntries);
         recordWhatsAppAiEvent({ context: options.observabilityContext, type: 'ai.provider.finished', outcome: 'success', diagnostics: { decision: safe.decision, intent: safe.intent } });
         return { ...safe, dynamicToolResults: input.dynamicToolResults };
       }
