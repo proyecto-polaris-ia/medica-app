@@ -132,6 +132,17 @@ decision without writing database rows or sending WhatsApp messages.
 - THEN the result MUST use decision `needs_human`
 - AND include an escalation reason
 
+### Requirement: Conversation history context
+The system MUST provide recent conversation history to the agent so it can
+maintain context across multiple messages in the same conversation.
+
+#### Scenario: Multi-turn conversation maintains context
+- GIVEN a conversation with previous inbound and outbound messages
+- WHEN a new inbound message is processed
+- THEN the agent MUST receive the last 20 text messages as conversation history
+- AND the history MUST include both user (inbound) and assistant (outbound) turns
+- AND the agent MUST be able to reference information from previous messages
+
 ### Requirement: Validated conservative model output
 The system MUST validate structured model/provider output before using it.
 
