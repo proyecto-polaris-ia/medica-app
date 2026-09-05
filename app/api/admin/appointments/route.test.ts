@@ -99,6 +99,7 @@ describe('/api/admin/appointments', () => {
       startAt: '2026-09-10T14:00:00.000Z',
       endAt: '2026-09-10T14:30:00.000Z',
       status: 'requested',
+      notes: null,
     });
     const res = await POST(
       new Request('http://localhost/api/admin/appointments', {
@@ -112,6 +113,35 @@ describe('/api/admin/appointments', () => {
       })
     );
     expect(res.status).toBe(201);
+  });
+
+  it('POST forwards notes to createAppointment', async () => {
+    (createAppointment as ReturnType<typeof vi.fn>).mockResolvedValue({
+      id: 'appt-1',
+      serviceId: SERVICE_ID,
+      providerId: PROVIDER_ID,
+      startAt: '2026-09-10T14:00:00.000Z',
+      endAt: '2026-09-10T14:30:00.000Z',
+      status: 'requested',
+      notes: 'Traer estudios previos',
+    });
+
+    await POST(
+      new Request('http://localhost/api/admin/appointments', {
+        method: 'POST',
+        body: JSON.stringify({
+          serviceId: SERVICE_ID,
+          providerId: PROVIDER_ID,
+          startAt: '2026-09-10T14:00:00.000Z',
+          endAt: '2026-09-10T14:30:00.000Z',
+          notes: 'Traer estudios previos',
+        }),
+      })
+    );
+
+    expect(createAppointment).toHaveBeenCalledWith(
+      expect.objectContaining({ notes: 'Traer estudios previos' })
+    );
   });
 
   it('POST returns 400 for invalid input', async () => {

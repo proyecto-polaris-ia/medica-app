@@ -179,6 +179,70 @@ describe('POST /api/booking/book', () => {
       startAt: validBody.startAt,
       endAt: validBody.endAt,
     });
+    expect(bookAppointment).toHaveBeenCalledWith(
+      expect.objectContaining({ notes: null })
+    );
+  });
+
+  it('returns 400 when notes exceed 1000 characters', async () => {
+    (isBookingUiEnabled as ReturnType<typeof vi.fn>).mockReturnValue(true);
+
+    const res = await POST(
+      new Request('http://localhost/api/booking/book', {
+        method: 'POST',
+        body: JSON.stringify({ ...validBody, notes: 'a'.repeat(1001) }),
+      })
+    );
+    const body = await res.json();
+
+    expect(res.status).toBe(400);
+    expect(body.field).toBe('notes');
+    expect(resolvePatient).not.toHaveBeenCalled();
+    expect(bookAppointment).not.toHaveBeenCalled();
+  });
+
+  it('forwards valid notes to bookAppointment', async () => {
+    (isBookingUiEnabled as ReturnType<typeof vi.fn>).mockReturnValue(true);
+    (resolvePatient as ReturnType<typeof vi.fn>).mockResolvedValue({
+      id: 'pat-1',
+      full_name: 'María García',
+    });
+    (bookAppointment as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+    });
+
+    await POST(
+      new Request('http://localhost/api/booking/book', {
+        method: 'POST',
+        body: JSON.stringify({ ...validBody, notes: 'Prefiero mañana' }),
+      })
+    );
+
+    expect(bookAppointment).toHaveBeenCalledWith(
+      expect.objectContaining({ notes: 'Prefiero mañana' })
+    );
+  });
+
+  it('passes null for whitespace-only notes', async () => {
+    (isBookingUiEnabled as ReturnType<typeof vi.fn>).mockReturnValue(true);
+    (resolvePatient as ReturnType<typeof vi.fn>).mockResolvedValue({
+      id: 'pat-1',
+      full_name: 'María García',
+    });
+    (bookAppointment as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+    });
+
+    await POST(
+      new Request('http://localhost/api/booking/book', {
+        method: 'POST',
+        body: JSON.stringify({ ...validBody, notes: '   ' }),
+      })
+    );
+
+    expect(bookAppointment).toHaveBeenCalledWith(
+      expect.objectContaining({ notes: null })
+    );
   });
 
   it('returns 409 with the next available slot on conflict', async () => {

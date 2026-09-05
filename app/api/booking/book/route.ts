@@ -8,6 +8,7 @@ import {
 import { isBookingUiEnabled } from '../_lib/flag';
 import {
   parseIsoDate,
+  parseNotes,
   parsePhoneE164,
   parseUuid,
   ValidationError,
@@ -53,6 +54,7 @@ export async function POST(request: Request): Promise<Response> {
     const phone = parsePhoneE164(body.phone, 'phone');
     const fullName =
       typeof body.fullName === 'string' ? body.fullName : undefined;
+    const notes = parseNotes(body.notes, 'notes');
 
     const patient = await resolvePatient({ phone, fullName });
 
@@ -62,6 +64,7 @@ export async function POST(request: Request): Promise<Response> {
       providerId,
       startAt,
       endAt,
+      notes,
     });
 
     if ('type' in result) {

@@ -36,6 +36,7 @@ export async function POST(request: Request): Promise<Response> {
       startAt: body.startAt as string,
       endAt: body.endAt as string,
       status: body.status as AppointmentStatus | undefined,
+      notes: body.notes as string | null | undefined,
     });
     return Response.json({ appointment }, { status: 201 });
   });

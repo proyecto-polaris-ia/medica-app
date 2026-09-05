@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useReducer } from 'react';
-import { ConfirmStep } from './ConfirmStep';
+import { ConfirmStep, type ConfirmPatient } from './ConfirmStep';
 import { ProviderStep } from './ProviderStep';
 import { ResultStep } from './ResultStep';
 import { ServiceStep } from './ServiceStep';
@@ -140,12 +140,7 @@ export function BookingWizard({
     };
   }, [state.step, state.date, state.service, state.provider]);
 
-  async function handleConfirm(patient: {
-    phone: string;
-    fullName: string;
-    patientId?: string;
-    captchaToken?: string;
-  }) {
+  async function handleConfirm(patient: ConfirmPatient) {
     if (!state.service || !state.provider || !state.slot) return;
 
     dispatch({ type: 'SUBMIT' });
@@ -172,6 +167,10 @@ export function BookingWizard({
 
     if (patient.captchaToken) {
       body.captchaToken = patient.captchaToken;
+    }
+
+    if (patient.notes) {
+      body.notes = patient.notes;
     }
 
     const res = await fetch(`${apiBase}/book`, {

@@ -40,3 +40,19 @@ export function parsePhoneE164(value: unknown, field = 'phone'): string {
   }
   return value;
 }
+
+const MAX_NOTES_LENGTH = 1000;
+
+export function parseNotes(value: unknown, field = 'notes'): string | null {
+  if (typeof value !== 'string') {
+    return null;
+  }
+  const trimmed = value.trim();
+  if (trimmed.length === 0) {
+    return null;
+  }
+  if (trimmed.length > MAX_NOTES_LENGTH) {
+    throw new ValidationError(field, `Invalid ${field}`);
+  }
+  return trimmed;
+}

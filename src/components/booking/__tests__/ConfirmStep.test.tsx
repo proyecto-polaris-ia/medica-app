@@ -94,6 +94,68 @@ describe('ConfirmStep public mode', () => {
     ).toBeInTheDocument();
     expect(screen.getByText('Confirmar reserva')).toBeDisabled();
   });
+
+  it('shows a notes textarea with label and placeholder', () => {
+    render(
+      <ConfirmStep
+        mode="public"
+        service={service}
+        provider={provider}
+        slot={slot}
+        onConfirm={vi.fn()}
+        onBack={vi.fn()}
+        loading={false}
+        error={null}
+        siteKey="site-key"
+      />
+    );
+
+    const textarea = screen.getByLabelText('Notas de la cita');
+    expect(textarea).toBeInTheDocument();
+    expect(textarea).toHaveAttribute(
+      'placeholder',
+      '¿Quieres agregar algo más para tener en consideración para tu cita?'
+    );
+    expect(textarea).toHaveAttribute('maxLength', '1000');
+  });
+
+  it('includes notes in the confirm payload', async () => {
+    const onConfirm = vi.fn();
+    render(
+      <ConfirmStep
+        mode="public"
+        service={service}
+        provider={provider}
+        slot={slot}
+        onConfirm={onConfirm}
+        onBack={vi.fn()}
+        loading={false}
+        error={null}
+        siteKey="site-key"
+      />
+    );
+
+    await userEvent.type(
+      screen.getByPlaceholderText('+5215512345678'),
+      '+5215512345678'
+    );
+    await userEvent.type(
+      screen.getByPlaceholderText('María García'),
+      'María García'
+    );
+    await userEvent.type(
+      screen.getByLabelText('Notas de la cita'),
+      'Prefiero horario de la mañana'
+    );
+
+    await userEvent.click(screen.getByText('Confirmar reserva'));
+
+    await waitFor(() => {
+      expect(onConfirm).toHaveBeenCalledWith(
+        expect.objectContaining({ notes: 'Prefiero horario de la mañana' })
+      );
+    });
+  });
 });
 
 describe('ConfirmStep internal mode', () => {

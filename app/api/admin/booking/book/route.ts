@@ -3,7 +3,7 @@ import {
   resolvePatient,
   resolvePatientById,
 } from '@/lib/booking/patient-resolution';
-import { ValidationError } from '@/lib/admin/validate';
+import { parseNotes, ValidationError } from '@/lib/admin/validate';
 import { requireUser } from '../../_lib/auth';
 import { parseJsonBody, handleAdminRequest } from '../../_lib/responses';
 import {
@@ -24,6 +24,7 @@ export async function POST(request: Request): Promise<Response> {
     const providerId = parseUuid(body.providerId, 'providerId');
     const startAt = parseIsoDate(body.startAt, 'startAt');
     const endAt = parseIsoDate(body.endAt, 'endAt');
+    const notes = parseNotes(body.notes, 'notes');
 
     let patient: { id: string; full_name: string };
 
@@ -51,6 +52,7 @@ export async function POST(request: Request): Promise<Response> {
       providerId,
       startAt,
       endAt,
+      notes,
     });
 
     if ('type' in result) {

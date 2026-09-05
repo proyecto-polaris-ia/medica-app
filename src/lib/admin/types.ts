@@ -73,6 +73,7 @@ export type Appointment = {
   startAt: string;
   endAt: string;
   status: AppointmentStatus;
+  notes: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -84,6 +85,7 @@ export type AppointmentInput = {
   startAt: string;
   endAt: string;
   status?: AppointmentStatus;
+  notes?: string | null;
 };
 
 export type ProviderAppointment = {

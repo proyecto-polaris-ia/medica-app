@@ -18,6 +18,7 @@ export type ConfirmPatient = {
   fullName: string;
   patientId?: string;
   captchaToken?: string;
+  notes?: string;
 };
 
 export function ConfirmStep({
@@ -45,6 +46,7 @@ export function ConfirmStep({
   const [fullName, setFullName] = useState('');
   const [patientId, setPatientId] = useState<string | null>(null);
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  const [notes, setNotes] = useState('');
 
   const isValidPhone = /^\+[1-9]\d{7,14}$/.test(phone);
 
@@ -108,6 +110,20 @@ export function ConfirmStep({
         />
       </label>
 
+      <label className="block">
+        <span className="text-sm font-medium text-gray-700">
+          Notas de la cita
+        </span>
+        <textarea
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          placeholder="¿Quieres agregar algo más para tener en consideración para tu cita?"
+          maxLength={1000}
+          rows={3}
+          className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2"
+        />
+      </label>
+
       {mode === 'public' && (
         <>
           {!siteKey ? (
@@ -144,6 +160,7 @@ export function ConfirmStep({
               fullName,
               ...(patientId ? { patientId } : {}),
               ...(captchaToken ? { captchaToken } : {}),
+              ...(notes.trim() ? { notes: notes.trim() } : {}),
             })
           }
           disabled={!canSubmit || loading}

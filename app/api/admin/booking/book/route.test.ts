@@ -127,4 +127,73 @@ describe('POST /api/admin/booking/book', () => {
     expect(res.status).toBe(400);
     expect(body.field).toBe('patient');
   });
+
+  it('returns 400 when notes exceed 1000 characters', async () => {
+    const res = await POST(
+      new Request('http://localhost/api/admin/booking/book', {
+        method: 'POST',
+        body: JSON.stringify({
+          ...slotBody,
+          patientId: 'pat-1',
+          notes: 'a'.repeat(1001),
+        }),
+      })
+    );
+    const body = await res.json();
+
+    expect(res.status).toBe(400);
+    expect(body.field).toBe('notes');
+    expect(resolvePatientById).not.toHaveBeenCalled();
+    expect(bookAppointment).not.toHaveBeenCalled();
+  });
+
+  it('forwards valid notes to bookAppointment', async () => {
+    (resolvePatientById as ReturnType<typeof vi.fn>).mockResolvedValue({
+      id: 'pat-1',
+      full_name: 'María García',
+    });
+    (bookAppointment as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+    });
+
+    await POST(
+      new Request('http://localhost/api/admin/booking/book', {
+        method: 'POST',
+        body: JSON.stringify({
+          ...slotBody,
+          patientId: 'pat-1',
+          notes: 'Prefiere mañana',
+        }),
+      })
+    );
+
+    expect(bookAppointment).toHaveBeenCalledWith(
+      expect.objectContaining({ notes: 'Prefiere mañana' })
+    );
+  });
+
+  it('passes null for whitespace-only notes', async () => {
+    (resolvePatientById as ReturnType<typeof vi.fn>).mockResolvedValue({
+      id: 'pat-1',
+      full_name: 'María García',
+    });
+    (bookAppointment as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+    });
+
+    await POST(
+      new Request('http://localhost/api/admin/booking/book', {
+        method: 'POST',
+        body: JSON.stringify({
+          ...slotBody,
+          patientId: 'pat-1',
+          notes: '   ',
+        }),
+      })
+    );
+
+    expect(bookAppointment).toHaveBeenCalledWith(
+      expect.objectContaining({ notes: null })
+    );
+  });
 });
