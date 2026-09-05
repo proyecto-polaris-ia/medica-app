@@ -111,3 +111,35 @@ phone or create a new patient.
 - GIVEN a booking request with `phone_e164` and `fullName` but no `patientId`
 - WHEN the system resolves the patient
 - THEN it MUST find an existing patient by phone or create a new one
+
+### Requirement: Calendar integration on confirmation
+The system MUST provide calendar export options after booking confirmation.
+
+#### Scenario: Google Calendar and ICS export
+- GIVEN a booking is confirmed
+- WHEN the confirmation page is displayed
+- THEN a link to Google Calendar and a button to download ICS MUST be shown
+
+### Requirement: Return to booking flow
+The system MUST allow users to start a new booking after confirmation.
+
+#### Scenario: Link to new booking
+- GIVEN a booking is confirmed
+- WHEN the user clicks "Registrar otra cita"
+- THEN the user MUST be navigated to `/booking`
+
+### Requirement: Appointments list filtering
+The system MUST provide filtering by service, patient, provider, and date range.
+
+#### Scenario: Filter appointments
+- GIVEN the appointments list is displayed
+- WHEN filters are applied
+- THEN only matching appointments MUST be shown
+
+### Requirement: Appointments list sorting
+The system MUST provide sortable columns with start date as default.
+
+#### Scenario: Sort appointments
+- GIVEN the appointments list is displayed
+- WHEN a column header is clicked
+- THEN the list MUST be sorted by that column
