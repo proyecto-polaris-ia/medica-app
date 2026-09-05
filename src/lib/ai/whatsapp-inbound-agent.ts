@@ -39,6 +39,7 @@ export type WhatsAppToolAction = {
     providerId?: string;
     serviceName?: string;
     providerName?: string;
+    knowledgeServiceName?: string;
     localDate?: string;
     startAt?: string;
     endAt?: string;

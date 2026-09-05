@@ -7,12 +7,14 @@ export async function bookAppointment({
   providerId,
   startAt,
   endAt,
+  notes,
 }: {
   patientId: string;
   serviceId: string;
   providerId: string;
   startAt: Date;
   endAt: Date;
+  notes?: string;
 }): Promise<{ ok: true } | BookingConflict> {
   const supabase = getSupabaseAdmin();
   const maxRetries = 3;
@@ -25,6 +27,7 @@ export async function bookAppointment({
       start_at: startAt.toISOString(),
       end_at: endAt.toISOString(),
       status: 'requested',
+      notes: notes ?? null,
     });
 
     if (!error) return { ok: true };
