@@ -15,6 +15,7 @@ const timeFormatter = new Intl.DateTimeFormat('es-MX', {
 
 export type ConfirmPatient = {
   phone: string;
+  email?: string;
   fullName: string;
   patientId?: string;
   captchaToken?: string;
@@ -43,21 +44,25 @@ export function ConfirmStep({
   siteKey?: string;
 }) {
   const [phone, setPhone] = useState('');
+  const [email, setEmail] = useState('');
   const [fullName, setFullName] = useState('');
   const [patientId, setPatientId] = useState<string | null>(null);
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
   const [notes, setNotes] = useState('');
 
   const isValidPhone = /^\+[1-9]\d{7,14}$/.test(phone);
+  const isValidEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+  const hasContact = mode === 'internal' ? isValidPhone || isValidEmail : isValidPhone;
 
   const canSubmit =
-    isValidPhone &&
+    hasContact &&
     fullName.trim().length > 0 &&
     (mode === 'internal' || captchaToken !== null);
 
   const handleSelectPatient = (patient: Patient) => {
     setPatientId(patient.id);
-    setPhone(patient.phoneE164);
+    setPhone(patient.phoneE164 ?? '');
+    setEmail(patient.email ?? '');
     setFullName(patient.fullName);
   };
 
@@ -95,6 +100,13 @@ export function ConfirmStep({
           className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 disabled:bg-gray-100"
         />
       </label>
+
+      {mode === 'internal' && (
+        <label className="block">
+          <span className="text-sm font-medium text-gray-700">Correo electrónico</span>
+          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="maria@ejemplo.com" disabled={patientId !== null} className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 disabled:bg-gray-100" />
+        </label>
+      )}
 
       <label className="block">
         <span className="text-sm font-medium text-gray-700">
@@ -157,6 +169,7 @@ export function ConfirmStep({
           onClick={() =>
             onConfirm({
               phone,
+              ...(mode === 'internal' && email ? { email } : {}),
               fullName,
               ...(patientId ? { patientId } : {}),
               ...(captchaToken ? { captchaToken } : {}),

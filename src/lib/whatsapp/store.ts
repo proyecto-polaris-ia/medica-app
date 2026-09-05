@@ -26,6 +26,7 @@ type WhatsAppStoreDecision = Pick<WhatsAppInboundAgentDecision, 'intent' | 'conf
 
 export type WhatsAppStore = {
   persistInboundEvent(event: NormalizedWhatsAppInboundEvent): Promise<PersistedWhatsAppInboundEvent>;
+  linkWhatsAppContactToPatient(input: { contactId: string; patientId: string }): Promise<void>;
   loadConversationContext(conversationId: string): Promise<WhatsAppConversationContext>;
   createIntent(input: { persisted: PersistedWhatsAppInboundEvent; decision: WhatsAppStoreDecision }): Promise<{ id: string }>;
   insertOutboundMessage(input: { persisted: PersistedWhatsAppInboundEvent; body: string; sendResult?: unknown; purpose: 'auto_answer' | 'customer_escalation' | 'human_alert' | 'booking' }): Promise<void>;
@@ -87,6 +88,14 @@ export async function persistWhatsAppInboundEvent(event: NormalizedWhatsAppInbou
   if (messageId) return { inserted: true, contactId, conversationId, messageId };
   const existing = await selectExistingMessageId(client, event.providerMessageId);
   return { inserted: false, contactId: existing?.contact_id ?? contactId, conversationId: existing?.conversation_id ?? conversationId, messageId: existing?.id ?? '' };
+}
+
+export async function linkWhatsAppContactToPatient(input: { contactId: string; patientId: string }) {
+  const result = await db()
+    .from('whatsapp_contacts')
+    .update({ linked_patient_id: input.patientId, linked_patient_source: 'auto_phone', linked_patient_matched_at: new Date().toISOString() })
+    .eq('id', input.contactId);
+  throwIfError(result.error, 'Could not link WhatsApp contact to patient');
 }
 
 async function touchConversation(client: DbClient, conversationId: string, event: NormalizedWhatsAppInboundEvent) {

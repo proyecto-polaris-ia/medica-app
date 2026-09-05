@@ -10,7 +10,8 @@ import { LoadingState } from '@/components/admin/LoadingState';
 type Patient = {
   id: string;
   fullName: string;
-  phoneE164: string;
+  phoneE164: string | null;
+  email: string | null;
   notes: string | null;
   createdAt: string;
   updatedAt: string;
@@ -19,6 +20,7 @@ type Patient = {
 const emptyPatient = {
   fullName: '',
   phoneE164: '',
+  email: '',
   notes: '',
 };
 
@@ -60,7 +62,8 @@ export default function PatientsPage() {
     setEditing(patient);
     setForm({
       fullName: patient.fullName,
-      phoneE164: patient.phoneE164,
+      phoneE164: patient.phoneE164 ?? '',
+      email: patient.email ?? '',
       notes: patient.notes ?? '',
     });
     setIsModalOpen(true);
@@ -84,6 +87,8 @@ export default function PatientsPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...form,
+          phoneE164: form.phoneE164 || null,
+          email: form.email || null,
           notes: form.notes || null,
         }),
       });
@@ -136,7 +141,8 @@ export default function PatientsPage() {
         <DataTable
           columns={[
             { header: 'Nombre', cell: (p) => p.fullName },
-            { header: 'Teléfono', cell: (p) => p.phoneE164 },
+            { header: 'Teléfono', cell: (p) => p.phoneE164 || '-' },
+            { header: 'Correo', cell: (p) => p.email || '-' },
             { header: 'Notas', cell: (p) => p.notes || '-' },
           ]}
           rows={patients}
@@ -154,10 +160,11 @@ export default function PatientsPage() {
           isSubmitting={submitting}
         >
           <div>
-            <label className="block text-sm font-medium text-gray-700">
+            <label htmlFor="patient-full-name" className="block text-sm font-medium text-gray-700">
               Nombre completo
             </label>
             <input
+              id="patient-full-name"
               type="text"
               value={form.fullName}
               onChange={(e) => setForm({ ...form, fullName: e.target.value })}
@@ -165,10 +172,11 @@ export default function PatientsPage() {
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700">
+            <label htmlFor="patient-phone" className="block text-sm font-medium text-gray-700">
               Teléfono (E.164)
             </label>
             <input
+              id="patient-phone"
               type="tel"
               value={form.phoneE164}
               onChange={(e) => setForm({ ...form, phoneE164: e.target.value })}
@@ -177,10 +185,15 @@ export default function PatientsPage() {
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700">
+            <label htmlFor="patient-email" className="block text-sm font-medium text-gray-700">Correo electrónico</label>
+            <input id="patient-email" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2" placeholder="maria@ejemplo.com" />
+          </div>
+          <div>
+            <label htmlFor="patient-notes" className="block text-sm font-medium text-gray-700">
               Notas
             </label>
             <textarea
+              id="patient-notes"
               value={form.notes}
               onChange={(e) => setForm({ ...form, notes: e.target.value })}
               className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2"

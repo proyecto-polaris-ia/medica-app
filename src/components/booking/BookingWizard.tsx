@@ -162,6 +162,7 @@ export function BookingWizard({
       body.patientId = patient.patientId;
     } else {
       body.phone = patient.phone;
+      if (mode === 'internal' && patient.email) body.email = patient.email;
       body.fullName = patient.fullName;
     }
 

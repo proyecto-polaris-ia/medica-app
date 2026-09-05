@@ -185,7 +185,7 @@ describe('ConfirmStep internal mode', () => {
     );
 
     expect(
-      screen.getByPlaceholderText('Buscar paciente por nombre o teléfono')
+      screen.getByPlaceholderText('Buscar paciente por nombre, teléfono o correo')
     ).toBeInTheDocument();
     expect(screen.getByPlaceholderText('+5215512345678')).toBeInTheDocument();
     expect(screen.getByPlaceholderText('María García')).toBeInTheDocument();
@@ -206,7 +206,7 @@ describe('ConfirmStep internal mode', () => {
     );
 
     const search = screen.getByPlaceholderText(
-      'Buscar paciente por nombre o teléfono'
+      'Buscar paciente por nombre, teléfono o correo'
     );
     await userEvent.type(search, 'maria');
 
@@ -238,7 +238,7 @@ describe('ConfirmStep internal mode', () => {
     );
 
     const search = screen.getByPlaceholderText(
-      'Buscar paciente por nombre o teléfono'
+      'Buscar paciente por nombre, teléfono o correo'
     );
     await userEvent.type(search, 'maria');
 
@@ -254,4 +254,13 @@ describe('ConfirmStep internal mode', () => {
       );
     });
   });
+});
+
+it('allows an internal email-only patient and sends the email', async () => {
+  const onConfirm = vi.fn();
+  render(<ConfirmStep mode="internal" service={service} provider={provider} slot={slot} onConfirm={onConfirm} onBack={vi.fn()} loading={false} error={null} />);
+  await userEvent.type(screen.getByPlaceholderText('maria@ejemplo.com'), 'maria@example.com');
+  await userEvent.type(screen.getByPlaceholderText('María García'), 'María García');
+  await userEvent.click(screen.getByText('Confirmar reserva'));
+  expect(onConfirm).toHaveBeenCalledWith(expect.objectContaining({ email: 'maria@example.com', phone: '' }));
 });

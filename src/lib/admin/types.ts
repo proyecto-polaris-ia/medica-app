@@ -1,7 +1,8 @@
 export type Patient = {
   id: string;
   fullName: string;
-  phoneE164: string;
+  phoneE164: string | null;
+  email: string | null;
   notes: string | null;
   createdAt: string;
   updatedAt: string;
@@ -9,7 +10,8 @@ export type Patient = {
 
 export type PatientInput = {
   fullName: string;
-  phoneE164: string;
+  phoneE164?: string | null;
+  email?: string | null;
   notes?: string | null;
 };
 

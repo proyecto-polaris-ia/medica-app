@@ -14,7 +14,8 @@ export async function PATCH(
     const body = await parseJsonBody(request);
     const patient = await updatePatient(id, {
       fullName: body.fullName as string,
-      phoneE164: body.phoneE164 as string,
+      phoneE164: body.phoneE164 as string | null | undefined,
+      email: body.email as string | null | undefined,
       notes: body.notes as string | null | undefined,
     });
     return Response.json({ patient });

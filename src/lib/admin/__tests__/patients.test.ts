@@ -70,6 +70,7 @@ describe('patients service', () => {
           id: PATIENT_ID,
           fullName: 'María García',
           phoneE164: '+5215512345678',
+          email: null,
           notes: 'Nota',
           createdAt: '2026-09-01T10:00:00Z',
           updatedAt: '2026-09-01T10:00:00Z',
@@ -108,6 +109,7 @@ describe('patients service', () => {
       expect(mockInsert).toHaveBeenCalledWith({
         full_name: 'Juan Pérez',
         phone_e164: '+5215587654321',
+        email: null,
         notes: undefined,
       });
       expect(patient).toEqual(
@@ -155,6 +157,7 @@ describe('patients service', () => {
       expect(mockUpdate).toHaveBeenCalledWith({
         full_name: 'María G.',
         phone_e164: '+5215512345678',
+        email: null,
         notes: 'Actualizado',
       });
       expect(patient).toEqual(
@@ -216,13 +219,14 @@ describe('patients service', () => {
       const patients = await searchPatients('maria');
 
       expect(mockOr).toHaveBeenCalledWith(
-        'full_name.ilike.%maria%,phone_e164.ilike.%maria%'
+        'full_name.ilike.%maria%,phone_e164.ilike.%maria%,email.ilike.%maria%'
       );
       expect(patients).toEqual([
         {
           id: PATIENT_ID,
           fullName: 'María García',
           phoneE164: '+5215512345678',
+          email: null,
           notes: null,
           createdAt: '2026-09-01T10:00:00Z',
           updatedAt: '2026-09-01T10:00:00Z',
@@ -235,5 +239,42 @@ describe('patients service', () => {
 
       await expect(searchPatients('ana')).rejects.toThrow('down');
     });
+  });
+});
+
+describe('patient email contact validation', () => {
+  it('creates an email-only patient with a normalized email', async () => {
+    const { createPatient } = await import('../patients');
+    const inserted = { id: 'pat-email', full_name: 'María', phone_e164: null, email: 'maria@example.com', notes: null, created_at: 'now', updated_at: 'now' };
+    const query = { insert: vi.fn().mockReturnThis(), select: vi.fn().mockReturnThis(), single: vi.fn().mockResolvedValue({ data: inserted, error: null }) };
+    (getSupabaseAdmin as ReturnType<typeof vi.fn>).mockReturnValue({ from: vi.fn().mockReturnValue(query) });
+    await expect(createPatient({ fullName: 'María', phoneE164: null, email: '  MARIA@EXAMPLE.COM ' })).resolves.toMatchObject({ phoneE164: null, email: 'maria@example.com' });
+  });
+
+  it('rejects a patient without either contact', async () => {
+    const { createPatient } = await import('../patients');
+    await expect(createPatient({ fullName: 'María', phoneE164: null, email: null })).rejects.toThrow('contact');
+  });
+});
+
+describe('patient contact edge cases', () => {
+  beforeEach(() => vi.resetAllMocks());
+  it('rejects a duplicate normalized email as a contact conflict', async () => {
+    const query = { insert: vi.fn().mockReturnThis(), select: vi.fn().mockReturnThis(), single: vi.fn().mockResolvedValue({ data: null, error: { code: '23505', message: 'duplicate email' } }) };
+    (getSupabaseAdmin as ReturnType<typeof vi.fn>).mockReturnValue({ from: vi.fn().mockReturnValue(query) });
+    const { ConflictError } = await import('../errors');
+    await expect(createPatient({ fullName: 'Otra', phoneE164: null, email: 'maria@example.com' })).rejects.toBeInstanceOf(ConflictError);
+  });
+  it('rejects update without contact before it can overwrite the current row', async () => {
+    const from = vi.fn(); (getSupabaseAdmin as ReturnType<typeof vi.fn>).mockReturnValue({ from });
+    await expect(updatePatient(PATIENT_ID, { fullName: 'María', phoneE164: null, email: null })).rejects.toMatchObject({ field: 'contact' });
+    expect(from).not.toHaveBeenCalled();
+  });
+  it('updates and maps both contact methods', async () => {
+    const row = { id: PATIENT_ID, full_name: 'María', phone_e164: '+5215512345678', email: 'maria@example.com', notes: null, created_at: 'a', updated_at: 'b' };
+    const query = { update: vi.fn().mockReturnThis(), eq: vi.fn().mockReturnThis(), select: vi.fn().mockReturnThis(), single: vi.fn().mockResolvedValue({ data: row, error: null }) };
+    (getSupabaseAdmin as ReturnType<typeof vi.fn>).mockReturnValue({ from: vi.fn().mockReturnValue(query) });
+    await expect(updatePatient(PATIENT_ID, { fullName: 'María', phoneE164: '+5215512345678', email: 'MARIA@example.COM' })).resolves.toMatchObject({ email: 'maria@example.com', phoneE164: '+5215512345678' });
+    expect(query.update).toHaveBeenCalledWith(expect.objectContaining({ email: 'maria@example.com' }));
   });
 });

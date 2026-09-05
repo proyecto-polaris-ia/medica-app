@@ -33,17 +33,12 @@ export async function POST(request: Request): Promise<Response> {
       body.patientId.length > 0
     ) {
       patient = await resolvePatientById(body.patientId);
-    } else if (
-      typeof body.phone === 'string' &&
-      typeof body.fullName === 'string'
-    ) {
-      const phone = parsePhoneE164(body.phone, 'phone');
-      patient = await resolvePatient({ phone, fullName: body.fullName });
     } else {
-      throw new ValidationError(
-        'patient',
-        'Provide either patientId or phone and fullName'
-      );
+      const phone = typeof body.phone === 'string' && body.phone ? parsePhoneE164(body.phone, 'phone') : undefined;
+      const email = typeof body.email === 'string' ? body.email : undefined;
+      if (!phone && !email) throw new ValidationError('patient', 'Provide either patientId or a contact method');
+      if (typeof body.fullName !== 'string' || !body.fullName.trim()) throw new ValidationError('fullName', 'fullName is required');
+      patient = await resolvePatient({ phone, email, fullName: body.fullName });
     }
 
     const result = await bookAppointment({
