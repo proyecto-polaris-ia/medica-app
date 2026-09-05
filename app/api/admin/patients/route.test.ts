@@ -127,6 +127,38 @@ describe('POST /api/admin/patients', () => {
     expect(body.patient.fullName).toBe('Juan');
   });
 
+  it('forwards an email-only patient to the service', async () => {
+    (createPatient as ReturnType<typeof vi.fn>).mockResolvedValue({
+      id: 'pat-email', fullName: 'María', phoneE164: null, email: 'maria@example.com',
+    });
+
+    const res = await POST(new Request('http://localhost/api/admin/patients', {
+      method: 'POST',
+      body: JSON.stringify({ fullName: 'María', phoneE164: null, email: 'MARIA@example.com' }),
+    }));
+
+    expect(res.status).toBe(201);
+    expect(createPatient).toHaveBeenCalledWith({
+      fullName: 'María', phoneE164: null, email: 'MARIA@example.com', notes: undefined,
+    });
+  });
+
+  it('forwards both contacts to the service', async () => {
+    (createPatient as ReturnType<typeof vi.fn>).mockResolvedValue({
+      id: 'pat-both', fullName: 'María', phoneE164: '+5215512345678', email: 'maria@example.com',
+    });
+
+    const res = await POST(new Request('http://localhost/api/admin/patients', {
+      method: 'POST',
+      body: JSON.stringify({ fullName: 'María', phoneE164: '+5215512345678', email: 'maria@example.com' }),
+    }));
+
+    expect(res.status).toBe(201);
+    expect(createPatient).toHaveBeenCalledWith({
+      fullName: 'María', phoneE164: '+5215512345678', email: 'maria@example.com', notes: undefined,
+    });
+  });
+
   it('returns 400 for invalid input', async () => {
     (createPatient as ReturnType<typeof vi.fn>).mockRejectedValue(
       new ValidationError('phoneE164', 'Invalid phoneE164')

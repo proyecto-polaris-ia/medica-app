@@ -317,7 +317,7 @@ describe('BookingWizard integration', () => {
     await userEvent.click(slotButton);
 
     const search = screen.getByPlaceholderText(
-      'Buscar paciente por nombre o teléfono'
+      'Buscar paciente por nombre, teléfono o correo'
     );
     await userEvent.type(search, 'maria');
 
@@ -335,6 +335,47 @@ describe('BookingWizard integration', () => {
 
     await waitFor(() => {
       expect(screen.getByText(/Reserva confirmada/i)).toBeInTheDocument();
+    });
+  });
+
+  it('includes the internal email in the booking request payload', async () => {
+    const adminFetch = vi.fn(async (url: string | URL) => {
+      const path = url.toString();
+      if (path.includes('/api/booking/services')) return Response.json({ services: [service] });
+      if (path.includes('/api/booking/providers')) return Response.json({ providers: [provider] });
+      if (path.includes('/api/booking/slots')) return Response.json({ slots: [slot] });
+      if (path.includes('/api/admin/booking/book')) {
+        return Response.json({
+          status: 'booked',
+          confirmation: { patientName: 'María García', startAt: slot.startAt, endAt: slot.endAt },
+        }, { status: 201 });
+      }
+      return new Response('Not found', { status: 404 });
+    }) as typeof fetch;
+    global.fetch = adminFetch;
+
+    render(<BookingWizard mode="internal" />);
+    await userEvent.click(await screen.findByText(service.name));
+    await userEvent.click(await screen.findByText(provider.name));
+    await userEvent.type(await screen.findByLabelText('Fecha'), '2026-09-10');
+    await userEvent.click(await screen.findByText(/\d{1,2}:\d{2}\s[ap]\.m\.\s*–\s*\d{1,2}:\d{2}\s[ap]\.m\./i));
+    await userEvent.type(await screen.findByPlaceholderText('maria@ejemplo.com'), 'maria@example.com');
+    await userEvent.type(await screen.findByPlaceholderText('María García'), 'María García');
+    await userEvent.click(screen.getByText('Confirmar reserva'));
+
+    await waitFor(() => {
+      const bookingCalls = (adminFetch as unknown as {
+        mock: { calls: Array<[string | URL, RequestInit]> };
+      }).mock.calls;
+      const bookingCall = bookingCalls.find(([url]) =>
+        String(url).includes('/api/admin/booking/book')
+      );
+      expect(bookingCall).toBeDefined();
+      expect(JSON.parse((bookingCall![1] as RequestInit).body as string)).toMatchObject({
+        email: 'maria@example.com',
+        phone: '',
+        fullName: 'María García',
+      });
     });
   });
 });

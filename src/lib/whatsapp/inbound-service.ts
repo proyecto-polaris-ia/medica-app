@@ -19,6 +19,7 @@ import {
   createCrmSyncEvent,
   createWhatsAppEscalation,
   insertWhatsAppOutboundMessage,
+  linkWhatsAppContactToPatient,
   loadWhatsAppConversationContext,
   loadWhatsAppConversationHistory,
   markWhatsAppInboundMessageProcessed,
@@ -50,6 +51,7 @@ export type WhatsAppInboundServiceOptions = {
 
 const defaultStore: WhatsAppStore = {
   persistInboundEvent: persistWhatsAppInboundEvent,
+  linkWhatsAppContactToPatient,
   loadConversationContext: loadWhatsAppConversationContext,
   loadConversationHistory: loadWhatsAppConversationHistory,
   createIntent: async (input) => {
@@ -115,7 +117,7 @@ async function defaultBookingContext() {
   return { services, providers };
 }
 
-async function runBookingTool(action: WhatsAppToolAction, event: NormalizedWhatsAppInboundEvent, context: Record<string, unknown> | null | undefined): Promise<{ responseText: string; bookingContext: JsonPayload | null; toolResults: WhatsAppDynamicToolResult[]; booked: boolean }> {
+async function runBookingTool(action: WhatsAppToolAction, event: NormalizedWhatsAppInboundEvent, context: Record<string, unknown> | null | undefined, store: WhatsAppStore, contactId: string): Promise<{ responseText: string; bookingContext: JsonPayload | null; toolResults: WhatsAppDynamicToolResult[]; booked: boolean }> {
   const priorServiceId = typeof context?.serviceId === 'string' ? context.serviceId : undefined;
   const priorProviderId = typeof context?.providerId === 'string' ? context.providerId : undefined;
   const selected = typeof action.args.selectedCandidateIndex === 'number' ? readCandidate(context, action.args.selectedCandidateIndex) : null;
@@ -146,7 +148,8 @@ async function runBookingTool(action: WhatsAppToolAction, event: NormalizedWhats
       return { responseText: 'Ya tengo el contexto de la cita, pero necesito que me confirmes cuál horario deseas reservar.', bookingContext: { ...context, serviceId, providerId, step: 'selecting_slot' }, toolResults: [{ id: 'booking:missing_slot', tool: 'book_appointment', status: 'blocked', reason: 'Falta horario seleccionado.' }], booked: false };
     }
     const patient = await resolvePatient({ phone: event.fromPhone, fullName: action.args.fullName ?? event.profileName });
-    
+    await store.linkWhatsAppContactToPatient({ contactId, patientId: patient.id });
+
     // Build notes from conversation context
     const notes = buildAppointmentNotes({
       knowledgeServiceName: action.args.knowledgeServiceName,
@@ -157,7 +160,7 @@ async function runBookingTool(action: WhatsAppToolAction, event: NormalizedWhats
         localDate: action.args.localDate,
       },
     });
-    
+
     const result = await bookAppointment({ patientId: patient.id, serviceId, providerId, startAt, endAt, notes: notes ?? undefined });
     if ('type' in result) {
       const next = await findNextAvailable({ providerId, serviceId, after: startAt });
@@ -375,7 +378,13 @@ async function processWithLegacy(
   let booked = false;
 
   if (decision.decision === 'tool_action' && decision.toolAction) {
-    const tool = await runBookingTool(decision.toolAction, event, { ...conversation.bookingContext, summary: conversation.summary });
+    const tool = await runBookingTool(
+      decision.toolAction,
+      event,
+      { ...conversation.bookingContext, summary: conversation.summary },
+      store,
+      persisted.contactId,
+    );
     booked = tool.booked;
     finalDecision = { ...decision, responseText: tool.responseText, citedToolCallIds: tool.toolResults.map((result) => result.id), dynamicToolResults: tool.toolResults };
     await store.updateConversationStatus({ conversationId: persisted.conversationId, status: 'open', lastIntent: finalDecision.intent, bookingContext: tool.bookingContext });

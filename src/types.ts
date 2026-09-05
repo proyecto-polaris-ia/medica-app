@@ -24,7 +24,8 @@ export type WhatsAppKnowledgeEntry = {
 export type Patient = {
   id: string;
   fullName: string;
-  phoneE164: string;
+  phoneE164: string | null;
+  email: string | null;
   notes: string | null;
   createdAt?: string;
   updatedAt?: string;

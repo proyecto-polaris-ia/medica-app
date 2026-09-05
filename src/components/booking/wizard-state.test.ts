@@ -208,3 +208,8 @@ describe('public mode state', () => {
     expect(state.captchaToken).toBeNull();
   });
 });
+
+it('stores an internal email alongside the optional phone', () => {
+  const state = wizardReducer(initState(), { type: 'SET_PATIENT', patient: { fullName: 'María', phone: '', email: 'maria@example.com' } });
+  expect(state.patient).toEqual({ fullName: 'María', phone: '', email: 'maria@example.com' });
+});

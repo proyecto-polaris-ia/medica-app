@@ -67,6 +67,40 @@ describe('PATCH /api/admin/patients/[id]', () => {
     expect(body.patient.fullName).toBe('María G.');
   });
 
+  it('forwards an email-only update to the service', async () => {
+    (updatePatient as ReturnType<typeof vi.fn>).mockResolvedValue({
+      id: PATIENT_ID, fullName: 'María', phoneE164: null, email: 'maria@example.com',
+    });
+    const res = await PATCH(
+      new Request(`http://localhost/api/admin/patients/${PATIENT_ID}`, {
+        method: 'PATCH', body: JSON.stringify({ fullName: 'María', phoneE164: null, email: 'maria@example.com' }),
+      }),
+      { params: Promise.resolve({ id: PATIENT_ID }) }
+    );
+
+    expect(res.status).toBe(200);
+    expect(updatePatient).toHaveBeenCalledWith(PATIENT_ID, {
+      fullName: 'María', phoneE164: null, email: 'maria@example.com', notes: undefined,
+    });
+  });
+
+  it('forwards both contacts on update', async () => {
+    (updatePatient as ReturnType<typeof vi.fn>).mockResolvedValue({
+      id: PATIENT_ID, fullName: 'María', phoneE164: '+5215512345678', email: 'maria@example.com',
+    });
+    const res = await PATCH(
+      new Request(`http://localhost/api/admin/patients/${PATIENT_ID}`, {
+        method: 'PATCH', body: JSON.stringify({ fullName: 'María', phoneE164: '+5215512345678', email: 'maria@example.com' }),
+      }),
+      { params: Promise.resolve({ id: PATIENT_ID }) }
+    );
+
+    expect(res.status).toBe(200);
+    expect(updatePatient).toHaveBeenCalledWith(PATIENT_ID, {
+      fullName: 'María', phoneE164: '+5215512345678', email: 'maria@example.com', notes: undefined,
+    });
+  });
+
   it('returns 404 when the patient does not exist', async () => {
     (updatePatient as ReturnType<typeof vi.fn>).mockRejectedValue(
       new NotFoundError('Patient')

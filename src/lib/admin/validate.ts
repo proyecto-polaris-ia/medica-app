@@ -127,3 +127,5 @@ export type AppointmentStatus =
   | 'rescheduled'
   | 'no_show'
   | 'attended';
+
+export { parseOptionalEmail } from '@/lib/booking/patient-contact';

@@ -27,7 +27,7 @@ export type WizardState = {
   provider: Provider | null;
   date: string;
   slot: Slot | null;
-  patient: { phone: string; fullName: string };
+  patient: { phone: string; email: string; fullName: string };
   patientId: string | null;
   captchaToken: string | null;
   phase: 'idle' | 'loading' | 'error';
@@ -44,7 +44,7 @@ export type WizardAction =
   | { type: 'SELECT_PROVIDER'; provider: Provider }
   | { type: 'SELECT_DATE'; date: string }
   | { type: 'SELECT_SLOT'; slot: Slot }
-  | { type: 'SET_PATIENT'; patient: { phone: string; fullName: string } }
+  | { type: 'SET_PATIENT'; patient: { phone: string; email: string; fullName: string } }
   | { type: 'SET_PATIENT_ID'; patientId: string | null }
   | { type: 'SET_CAPTCHA'; token: string | null }
   | { type: 'SET_SERVICES'; services: Service[] }
@@ -64,7 +64,7 @@ export function initState(): WizardState {
     provider: null,
     date: '',
     slot: null,
-    patient: { phone: '', fullName: '' },
+    patient: { phone: '', email: '', fullName: '' },
     patientId: null,
     captchaToken: null,
     phase: 'idle',

@@ -197,3 +197,30 @@ describe('POST /api/admin/booking/book', () => {
     );
   });
 });
+
+it('accepts an email-only internal booking', async () => {
+  (resolvePatient as ReturnType<typeof vi.fn>).mockResolvedValue({ id: 'pat-email', full_name: 'María' });
+  (bookAppointment as ReturnType<typeof vi.fn>).mockResolvedValue({ ok: true });
+  const res = await POST(new Request('http://localhost/api/admin/booking/book', { method: 'POST', body: JSON.stringify({ ...slotBody, email: 'MARIA@example.com', fullName: 'María' }) }));
+  expect(res.status).toBe(201);
+  expect(resolvePatient).toHaveBeenCalledWith({ email: 'MARIA@example.com', fullName: 'María', phone: undefined });
+});
+
+it('passes both internal contacts to the resolver', async () => {
+  vi.clearAllMocks(); (requireUser as ReturnType<typeof vi.fn>).mockResolvedValue(USER);
+  (resolvePatient as ReturnType<typeof vi.fn>).mockResolvedValue({ id: 'pat-both', full_name: 'María' });
+  (bookAppointment as ReturnType<typeof vi.fn>).mockResolvedValue({ ok: true });
+  const res = await POST(new Request('http://localhost/api/admin/booking/book', { method: 'POST', body: JSON.stringify({ ...slotBody, phone: '+5215512345678', email: 'maria@example.com', fullName: 'María' }) }));
+  expect(res.status).toBe(201);
+  expect(resolvePatient).toHaveBeenCalledWith({ phone: '+5215512345678', email: 'maria@example.com', fullName: 'María' });
+});
+
+it('returns typed 409 without booking when identity resolution conflicts', async () => {
+  vi.clearAllMocks(); (requireUser as ReturnType<typeof vi.fn>).mockResolvedValue(USER);
+  const { ConflictError } = await import('@/lib/admin/errors');
+  (resolvePatient as ReturnType<typeof vi.fn>).mockRejectedValue(new ConflictError('Identity conflict', 'patient_identity_conflict'));
+  const res = await POST(new Request('http://localhost/api/admin/booking/book', { method: 'POST', body: JSON.stringify({ ...slotBody, phone: '+5215512345678', email: 'other@example.com', fullName: 'María' }) }));
+  expect(res.status).toBe(409);
+  await expect(res.json()).resolves.toMatchObject({ code: 'patient_identity_conflict' });
+  expect(bookAppointment).not.toHaveBeenCalled();
+});
