@@ -16,12 +16,14 @@ export type PatientInput = {
 export type Provider = {
   id: string;
   name: string;
+  color: string | null;
   createdAt: string;
   updatedAt: string;
 };
 
 export type ProviderInput = {
   name: string;
+  color?: string | null;
 };
 
 export type Service = {
@@ -82,4 +84,28 @@ export type AppointmentInput = {
   startAt: string;
   endAt: string;
   status?: AppointmentStatus;
+};
+
+export type ProviderAppointment = {
+  id: string;
+  patientId: string | null;
+  patientName: string;
+  serviceName: string;
+  startAt: string;
+  endAt: string;
+  status: AppointmentStatus;
+};
+
+export type RecentClient = {
+  id: string;
+  fullName: string;
+  count: number;
+};
+
+export type ProviderSnapshot = {
+  provider: Provider;
+  upcoming: ProviderAppointment[];
+  today: ProviderAppointment[];
+  recentClients: RecentClient[];
+  clientsHref: string;
 };

@@ -17,7 +17,14 @@ import {
   wizardReducer,
 } from './wizard-state';
 
-const API = '/api/booking';
+const PUBLIC_API = '/api/booking';
+const ADMIN_API = '/api/admin/booking';
+
+// The catalog endpoints (services/providers/slots) live only under the public
+// `/api/booking/*` namespace. Only the write (book) differs by mode: the public
+// flow posts to `/api/booking/book` (Turnstile-gated) and the internal flow
+// posts to `/api/admin/booking/book` (session-gated, accepts patientId).
+const CATALOG_API = PUBLIC_API;
 
 type ApiSlot = { startAt: string; endAt: string };
 
@@ -35,14 +42,21 @@ function toApiSlot(slot: Slot): ApiSlot {
   };
 }
 
-export function BookingWizard() {
+export function BookingWizard({
+  mode,
+  siteKey,
+}: {
+  mode: 'public' | 'internal';
+  siteKey?: string;
+}) {
+  const apiBase = mode === 'internal' ? ADMIN_API : PUBLIC_API;
   const [state, dispatch] = useReducer(wizardReducer, initState());
 
   useEffect(() => {
     let cancelled = false;
 
     async function loadServices() {
-      const res = await fetch(`${API}/services`);
+      const res = await fetch(`${CATALOG_API}/services`);
       if (!res.ok) {
         dispatch({
           type: 'ERROR',
@@ -68,7 +82,7 @@ export function BookingWizard() {
     let cancelled = false;
 
     async function loadProviders() {
-      const res = await fetch(`${API}/providers`);
+      const res = await fetch(`${CATALOG_API}/providers`);
       if (!res.ok) {
         dispatch({
           type: 'ERROR',
@@ -106,7 +120,7 @@ export function BookingWizard() {
         serviceId: state.service!.id,
         date: state.date,
       });
-      const res = await fetch(`${API}/slots?${params.toString()}`);
+      const res = await fetch(`${CATALOG_API}/slots?${params.toString()}`);
       if (!res.ok) {
         dispatch({
           type: 'ERROR',
@@ -126,21 +140,44 @@ export function BookingWizard() {
     };
   }, [state.step, state.date, state.service, state.provider]);
 
-  async function handleConfirm(patient: { phone: string; fullName: string }) {
+  async function handleConfirm(patient: {
+    phone: string;
+    fullName: string;
+    patientId?: string;
+    captchaToken?: string;
+  }) {
     if (!state.service || !state.provider || !state.slot) return;
 
     dispatch({ type: 'SUBMIT' });
 
-    const res = await fetch(`${API}/book`, {
+    if (patient.patientId) {
+      dispatch({ type: 'SET_PATIENT_ID', patientId: patient.patientId });
+    }
+    if (patient.captchaToken) {
+      dispatch({ type: 'SET_CAPTCHA', token: patient.captchaToken });
+    }
+
+    const body: Record<string, unknown> = {
+      serviceId: state.service.id,
+      providerId: state.provider.id,
+      ...toApiSlot(state.slot),
+    };
+
+    if (patient.patientId) {
+      body.patientId = patient.patientId;
+    } else {
+      body.phone = patient.phone;
+      body.fullName = patient.fullName;
+    }
+
+    if (patient.captchaToken) {
+      body.captchaToken = patient.captchaToken;
+    }
+
+    const res = await fetch(`${apiBase}/book`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        serviceId: state.service.id,
-        providerId: state.provider.id,
-        ...toApiSlot(state.slot),
-        phone: patient.phone,
-        fullName: patient.fullName,
-      }),
+      body: JSON.stringify(body),
     });
 
     if (!res.ok && res.status !== 409) {
@@ -254,6 +291,7 @@ export function BookingWizard() {
           onBack={() => dispatch({ type: 'GO_TO_STEP', step: 'slots' })}
         >
           <ConfirmStep
+            mode={mode}
             service={state.service}
             provider={state.provider}
             slot={state.slot}
@@ -261,6 +299,7 @@ export function BookingWizard() {
             onBack={() => dispatch({ type: 'GO_TO_STEP', step: 'slots' })}
             loading={state.phase === 'loading'}
             error={state.error}
+            siteKey={siteKey}
           />
         </StepShell>
       )}

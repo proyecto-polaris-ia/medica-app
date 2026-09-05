@@ -1,5 +1,5 @@
 import { getSupabaseAdmin } from '@/lib/supabase/server';
-import type { Appointment, AppointmentInput } from './types';
+import type { Appointment, AppointmentInput, ProviderAppointment } from './types';
 import {
   parseAppointmentStatus,
   parseIsoDate,
@@ -31,6 +31,50 @@ export async function listAppointments(): Promise<Appointment[]> {
     .from('appointments')
     .select(SELECT_COLUMNS)
     .order('start_at', { ascending: false });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return (data ?? []).map(mapRow);
+}
+
+const MAX_RANGE_DAYS = 62;
+const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+
+function validateDateRange(
+  startAtIso: string,
+  endAtIso: string,
+  startField = 'start',
+  endField = 'end'
+): { startAt: Date; endAt: Date } {
+  const startAt = parseIsoDate(startAtIso, startField);
+  const endAt = parseIsoDate(endAtIso, endField);
+
+  if (endAt <= startAt) {
+    throw new ValidationError(endField, `${endField} must be after ${startField}`);
+  }
+
+  const spanDays = (endAt.getTime() - startAt.getTime()) / ONE_DAY_MS;
+  if (spanDays > MAX_RANGE_DAYS) {
+    throw new ValidationError(endField, 'Range cannot exceed 62 days');
+  }
+
+  return { startAt, endAt };
+}
+
+export async function listAppointmentsRange(
+  startAtIso: string,
+  endAtIso: string
+): Promise<Appointment[]> {
+  const { startAt, endAt } = validateDateRange(startAtIso, endAtIso);
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from('appointments')
+    .select(SELECT_COLUMNS)
+    .gte('start_at', startAt.toISOString())
+    .lt('start_at', endAt.toISOString())
+    .order('start_at', { ascending: true });
 
   if (error) {
     throw new Error(error.message);
@@ -150,4 +194,82 @@ export async function deleteAppointment(id: string): Promise<void> {
   if (error) {
     throw new Error(error.message);
   }
+}
+
+const PROVIDER_APPOINTMENT_SELECT = '*, patients(*), services(*)';
+
+function toArray<T>(value: unknown): T[] {
+  if (Array.isArray(value)) return value as T[];
+  if (value === undefined || value === null) return [];
+  return [value as T];
+}
+
+function extractPatientName(patientEmbed: unknown): string {
+  const rows = toArray<{ full_name?: string; fullName?: string }>(patientEmbed);
+  const row = rows[0];
+  if (!row) return 'Sin paciente';
+  return row.full_name ?? row.fullName ?? 'Sin paciente';
+}
+
+function extractServiceName(serviceEmbed: unknown): string {
+  const rows = toArray<{ name?: string }>(serviceEmbed);
+  const row = rows[0];
+  if (!row?.name) return 'Servicio desconocido';
+  return row.name;
+}
+
+function mapProviderAppointmentRow(row: Record<string, unknown>): ProviderAppointment {
+  return {
+    id: row.id as string,
+    patientId: (row.patient_id as string | null) ?? null,
+    patientName: extractPatientName(row.patients),
+    serviceName: extractServiceName(row.services),
+    startAt: row.start_at as string,
+    endAt: row.end_at as string,
+    status: row.status as Appointment['status'],
+  };
+}
+
+export async function listUpcomingByProvider(
+  providerId: string,
+  now: Date,
+  limit = 10
+): Promise<ProviderAppointment[]> {
+  const parsedId = parseUuid(providerId, 'providerId');
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from('appointments')
+    .select(PROVIDER_APPOINTMENT_SELECT)
+    .eq('provider_id', parsedId)
+    .gt('start_at', now.toISOString())
+    .order('start_at', { ascending: true })
+    .limit(limit);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return (data ?? []).map(mapProviderAppointmentRow);
+}
+
+export async function listByProviderRange(
+  providerId: string,
+  startInclusive: Date,
+  endExclusive: Date
+): Promise<ProviderAppointment[]> {
+  const parsedId = parseUuid(providerId, 'providerId');
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from('appointments')
+    .select(PROVIDER_APPOINTMENT_SELECT)
+    .eq('provider_id', parsedId)
+    .gte('start_at', startInclusive.toISOString())
+    .lt('start_at', endExclusive.toISOString())
+    .order('start_at', { ascending: true });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return (data ?? []).map(mapProviderAppointmentRow);
 }

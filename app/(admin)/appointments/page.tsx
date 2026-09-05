@@ -1,27 +1,30 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { DataTable } from '@/components/admin/DataTable';
 import { EmptyState } from '@/components/admin/EmptyState';
 import { ErrorState } from '@/components/admin/ErrorState';
 import { FormModal } from '@/components/admin/FormModal';
 import { LoadingState } from '@/components/admin/LoadingState';
-
-type Appointment = {
-  id: string;
-  patientId: string | null;
-  serviceId: string;
-  providerId: string;
-  startAt: string;
-  endAt: string;
-  status: string;
-};
+import { MonthCalendar } from '@/components/admin/calendar/MonthCalendar';
+import { CalendarNav } from '@/components/admin/calendar/CalendarNav';
+import { ProviderLegend } from '@/components/admin/calendar/ProviderLegend';
+import type { Appointment, Provider } from '@/lib/admin/types';
+import {
+  clinicMonthRangeUtc,
+  FALLBACK_COLOR,
+  getCurrentClinicMonth,
+  groupAppointmentsByDay,
+} from '@/lib/admin/timezone';
 
 type Reference = {
   id: string;
   name: string;
 };
 
+type ViewMode = 'list' | 'calendar';
 type SortField = 'startAt' | 'endAt' | 'patient' | 'service' | 'provider' | 'status';
 type SortDirection = 'asc' | 'desc';
 
@@ -55,9 +58,12 @@ function fromLocalInput(value: string): string {
 }
 
 export default function AppointmentsPage() {
+  const searchParams = useSearchParams();
+  const urlProviderFilter = searchParams?.get('providerId') ?? undefined;
+
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [patients, setPatients] = useState<Reference[]>([]);
-  const [providers, setProviders] = useState<Reference[]>([]);
+  const [providers, setProviders] = useState<Provider[]>([]);
   const [services, setServices] = useState<Reference[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -65,21 +71,58 @@ export default function AppointmentsPage() {
   const [editing, setEditing] = useState<Appointment | null>(null);
   const [form, setForm] = useState(emptyAppointment);
   const [submitting, setSubmitting] = useState(false);
+  const [view, setView] = useState<ViewMode>('list');
+  const [visibleMonth, setVisibleMonth] = useState(getCurrentClinicMonth());
   
   const [serviceFilter, setServiceFilter] = useState('');
   const [patientFilter, setPatientFilter] = useState('');
-  const [providerFilter, setProviderFilter] = useState('');
+  const [providerFilter, setProviderFilter] = useState(urlProviderFilter ?? '');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [sortField, setSortField] = useState<SortField>('startAt');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
 
-  async function loadData() {
+  const providerColor = useCallback(
+    (providerId: string) =>
+      providers.find((p) => p.id === providerId)?.color || FALLBACK_COLOR,
+    [providers]
+  );
+
+  const blocksByDay = useMemo(() => {
+    const enriched = appointments.map((appointment) => ({
+      id: appointment.id,
+      patientName: refName(patients, appointment.patientId ?? '') || 'Sin paciente',
+      serviceName: refName(services, appointment.serviceId),
+      providerId: appointment.providerId,
+      startAt: appointment.startAt,
+      endAt: appointment.endAt,
+      status: appointment.status,
+    }));
+    return groupAppointmentsByDay(enriched, providerColor);
+  }, [appointments, patients, services, providerColor]);
+
+  const visibleProviders = useMemo(() => {
+    const providerIds = new Set(appointments.map((a) => a.providerId));
+    return providers.filter((p) => providerIds.has(p.id));
+  }, [appointments, providers]);
+
+  const loadData = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
+      const appointmentsUrl =
+        view === 'calendar'
+          ? (() => {
+              const { startAt, endAt } = clinicMonthRangeUtc(
+                visibleMonth.year,
+                visibleMonth.month
+              );
+              return `/api/admin/appointments?start=${encodeURIComponent(startAt)}&end=${encodeURIComponent(endAt)}`;
+            })()
+          : '/api/admin/appointments';
+
       const [apptRes, patientRes, providerRes, serviceRes] = await Promise.all([
-        fetch('/api/admin/appointments'),
+        fetch(appointmentsUrl),
         fetch('/api/admin/patients'),
         fetch('/api/admin/providers'),
         fetch('/api/admin/services'),
@@ -89,25 +132,25 @@ export default function AppointmentsPage() {
       const patientData = await patientRes.json();
       const providerData = await providerRes.json();
       const serviceData = await serviceRes.json();
-      setAppointments(apptData.appointments);
+      setAppointments(apptData.appointments ?? []);
       setPatients(
         (patientData.patients ?? []).map((p: { id: string; fullName: string }) => ({
           id: p.id,
           name: p.fullName,
         }))
       );
-      setProviders(providerData.providers);
-      setServices(serviceData.services);
+      setProviders(providerData.providers ?? []);
+      setServices(serviceData.services ?? []);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error desconocido');
     } finally {
       setLoading(false);
     }
-  }
+  }, [view, visibleMonth]);
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [loadData]);
 
   function openCreate() {
     setEditing(null);
@@ -132,6 +175,13 @@ export default function AppointmentsPage() {
     setIsModalOpen(false);
     setEditing(null);
     setForm(emptyAppointment);
+  }
+
+  function handleSelectBlock(id: string) {
+    const appointment = appointments.find((a) => a.id === id);
+    if (appointment) {
+      openEdit(appointment);
+    }
   }
 
   async function handleSubmit() {
@@ -258,115 +308,156 @@ export default function AppointmentsPage() {
 
   return (
     <div>
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <h1 className="text-2xl font-bold text-gray-900">Citas</h1>
-        <button
-          onClick={openCreate}
-          className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
-        >
-          Nueva cita
-        </button>
+        <div className="flex items-center gap-2">
+          <div className="inline-flex rounded-md shadow-sm" role="group">
+            <button
+              type="button"
+              onClick={() => setView('list')}
+              className={[
+                'rounded-l-md border px-4 py-2 text-sm font-medium',
+                view === 'list'
+                  ? 'border-blue-600 bg-blue-600 text-white'
+                  : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50',
+              ].join(' ')}
+            >
+              Lista
+            </button>
+            <button
+              type="button"
+              onClick={() => setView('calendar')}
+              className={[
+                'rounded-r-md border px-4 py-2 text-sm font-medium',
+                view === 'calendar'
+                  ? 'border-blue-600 bg-blue-600 text-white'
+                  : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50',
+              ].join(' ')}
+            >
+              Calendario
+            </button>
+          </div>
+          <button
+            onClick={openCreate}
+            className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+          >
+            Nueva cita
+          </button>
+        </div>
       </div>
 
-      <div className="mb-4 rounded-lg border bg-white p-4 shadow-sm">
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-gray-700">Filtros</h2>
-          {hasActiveFilters && (
-            <button
-              onClick={clearFilters}
-              className="text-sm text-blue-600 hover:text-blue-800"
-            >
-              Limpiar filtros
-            </button>
-          )}
+      {view === 'list' && (
+        <div className="mb-4 rounded-lg border bg-white p-4 shadow-sm">
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-gray-700">Filtros</h2>
+            {hasActiveFilters && (
+              <button
+                onClick={clearFilters}
+                className="text-sm text-blue-600 hover:text-blue-800"
+              >
+                Limpiar filtros
+              </button>
+            )}
+          </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
+            <div>
+              <label className="block text-xs font-medium text-gray-600">
+                Servicio
+              </label>
+              <select
+                value={serviceFilter}
+                onChange={(e) => setServiceFilter(e.target.value)}
+                className="mt-1 block w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+              >
+                <option value="">Todos</option>
+                {services.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600">
+                Paciente
+              </label>
+              <select
+                value={patientFilter}
+                onChange={(e) => setPatientFilter(e.target.value)}
+                className="mt-1 block w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+              >
+                <option value="">Todos</option>
+                {patients.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600">
+                Proveedor
+              </label>
+              <select
+                value={providerFilter}
+                onChange={(e) => setProviderFilter(e.target.value)}
+                className="mt-1 block w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+              >
+                <option value="">Todos</option>
+                {providers.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600">
+                Desde
+              </label>
+              <input
+                type="date"
+                value={dateFrom}
+                onChange={(e) => setDateFrom(e.target.value)}
+                className="mt-1 block w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600">
+                Hasta
+              </label>
+              <input
+                type="date"
+                value={dateTo}
+                onChange={(e) => setDateTo(e.target.value)}
+                className="mt-1 block w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+              />
+            </div>
+          </div>
         </div>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
-          <div>
-            <label className="block text-xs font-medium text-gray-600">
-              Servicio
-            </label>
-            <select
-              value={serviceFilter}
-              onChange={(e) => setServiceFilter(e.target.value)}
-              className="mt-1 block w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm"
-            >
-              <option value="">Todos</option>
-              {services.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-600">
-              Paciente
-            </label>
-            <select
-              value={patientFilter}
-              onChange={(e) => setPatientFilter(e.target.value)}
-              className="mt-1 block w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm"
-            >
-              <option value="">Todos</option>
-              {patients.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-600">
-              Proveedor
-            </label>
-            <select
-              value={providerFilter}
-              onChange={(e) => setProviderFilter(e.target.value)}
-              className="mt-1 block w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm"
-            >
-              <option value="">Todos</option>
-              {providers.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-600">
-              Desde
-            </label>
-            <input
-              type="date"
-              value={dateFrom}
-              onChange={(e) => setDateFrom(e.target.value)}
-              className="mt-1 block w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-600">
-              Hasta
-            </label>
-            <input
-              type="date"
-              value={dateTo}
-              onChange={(e) => setDateTo(e.target.value)}
-              className="mt-1 block w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm"
-            />
-          </div>
+      )}
+
+      {view === 'calendar' && (
+        <div className="mb-4 flex items-center justify-between">
+          <CalendarNav
+            year={visibleMonth.year}
+            month={visibleMonth.month}
+            onChange={(year, month) => setVisibleMonth({ year, month })}
+          />
+          <ProviderLegend providers={visibleProviders} />
         </div>
-      </div>
+      )}
 
       {loading && <LoadingState />}
       {error && <ErrorState message={error} onRetry={loadData} />}
-      {!loading && !error && filteredAndSortedAppointments.length === 0 && (
+      {!loading && !error && view === 'list' && filteredAndSortedAppointments.length === 0 && (
         <EmptyState 
           message={hasActiveFilters 
             ? 'No hay citas que coincidan con los filtros.' 
             : 'No hay citas registradas.'} 
         />
       )}
-      {!loading && !error && filteredAndSortedAppointments.length > 0 && (
+      {!loading && !error && view === 'list' && filteredAndSortedAppointments.length > 0 && (
         <DataTable
           columns={[
             { 
@@ -457,6 +548,15 @@ export default function AppointmentsPage() {
           rows={filteredAndSortedAppointments}
           onEdit={openEdit}
           onDelete={handleDelete}
+        />
+      )}
+
+      {!loading && !error && view === 'calendar' && (
+        <MonthCalendar
+          year={visibleMonth.year}
+          month={visibleMonth.month}
+          blocksByDay={blocksByDay}
+          onSelectBlock={handleSelectBlock}
         />
       )}
 

@@ -10,9 +10,10 @@ type DataTableProps<T> = {
   rows: T[];
   onEdit: (row: T) => void;
   onDelete: (row: T) => void;
+  onView?: (row: T) => void;
 };
 
-export function DataTable<T>({ columns, rows, onEdit, onDelete }: DataTableProps<T>) {
+export function DataTable<T>({ columns, rows, onEdit, onDelete, onView }: DataTableProps<T>) {
   return (
     <div className="overflow-x-auto rounded-lg border bg-white shadow-sm">
       <table className="min-w-full divide-y divide-gray-200">
@@ -40,6 +41,14 @@ export function DataTable<T>({ columns, rows, onEdit, onDelete }: DataTableProps
                 </td>
               ))}
               <td className="px-4 py-3 text-right text-sm font-medium">
+                {onView && (
+                  <button
+                    onClick={() => onView(row)}
+                    className="mr-3 text-green-600 hover:text-green-900"
+                  >
+                    Ver
+                  </button>
+                )}
                 <button
                   onClick={() => onEdit(row)}
                   className="mr-3 text-blue-600 hover:text-blue-900"

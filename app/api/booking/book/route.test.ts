@@ -13,27 +13,28 @@ vi.mock('@/lib/booking/patient-resolution', () => ({
   resolvePatient: vi.fn(),
 }));
 
-vi.mock('../_lib/flag', () => ({
-  isBookingUiEnabled: vi.fn(),
-}));
-
-vi.mock('@/lib/supabase/auth', () => ({
-  requireUser: vi.fn(),
-  UnauthorizedError: class extends Error {
+vi.mock('@/lib/booking/turnstile', () => ({
+  TurnstileUnavailableError: class extends Error {
     constructor() {
-      super('Unauthorized');
-      this.name = 'UnauthorizedError';
+      super('Turnstile is not configured');
+      this.name = 'TurnstileUnavailableError';
     }
   },
+  verifyTurnstile: vi.fn(),
+}));
+
+vi.mock('../_lib/flag', () => ({
+  isBookingUiEnabled: vi.fn(),
 }));
 
 import { bookAppointment } from '@/lib/booking/booking';
 import { findNextAvailable } from '@/lib/booking/next-available';
 import { resolvePatient } from '@/lib/booking/patient-resolution';
+import {
+  TurnstileUnavailableError,
+  verifyTurnstile,
+} from '@/lib/booking/turnstile';
 import { isBookingUiEnabled } from '../_lib/flag';
-import { requireUser, UnauthorizedError } from '@/lib/supabase/auth';
-
-const USER = { id: 'user-1', email: 'a@b.c' };
 
 const validBody = {
   serviceId: '550e8400-e29b-41d4-a716-446655440000',
@@ -42,29 +43,13 @@ const validBody = {
   endAt: '2026-09-10T14:30:00.000Z',
   phone: '+5215512345678',
   fullName: 'María García',
+  captchaToken: 'valid-captcha-token',
 };
 
 describe('POST /api/booking/book', () => {
   beforeEach(() => {
     vi.resetAllMocks();
-    (requireUser as ReturnType<typeof vi.fn>).mockResolvedValue(USER);
-  });
-
-  it('returns 401 when there is no session', async () => {
-    (isBookingUiEnabled as ReturnType<typeof vi.fn>).mockReturnValue(true);
-    (requireUser as ReturnType<typeof vi.fn>).mockRejectedValue(
-      new UnauthorizedError()
-    );
-
-    const res = await POST(
-      new Request('http://localhost/api/booking/book', {
-        method: 'POST',
-        body: JSON.stringify(validBody),
-      })
-    );
-
-    expect(res.status).toBe(401);
-    expect(resolvePatient).not.toHaveBeenCalled();
+    (verifyTurnstile as ReturnType<typeof vi.fn>).mockResolvedValue(true);
   });
 
   it('returns 404 when the booking UI flag is off', async () => {
@@ -78,6 +63,76 @@ describe('POST /api/booking/book', () => {
     );
 
     expect(res.status).toBe(404);
+    expect(resolvePatient).not.toHaveBeenCalled();
+  });
+
+  it('returns 400 when patientId is present', async () => {
+    (isBookingUiEnabled as ReturnType<typeof vi.fn>).mockReturnValue(true);
+
+    const res = await POST(
+      new Request('http://localhost/api/booking/book', {
+        method: 'POST',
+        body: JSON.stringify({ ...validBody, patientId: 'pat-1' }),
+      })
+    );
+    const body = await res.json();
+
+    expect(res.status).toBe(400);
+    expect(body.field).toBe('patientId');
+    expect(verifyTurnstile).not.toHaveBeenCalled();
+    expect(resolvePatient).not.toHaveBeenCalled();
+  });
+
+  it('returns 400 for a missing captcha token', async () => {
+    (isBookingUiEnabled as ReturnType<typeof vi.fn>).mockReturnValue(true);
+
+    const { captchaToken: _, ...bodyWithoutToken } = validBody;
+    const res = await POST(
+      new Request('http://localhost/api/booking/book', {
+        method: 'POST',
+        body: JSON.stringify(bodyWithoutToken),
+      })
+    );
+    const body = await res.json();
+
+    expect(res.status).toBe(400);
+    expect(body.field).toBe('captchaToken');
+    expect(resolvePatient).not.toHaveBeenCalled();
+  });
+
+  it('returns 400 for an invalid captcha token', async () => {
+    (isBookingUiEnabled as ReturnType<typeof vi.fn>).mockReturnValue(true);
+    (verifyTurnstile as ReturnType<typeof vi.fn>).mockResolvedValue(false);
+
+    const res = await POST(
+      new Request('http://localhost/api/booking/book', {
+        method: 'POST',
+        body: JSON.stringify(validBody),
+      })
+    );
+    const body = await res.json();
+
+    expect(res.status).toBe(400);
+    expect(body.field).toBe('captchaToken');
+    expect(resolvePatient).not.toHaveBeenCalled();
+  });
+
+  it('returns 503 when the Turnstile secret is missing', async () => {
+    (isBookingUiEnabled as ReturnType<typeof vi.fn>).mockReturnValue(true);
+    (verifyTurnstile as ReturnType<typeof vi.fn>).mockRejectedValue(
+      new TurnstileUnavailableError()
+    );
+
+    const res = await POST(
+      new Request('http://localhost/api/booking/book', {
+        method: 'POST',
+        body: JSON.stringify(validBody),
+      })
+    );
+    const body = await res.json();
+
+    expect(res.status).toBe(503);
+    expect(body.error).toBe('turnstile_unavailable');
     expect(resolvePatient).not.toHaveBeenCalled();
   });
 

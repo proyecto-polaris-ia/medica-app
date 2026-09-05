@@ -16,11 +16,16 @@ vi.mock('@/lib/supabase/auth', () => ({
 
 vi.mock('@/lib/admin/patients', () => ({
   listPatients: vi.fn(),
+  searchPatients: vi.fn(),
   createPatient: vi.fn(),
 }));
 
 import { requireUser } from '@/lib/supabase/auth';
-import { createPatient, listPatients } from '@/lib/admin/patients';
+import {
+  createPatient,
+  listPatients,
+  searchPatients,
+} from '@/lib/admin/patients';
 
 const USER = { id: 'user-1', email: 'a@b.c' };
 
@@ -62,6 +67,38 @@ describe('GET /api/admin/patients', () => {
     const res = await GET(new Request('http://localhost/api/admin/patients'));
 
     expect(res.status).toBe(500);
+  });
+
+  it('searches patients when ?q= is provided', async () => {
+    (searchPatients as ReturnType<typeof vi.fn>).mockResolvedValue([
+      { id: 'pat-1', fullName: 'María', phoneE164: '+5215512345678' },
+    ]);
+
+    const res = await GET(
+      new Request('http://localhost/api/admin/patients?q=maria')
+    );
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(searchPatients).toHaveBeenCalledWith('maria');
+    expect(listPatients).not.toHaveBeenCalled();
+    expect(body.patients).toHaveLength(1);
+  });
+
+  it('lists all patients when ?q= is empty', async () => {
+    (listPatients as ReturnType<typeof vi.fn>).mockResolvedValue([
+      { id: 'pat-1', fullName: 'María', phoneE164: '+5215512345678' },
+    ]);
+
+    const res = await GET(
+      new Request('http://localhost/api/admin/patients?q=')
+    );
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(listPatients).toHaveBeenCalled();
+    expect(searchPatients).not.toHaveBeenCalled();
+    expect(body.patients).toHaveLength(1);
   });
 });
 

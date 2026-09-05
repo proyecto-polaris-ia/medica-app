@@ -59,6 +59,19 @@ export function parseDayOfWeek(value: unknown, field = 'dayOfWeek'): number {
   return value;
 }
 
+const HEX_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
+
+export function parseHexColor(value: unknown): string | null {
+  if (typeof value !== 'string' || value.trim().length === 0) {
+    return null;
+  }
+  const normalized = value.trim().toLowerCase();
+  if (!HEX_COLOR_RE.test(normalized)) {
+    return null;
+  }
+  return normalized;
+}
+
 export function parseTime(value: unknown, field = 'time'): string {
   if (
     typeof value !== 'string' ||

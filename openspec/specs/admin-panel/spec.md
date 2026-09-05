@@ -52,12 +52,21 @@ The `service_role` key MUST remain server-side only. Admin CRUD and booking writ
 - THEN the UI MUST fetch through `/api/admin/*` and `/api/booking/*`, and MUST NOT query agenda tables directly with the anon key
 
 ### Requirement: Protected admin routes
-Admin pages (dashboard, CRUD screens, and booking) MUST require an authenticated session. An unauthenticated request to an admin page MUST be redirected to `/login`.
+Admin pages (dashboard, CRUD screens, and internal booking) MUST require an
+authenticated session. The public `/booking` route MUST NOT be treated as an
+admin route. An unauthenticated request to an admin page MUST be redirected to
+`/login`.
 
 #### Scenario: Unauthenticated visitor is redirected
 - GIVEN a visitor without a session
-- WHEN they request any admin route (including `/booking`)
+- WHEN they request any admin route (dashboard, CRUD, `/appointments/new`)
 - THEN the application MUST redirect them to `/login`
+
+#### Scenario: Public booking excluded from admin protection
+- GIVEN a visitor without a session
+- WHEN they request `/booking`
+- THEN the application MUST NOT redirect to `/login` and MUST render the public
+  booking wizard
 
 #### Scenario: Authenticated user is admitted
 - GIVEN an authenticated user
@@ -96,12 +105,22 @@ The admin panel MUST allow an authenticated user to list, create, update, and de
 - THEN the record MUST be removed and MUST no longer appear in the list
 
 ### Requirement: Providers CRUD
-The admin panel MUST allow an authenticated user to list, create, update, and delete `providers` records (name).
+The admin panel MUST allow an authenticated user to list, create, update, and delete `providers` records (name, color). The `color` MUST be stored as a text/hex value per provider and MUST be editable through the provider form. The calendar view consumes this `color` for block coloring.
 
 #### Scenario: Manage providers
 - GIVEN an authenticated admin
 - WHEN they create, read, update, and delete providers
 - THEN each operation MUST persist the corresponding change to the `providers` table
+
+#### Scenario: Provider color persists
+- GIVEN an authenticated admin
+- WHEN they set or update a provider's `color` and save
+- THEN the `color` value MUST persist on the `providers` record and MUST be retrievable by the calendar view
+
+#### Scenario: Missing or invalid color is tolerated
+- GIVEN an admin submits a provider with no color or an unsupported color string
+- WHEN the record is saved
+- THEN the system SHOULD accept the record and the calendar MUST fall back to a neutral color for that provider
 
 ### Requirement: Services CRUD
 The admin panel MUST allow an authenticated user to list, create, update, and delete `services` records (name and positive duration in minutes).
@@ -128,30 +147,55 @@ The admin panel MUST allow an authenticated user to list, create, update, and de
 - THEN each operation MUST persist the corresponding change to the `appointments` table and MUST respect the provider no-overlap exclusion constraint
 
 ### Requirement: Booking flow behind login
-The existing booking wizard MUST remain available at `/booking` only to authenticated users, reachable from the admin navigation, and MUST preserve its existing multi-step, atomic-booking behavior.
+The internal booking wizard MUST be available at `/appointments/new` only to
+authenticated users, reachable from the admin navigation, and MUST preserve its
+existing multi-step, atomic-booking behavior. A separate public booking wizard
+MUST be available at `/booking` without authentication.
 
-#### Scenario: Booking reachable after login
+#### Scenario: Internal booking reachable after login
 - GIVEN an authenticated admin
 - WHEN they select the booking option in the admin navigation
-- THEN the existing booking wizard MUST render and complete a booking as before
+- THEN the internal booking wizard MUST render at `/appointments/new`
 
-#### Scenario: Booking unreachable before login
+#### Scenario: Internal booking unreachable before login
+- GIVEN a visitor without a session
+- WHEN they request `/appointments/new`
+- THEN they MUST be redirected to `/login`
+
+#### Scenario: Public booking reachable without login
 - GIVEN a visitor without a session
 - WHEN they request `/booking`
-- THEN they MUST be redirected to `/login` instead of seeing the wizard
+- THEN the public booking wizard MUST render (no redirect)
 
 ### Requirement: Unauthenticated API rejection
-Admin and booking API routes MUST reject requests without a valid session with `401 Unauthorized`.
+Admin API routes MUST reject requests without a valid session with
+`401 Unauthorized`. The public booking API route is an exception: it MUST accept
+unauthenticated requests but MUST verify a Turnstile CAPTCHA token before any
+write.
 
-#### Scenario: API call without session
-- GIVEN a request to an admin or booking API route with no valid session cookie
+#### Scenario: Admin API call without session
+- GIVEN a request to an admin API route with no valid session cookie
 - WHEN the route processes the request
 - THEN it MUST return `401` and MUST NOT read or write data
 
-#### Scenario: API call with session
-- GIVEN a request with a valid session cookie
+#### Scenario: Public booking API call without session
+- GIVEN a request to the public booking API route with no session
+- WHEN the route processes the request with a valid Turnstile token
+- THEN it MUST proceed to write data
+
+#### Scenario: Public booking API call without valid token
+- GIVEN a request to the public booking API route
+- WHEN the Turnstile token is missing or invalid
+- THEN it MUST reject the request and MUST NOT write data
+
+### Requirement: Internal booking endpoint authentication
+The internal booking API endpoint at `/api/admin/booking/book` MUST require a
+valid session and MUST return `401 Unauthorized` otherwise.
+
+#### Scenario: Internal booking without session
+- GIVEN a request to `/api/admin/booking/book` without a session
 - WHEN the route processes the request
-- THEN it MUST proceed to read or write data through the service-role client
+- THEN it MUST return `401`
 
 ### Requirement: Graceful degradation without configuration
 External integrations MUST degrade gracefully when required environment keys are missing, and MUST NOT throw on import.

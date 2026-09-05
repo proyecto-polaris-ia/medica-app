@@ -9,7 +9,7 @@ export default function DashboardPage() {
     { href: '/providers', title: 'Proveedores', description: 'Administra los doctores y proveedores.' },
     { href: '/services', title: 'Servicios', description: 'Configura los servicios y duraciones.' },
     { href: '/business-hours', title: 'Horarios', description: 'Define los horarios de atención.' },
-    { href: '/booking', title: 'Reservar cita', description: 'Abre el asistente de reservas.' },
+    { href: '/appointments/new', title: 'Reservar cita', description: 'Registra una cita para un paciente.' },
   ];
 
   return (

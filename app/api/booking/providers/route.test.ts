@@ -31,20 +31,6 @@ describe('GET /api/booking/providers', () => {
     (requireUser as ReturnType<typeof vi.fn>).mockResolvedValue(USER);
   });
 
-  it('returns 401 when there is no session', async () => {
-    (isBookingUiEnabled as ReturnType<typeof vi.fn>).mockReturnValue(true);
-    (requireUser as ReturnType<typeof vi.fn>).mockRejectedValue(
-      new UnauthorizedError()
-    );
-
-    const res = await GET(
-      new Request('http://localhost/api/booking/providers')
-    );
-
-    expect(res.status).toBe(401);
-    expect(listProviders).not.toHaveBeenCalled();
-  });
-
   it('returns 404 when the booking UI flag is off', async () => {
     (isBookingUiEnabled as ReturnType<typeof vi.fn>).mockReturnValue(false);
 
@@ -58,6 +44,26 @@ describe('GET /api/booking/providers', () => {
 
   it('returns the catalog when the flag is on', async () => {
     (isBookingUiEnabled as ReturnType<typeof vi.fn>).mockReturnValue(true);
+    (listProviders as ReturnType<typeof vi.fn>).mockResolvedValue([
+      { id: 'pro-1', name: 'Dra. Ana López' },
+    ]);
+
+    const res = await GET(
+      new Request('http://localhost/api/booking/providers')
+    );
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body).toEqual({
+      providers: [{ id: 'pro-1', name: 'Dra. Ana López' }],
+    });
+  });
+
+  it('returns the catalog for an anonymous caller', async () => {
+    (isBookingUiEnabled as ReturnType<typeof vi.fn>).mockReturnValue(true);
+    (requireUser as ReturnType<typeof vi.fn>).mockRejectedValue(
+      new UnauthorizedError()
+    );
     (listProviders as ReturnType<typeof vi.fn>).mockResolvedValue([
       { id: 'pro-1', name: 'Dra. Ana López' },
     ]);

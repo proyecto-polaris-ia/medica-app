@@ -28,6 +28,8 @@ export type WizardState = {
   date: string;
   slot: Slot | null;
   patient: { phone: string; fullName: string };
+  patientId: string | null;
+  captchaToken: string | null;
   phase: 'idle' | 'loading' | 'error';
   error: string | null;
   confirmation: Record<string, unknown> | null;
@@ -43,6 +45,8 @@ export type WizardAction =
   | { type: 'SELECT_DATE'; date: string }
   | { type: 'SELECT_SLOT'; slot: Slot }
   | { type: 'SET_PATIENT'; patient: { phone: string; fullName: string } }
+  | { type: 'SET_PATIENT_ID'; patientId: string | null }
+  | { type: 'SET_CAPTCHA'; token: string | null }
   | { type: 'SET_SERVICES'; services: Service[] }
   | { type: 'SET_PROVIDERS'; providers: Provider[] }
   | { type: 'SET_SLOTS'; slots: Slot[] }
@@ -61,6 +65,8 @@ export function initState(): WizardState {
     date: '',
     slot: null,
     patient: { phone: '', fullName: '' },
+    patientId: null,
+    captchaToken: null,
     phase: 'idle',
     error: null,
     confirmation: null,
@@ -150,6 +156,12 @@ export function wizardReducer(
 
     case 'SET_PATIENT':
       return { ...state, patient: action.patient, error: null };
+
+    case 'SET_PATIENT_ID':
+      return { ...state, patientId: action.patientId, error: null };
+
+    case 'SET_CAPTCHA':
+      return { ...state, captchaToken: action.token, error: null };
 
     case 'SET_SERVICES':
       return { ...state, services: action.services, phase: 'idle', error: null };
