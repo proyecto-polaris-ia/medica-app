@@ -20,6 +20,12 @@ import {
 const PUBLIC_API = '/api/booking';
 const ADMIN_API = '/api/admin/booking';
 
+// The catalog endpoints (services/providers/slots) live only under the public
+// `/api/booking/*` namespace. Only the write (book) differs by mode: the public
+// flow posts to `/api/booking/book` (Turnstile-gated) and the internal flow
+// posts to `/api/admin/booking/book` (session-gated, accepts patientId).
+const CATALOG_API = PUBLIC_API;
+
 type ApiSlot = { startAt: string; endAt: string };
 
 function toSlot(apiSlot: ApiSlot): Slot {
@@ -50,7 +56,7 @@ export function BookingWizard({
     let cancelled = false;
 
     async function loadServices() {
-      const res = await fetch(`${apiBase}/services`);
+      const res = await fetch(`${CATALOG_API}/services`);
       if (!res.ok) {
         dispatch({
           type: 'ERROR',
@@ -76,7 +82,7 @@ export function BookingWizard({
     let cancelled = false;
 
     async function loadProviders() {
-      const res = await fetch(`${apiBase}/providers`);
+      const res = await fetch(`${CATALOG_API}/providers`);
       if (!res.ok) {
         dispatch({
           type: 'ERROR',
@@ -114,7 +120,7 @@ export function BookingWizard({
         serviceId: state.service!.id,
         date: state.date,
       });
-      const res = await fetch(`${apiBase}/slots?${params.toString()}`);
+      const res = await fetch(`${CATALOG_API}/slots?${params.toString()}`);
       if (!res.ok) {
         dispatch({
           type: 'ERROR',

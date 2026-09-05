@@ -17,7 +17,7 @@ describe('TurnstileWidget', () => {
 
     window.turnstile = {
       render: renderWidget,
-      ready: vi.fn((cb: () => void) => cb()),
+      remove: vi.fn(),
     } as unknown as typeof window.turnstile;
   });
 
