@@ -3,13 +3,14 @@ import type { Appointment, AppointmentInput, ProviderAppointment } from './types
 import {
   parseAppointmentStatus,
   parseIsoDate,
+  parseNotes,
   parseUuid,
   ValidationError,
 } from './validate';
 import { ConflictError, NotFoundError } from './errors';
 
 const SELECT_COLUMNS =
-  'id, patient_id, service_id, provider_id, start_at, end_at, status, created_at, updated_at';
+  'id, patient_id, service_id, provider_id, start_at, end_at, status, notes, created_at, updated_at';
 
 function mapRow(row: Record<string, unknown>): Appointment {
   return {
@@ -20,6 +21,7 @@ function mapRow(row: Record<string, unknown>): Appointment {
     startAt: row.start_at as string,
     endAt: row.end_at as string,
     status: row.status as Appointment['status'],
+    notes: (row.notes as string | null) ?? null,
     createdAt: row.created_at as string,
     updatedAt: row.updated_at as string,
   };
@@ -90,6 +92,7 @@ function validateAppointmentInput(input: AppointmentInput): {
   start_at: string;
   end_at: string;
   status: Appointment['status'];
+  notes: string | null;
 } {
   const startAt = parseIsoDate(input.startAt, 'startAt');
   const endAt = parseIsoDate(input.endAt, 'endAt');
@@ -107,6 +110,7 @@ function validateAppointmentInput(input: AppointmentInput): {
       input.status ?? 'requested',
       'status'
     ),
+    notes: parseNotes(input.notes, 'notes'),
   };
 }
 

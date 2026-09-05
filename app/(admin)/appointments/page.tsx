@@ -45,6 +45,7 @@ const emptyAppointment = {
   startAt: '',
   endAt: '',
   status: 'requested',
+  notes: '',
 };
 
 function toLocalInput(iso: string): string {
@@ -167,6 +168,7 @@ export default function AppointmentsPage() {
       startAt: toLocalInput(appointment.startAt),
       endAt: toLocalInput(appointment.endAt),
       status: appointment.status,
+      notes: appointment.notes ?? '',
     });
     setIsModalOpen(true);
   }
@@ -236,6 +238,11 @@ export default function AppointmentsPage() {
 
   function formatDate(iso: string) {
     return new Date(iso).toLocaleString('es-MX');
+  }
+
+  function formatNotes(notes: string | null) {
+    if (!notes || notes.length === 0) return '—';
+    return notes.length > 80 ? `${notes.slice(0, 80)}…` : notes;
   }
 
   function handleSort(field: SortField) {
@@ -544,6 +551,10 @@ export default function AppointmentsPage() {
               ),
               cell: (a) => a.status
             },
+            {
+              header: 'Notas',
+              cell: (a) => formatNotes(a.notes),
+            },
           ]}
           rows={filteredAndSortedAppointments}
           onEdit={openEdit}
@@ -658,6 +669,19 @@ export default function AppointmentsPage() {
                 </option>
               ))}
             </select>
+          </div>
+          <div>
+            <label htmlFor="notes" className="block text-sm font-medium text-gray-700">
+              Notas de la cita
+            </label>
+            <textarea
+              id="notes"
+              value={form.notes}
+              onChange={(e) => setForm({ ...form, notes: e.target.value })}
+              maxLength={1000}
+              rows={3}
+              className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2"
+            />
           </div>
         </FormModal>
       )}

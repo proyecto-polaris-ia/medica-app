@@ -67,6 +67,7 @@ describe('appointments service', () => {
         start_at: '2026-09-10T14:00:00.000Z',
         end_at: '2026-09-10T14:30:00.000Z',
         status: 'confirmed',
+        notes: 'Paciente nerviosa',
         created_at: '2026-09-01T10:00:00Z',
         updated_at: '2026-09-01T10:00:00Z',
       }],
@@ -75,6 +76,7 @@ describe('appointments service', () => {
 
     const appointments = await listAppointments();
 
+    expect(mockSelect).toHaveBeenCalledWith(expect.stringContaining('notes'));
     expect(appointments).toEqual([{
       id: APPOINTMENT_ID,
       patientId: PATIENT_ID,
@@ -83,6 +85,7 @@ describe('appointments service', () => {
       startAt: '2026-09-10T14:00:00.000Z',
       endAt: '2026-09-10T14:30:00.000Z',
       status: 'confirmed',
+      notes: 'Paciente nerviosa',
       createdAt: '2026-09-01T10:00:00Z',
       updatedAt: '2026-09-01T10:00:00Z',
     }]);
@@ -98,6 +101,7 @@ describe('appointments service', () => {
         start_at: '2026-09-10T14:00:00.000Z',
         end_at: '2026-09-10T14:30:00.000Z',
         status: 'requested',
+        notes: null,
         created_at: '2026-09-01T10:00:00Z',
         updated_at: '2026-09-01T10:00:00Z',
       },
@@ -117,8 +121,82 @@ describe('appointments service', () => {
       service_id: SERVICE_ID,
       provider_id: PROVIDER_ID,
       status: 'requested',
+      notes: null,
     }));
     expect(appointment.status).toBe('requested');
+  });
+
+  it('trims and stores notes when creating an appointment', async () => {
+    mockSingle.mockResolvedValue({
+      data: {
+        id: APPOINTMENT_ID,
+        patient_id: PATIENT_ID,
+        service_id: SERVICE_ID,
+        provider_id: PROVIDER_ID,
+        start_at: '2026-09-10T14:00:00.000Z',
+        end_at: '2026-09-10T14:30:00.000Z',
+        status: 'requested',
+        notes: 'Prefiere mañana',
+        created_at: '2026-09-01T10:00:00Z',
+        updated_at: '2026-09-01T10:00:00Z',
+      },
+      error: null,
+    });
+
+    await createAppointment({
+      patientId: PATIENT_ID,
+      serviceId: SERVICE_ID,
+      providerId: PROVIDER_ID,
+      startAt: '2026-09-10T14:00:00.000Z',
+      endAt: '2026-09-10T14:30:00.000Z',
+      notes: '  Prefiere mañana  ',
+    });
+
+    expect(mockInsert).toHaveBeenCalledWith(expect.objectContaining({
+      notes: 'Prefiere mañana',
+    }));
+  });
+
+  it('stores null for empty notes when creating an appointment', async () => {
+    mockSingle.mockResolvedValue({
+      data: {
+        id: APPOINTMENT_ID,
+        patient_id: PATIENT_ID,
+        service_id: SERVICE_ID,
+        provider_id: PROVIDER_ID,
+        start_at: '2026-09-10T14:00:00.000Z',
+        end_at: '2026-09-10T14:30:00.000Z',
+        status: 'requested',
+        notes: null,
+        created_at: '2026-09-01T10:00:00Z',
+        updated_at: '2026-09-01T10:00:00Z',
+      },
+      error: null,
+    });
+
+    await createAppointment({
+      patientId: PATIENT_ID,
+      serviceId: SERVICE_ID,
+      providerId: PROVIDER_ID,
+      startAt: '2026-09-10T14:00:00.000Z',
+      endAt: '2026-09-10T14:30:00.000Z',
+      notes: '   ',
+    });
+
+    expect(mockInsert).toHaveBeenCalledWith(expect.objectContaining({
+      notes: null,
+    }));
+  });
+
+  it('rejects notes longer than 1000 characters', async () => {
+    await expect(createAppointment({
+      patientId: PATIENT_ID,
+      serviceId: SERVICE_ID,
+      providerId: PROVIDER_ID,
+      startAt: '2026-09-10T14:00:00.000Z',
+      endAt: '2026-09-10T14:30:00.000Z',
+      notes: 'a'.repeat(1001),
+    })).rejects.toThrow(ValidationError);
   });
 
   it('translates a 23P01 exclusion violation into ConflictError', async () => {

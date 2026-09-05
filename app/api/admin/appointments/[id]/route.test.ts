@@ -66,6 +66,7 @@ describe('/api/admin/appointments/[id]', () => {
       startAt: '2026-09-10T15:00:00.000Z',
       endAt: '2026-09-10T15:30:00.000Z',
       status: 'confirmed',
+      notes: null,
     });
     const res = await PATCH(
       new Request(
@@ -84,6 +85,41 @@ describe('/api/admin/appointments/[id]', () => {
       { params: Promise.resolve({ id: APPOINTMENT_ID }) }
     );
     expect(res.status).toBe(200);
+  });
+
+  it('PATCH forwards notes to updateAppointment', async () => {
+    (updateAppointment as ReturnType<typeof vi.fn>).mockResolvedValue({
+      id: APPOINTMENT_ID,
+      serviceId: SERVICE_ID,
+      providerId: PROVIDER_ID,
+      startAt: '2026-09-10T15:00:00.000Z',
+      endAt: '2026-09-10T15:30:00.000Z',
+      status: 'confirmed',
+      notes: 'Actualizar teléfono',
+    });
+
+    await PATCH(
+      new Request(
+        `http://localhost/api/admin/appointments/${APPOINTMENT_ID}`,
+        {
+          method: 'PATCH',
+          body: JSON.stringify({
+            serviceId: SERVICE_ID,
+            providerId: PROVIDER_ID,
+            startAt: '2026-09-10T15:00:00.000Z',
+            endAt: '2026-09-10T15:30:00.000Z',
+            status: 'confirmed',
+            notes: 'Actualizar teléfono',
+          }),
+        }
+      ),
+      { params: Promise.resolve({ id: APPOINTMENT_ID }) }
+    );
+
+    expect(updateAppointment).toHaveBeenCalledWith(
+      APPOINTMENT_ID,
+      expect.objectContaining({ notes: 'Actualizar teléfono' })
+    );
   });
 
   it('PATCH returns 404 when not found', async () => {

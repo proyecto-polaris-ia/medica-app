@@ -14,10 +14,11 @@ export async function bookAppointment({
   providerId: string;
   startAt: Date;
   endAt: Date;
-  notes?: string;
+  notes?: string | null;
 }): Promise<{ ok: true } | BookingConflict> {
   const supabase = getSupabaseAdmin();
   const maxRetries = 3;
+  const normalizedNotes = notes?.trim() ? notes.trim() : null;
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     const { error } = await supabase.from('appointments').insert({
@@ -27,7 +28,7 @@ export async function bookAppointment({
       start_at: startAt.toISOString(),
       end_at: endAt.toISOString(),
       status: 'requested',
-      notes: notes ?? null,
+      notes: normalizedNotes,
     });
 
     if (!error) return { ok: true };
