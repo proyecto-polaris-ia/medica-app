@@ -31,22 +31,6 @@ describe('GET /api/booking/slots', () => {
     (requireUser as ReturnType<typeof vi.fn>).mockResolvedValue(USER);
   });
 
-  it('returns 401 when there is no session', async () => {
-    (isBookingUiEnabled as ReturnType<typeof vi.fn>).mockReturnValue(true);
-    (requireUser as ReturnType<typeof vi.fn>).mockRejectedValue(
-      new UnauthorizedError()
-    );
-
-    const res = await GET(
-      new Request(
-        'http://localhost/api/booking/slots?providerId=550e8400-e29b-41d4-a716-446655440000&serviceId=550e8400-e29b-41d4-a716-446655440001&date=2026-09-10'
-      )
-    );
-
-    expect(res.status).toBe(401);
-    expect(getFreeSlots).not.toHaveBeenCalled();
-  });
-
   it('returns 404 when the booking UI flag is off', async () => {
     (isBookingUiEnabled as ReturnType<typeof vi.fn>).mockReturnValue(false);
 
@@ -121,6 +105,23 @@ describe('GET /api/booking/slots', () => {
 
     expect(res.status).toBe(200);
     expect(body.slots).toEqual([]);
+  });
+
+  it('returns slots for an anonymous caller', async () => {
+    (isBookingUiEnabled as ReturnType<typeof vi.fn>).mockReturnValue(true);
+    (requireUser as ReturnType<typeof vi.fn>).mockRejectedValue(
+      new UnauthorizedError()
+    );
+    (getFreeSlots as ReturnType<typeof vi.fn>).mockResolvedValue([]);
+
+    const res = await GET(
+      new Request(
+        'http://localhost/api/booking/slots?providerId=550e8400-e29b-41d4-a716-446655440000&serviceId=550e8400-e29b-41d4-a716-446655440001&date=2026-09-10'
+      )
+    );
+
+    expect(res.status).toBe(200);
+    expect(getFreeSlots).toHaveBeenCalled();
   });
 
   it('serializes slot dates as startAt and endAt', async () => {

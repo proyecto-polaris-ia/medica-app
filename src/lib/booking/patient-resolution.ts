@@ -1,4 +1,26 @@
+import { NotFoundError } from '../admin/errors';
 import { getSupabaseAdmin } from '../supabase/server';
+
+export async function resolvePatientById(
+  id: string
+): Promise<{ id: string; full_name: string }> {
+  const supabase = getSupabaseAdmin();
+
+  const { data: patient, error } = await supabase
+    .from('patients')
+    .select('id, full_name')
+    .eq('id', id)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`Failed to resolve patient: ${error.message}`);
+  }
+  if (!patient) {
+    throw new NotFoundError('Patient');
+  }
+
+  return patient;
+}
 
 export async function resolvePatient({
   phone,

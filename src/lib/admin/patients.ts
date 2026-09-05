@@ -35,6 +35,26 @@ export async function listPatients(): Promise<Patient[]> {
   return (data ?? []).map(mapRow);
 }
 
+export async function searchPatients(q: string): Promise<Patient[]> {
+  const trimmed = q.trim();
+  if (!trimmed) {
+    return [];
+  }
+
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from('patients')
+    .select(SELECT_COLUMNS)
+    .or(`full_name.ilike.%${trimmed}%,phone_e164.ilike.%${trimmed}%`)
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return (data ?? []).map(mapRow);
+}
+
 function validatePatientInput(input: PatientInput): {
   full_name: string;
   phone_e164: string;

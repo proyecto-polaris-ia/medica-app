@@ -1,13 +1,22 @@
 import { requireUser } from '../_lib/auth';
-import { createPatient, listPatients } from '@/lib/admin/patients';
+import {
+  createPatient,
+  listPatients,
+  searchPatients,
+} from '@/lib/admin/patients';
 import { parseJsonBody, handleAdminRequest } from '../_lib/responses';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET(_request: Request): Promise<Response> {
+export async function GET(request: Request): Promise<Response> {
   return handleAdminRequest(async () => {
     await requireUser();
-    const patients = await listPatients();
+    const { searchParams } = new URL(request.url);
+    const q = searchParams.get('q');
+
+    const patients =
+      q === null || q === '' ? await listPatients() : await searchPatients(q);
+
     return Response.json({ patients });
   });
 }

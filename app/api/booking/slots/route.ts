@@ -1,5 +1,4 @@
 import { getFreeSlots } from '@/lib/booking/availability';
-import { requireUser, UnauthorizedError } from '@/lib/supabase/auth';
 import { isBookingUiEnabled } from '../_lib/flag';
 import { parseLocalDate, parseUuid, ValidationError } from '../_lib/validate';
 
@@ -13,7 +12,6 @@ export async function GET(request: Request): Promise<Response> {
   const { searchParams } = new URL(request.url);
 
   try {
-    await requireUser();
     const providerId = parseUuid(searchParams.get('providerId'), 'providerId');
     const serviceId = parseUuid(searchParams.get('serviceId'), 'serviceId');
     const localDate = parseLocalDate(searchParams.get('date'), 'date');
@@ -27,10 +25,6 @@ export async function GET(request: Request): Promise<Response> {
       })),
     });
   } catch (error) {
-    if (error instanceof UnauthorizedError) {
-      return Response.json({ error: 'unauthorized' }, { status: 401 });
-    }
-
     if (error instanceof ValidationError) {
       return Response.json(
         { error: 'invalid_request', field: error.field },
