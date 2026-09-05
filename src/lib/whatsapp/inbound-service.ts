@@ -25,6 +25,7 @@ import {
   persistWhatsAppInboundEvent,
   persistWhatsAppStatusEvents,
   updateWhatsAppConversationStatus,
+  updateWhatsAppConversationSummary,
   type JsonPayload,
   type PersistedWhatsAppInboundEvent,
   type WhatsAppStatusPersistenceResult,
@@ -59,6 +60,7 @@ const defaultStore: WhatsAppStore = {
   updateConversationStatus: updateWhatsAppConversationStatus,
   markInboundMessageProcessed: markWhatsAppInboundMessageProcessed,
   persistStatusEvents: persistWhatsAppStatusEvents,
+  updateConversationSummary: updateWhatsAppConversationSummary,
 };
 
 function unsupportedDecision(event: NormalizedWhatsAppInboundEvent): WhatsAppInboundAgentDecision {
@@ -125,7 +127,19 @@ async function runBookingTool(action: WhatsAppToolAction, event: NormalizedWhats
       return { responseText: 'Ya tengo el contexto de la cita, pero necesito que me confirmes cuál horario deseas reservar.', bookingContext: { ...context, serviceId, providerId, step: 'selecting_slot' }, toolResults: [{ id: 'booking:missing_slot', tool: 'book_appointment', status: 'blocked', reason: 'Falta horario seleccionado.' }], booked: false };
     }
     const patient = await resolvePatient({ phone: event.fromPhone, fullName: action.args.fullName ?? event.profileName });
-    const result = await bookAppointment({ patientId: patient.id, serviceId, providerId, startAt, endAt });
+    
+    // Build notes from conversation context
+    const notes = buildAppointmentNotes({
+      knowledgeServiceName: action.args.knowledgeServiceName,
+      conversationSummary: typeof context?.summary === 'string' ? context.summary : undefined,
+      userPreferences: {
+        providerName: action.args.providerName,
+        serviceName: action.args.serviceName,
+        localDate: action.args.localDate,
+      },
+    });
+    
+    const result = await bookAppointment({ patientId: patient.id, serviceId, providerId, startAt, endAt, notes: notes ?? undefined });
     if ('type' in result) {
       const next = await findNextAvailable({ providerId, serviceId, after: startAt });
       return { responseText: next ? `Ese horario ya no está disponible. La siguiente opción que encontré es ${formatSlot(next)}. ¿Quieres que la reserve?` : 'Ese horario ya no está disponible y no encontré otra opción cercana. Una persona del consultorio te dará seguimiento.', bookingContext: next ? { serviceId, providerId, candidates: [{ ...serializeSlot(next), serviceId, providerId }], step: 'selecting_slot' } : null, toolResults: [{ id: 'booking:conflict', tool: 'book_appointment', status: 'blocked', reason: result.message }], booked: false };
@@ -149,6 +163,57 @@ async function sendAndPersist(input: { store: WhatsAppStore; persisted: Persiste
   await input.store.insertOutboundMessage({ persisted: input.persisted, body: input.body, sendResult, purpose: input.purpose });
   recordWhatsAppAiEvent({ type: 'send.finished', outcome: sendResult.ok || sendResult.skipped ? 'success' : 'failure', diagnostics: { purpose: input.purpose, status: sendResult.status } });
   return sendResult;
+}
+
+function buildAppointmentNotes(input: {
+  knowledgeServiceName?: string;
+  conversationSummary?: string;
+  userPreferences: Record<string, unknown>;
+}): string | null {
+  const parts: string[] = [];
+
+  if (input.knowledgeServiceName) {
+    parts.push(`Servicio detallado: ${input.knowledgeServiceName}`);
+  }
+
+  if (input.conversationSummary) {
+    parts.push(`Resumen: ${input.conversationSummary}`);
+  }
+
+  const prefs = Object.entries(input.userPreferences)
+    .filter(([, v]) => v)
+    .map(([k, v]) => `${k}: ${v}`)
+    .join(', ');
+
+  if (prefs) {
+    parts.push(`Preferencias: ${prefs}`);
+  }
+
+  return parts.length > 0 ? parts.join(' | ') : null;
+}
+
+function buildConversationSummary(
+  previousSummary: string | null | undefined,
+  currentMessage: string | null | undefined,
+  decisionSummary: string | undefined
+): string {
+  const parts: string[] = [];
+
+  if (previousSummary) {
+    parts.push(previousSummary);
+  }
+
+  if (currentMessage) {
+    parts.push(`Usuario: ${currentMessage.slice(0, 100)}`);
+  }
+
+  if (decisionSummary) {
+    parts.push(`Agente: ${decisionSummary.slice(0, 100)}`);
+  }
+
+  // Keep last 500 chars
+  const full = parts.join(' | ');
+  return full.length > 500 ? full.slice(-500) : full;
 }
 
 export async function processWhatsAppInboundEvent(event: NormalizedWhatsAppInboundEvent, options: WhatsAppInboundServiceOptions = {}): Promise<WhatsAppInboundEventResult> {
@@ -175,7 +240,7 @@ export async function processWhatsAppInboundEvent(event: NormalizedWhatsAppInbou
   let booked = false;
 
   if (decision.decision === 'tool_action' && decision.toolAction) {
-    const tool = await runBookingTool(decision.toolAction, event, conversation.bookingContext);
+    const tool = await runBookingTool(decision.toolAction, event, { ...conversation.bookingContext, summary: conversation.summary });
     booked = tool.booked;
     finalDecision = { ...decision, responseText: tool.responseText, citedToolCallIds: tool.toolResults.map((result) => result.id), dynamicToolResults: tool.toolResults };
     await store.updateConversationStatus({ conversationId: persisted.conversationId, status: 'open', lastIntent: finalDecision.intent, bookingContext: tool.bookingContext });
@@ -183,6 +248,10 @@ export async function processWhatsAppInboundEvent(event: NormalizedWhatsAppInbou
 
   const intent = await store.createIntent({ persisted, decision: finalDecision });
   recordWhatsAppAiEvent({ context: options.observabilityContext, type: 'ai.decision', outcome: 'success', diagnostics: { decision: finalDecision.decision, intent: finalDecision.intent } });
+
+  // Update conversation summary
+  const summary = buildConversationSummary(conversation.summary, event.body, finalDecision.summary);
+  await store.updateConversationSummary({ conversationId: persisted.conversationId, summary });
 
   if (finalDecision.decision === 'auto_answer' || finalDecision.decision === 'tool_action') {
     const body = finalDecision.responseText || 'Gracias por escribirnos. Una persona del consultorio dará seguimiento.';

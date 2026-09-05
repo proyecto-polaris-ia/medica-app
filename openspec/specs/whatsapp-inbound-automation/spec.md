@@ -159,6 +159,59 @@ agent so it can use natural language names in tool actions.
 - THEN the agent MUST receive the list of available services with names
 - AND the list of available providers with names
 
+### Requirement: Knowledge-Service Mapping
+The system MUST resolve knowledge entries to service IDs using explicit links first, then fuzzy matching as fallback, with logging for debugging.
+
+#### Scenario: Explicit link exists
+- GIVEN a knowledge entry with an explicit service link in `whatsapp_knowledge_service_links`
+- WHEN the system resolves the entry to a service
+- THEN it MUST return the linked service_id
+- AND it MUST NOT perform fuzzy matching
+
+#### Scenario: No explicit link, fuzzy match succeeds
+- GIVEN a knowledge entry without an explicit service link
+- AND the entry's tags or topic match a service name via fuzzy matching
+- WHEN the system resolves the entry to a service
+- THEN it MUST return the matched service_id
+- AND it MUST log the fuzzy match for admin review
+
+#### Scenario: No explicit link, no fuzzy match
+- GIVEN a knowledge entry without an explicit service link
+- AND no fuzzy match is found
+- WHEN the system resolves the entry to a service
+- THEN it MUST return the default service "Valoración general"
+- AND it MUST log the unresolved attempt
+
+### Requirement: Appointment Notes Field
+The system MUST provide a nullable `notes` text column on `appointments` to capture detailed service information and conversation context.
+
+#### Scenario: Appointment created with notes
+- GIVEN a user requests a specific service from knowledge
+- WHEN the appointment is created
+- THEN the `notes` field MUST include the detailed service name from knowledge
+- AND the `notes` field MUST include a conversation summary
+- AND the `notes` field MUST include user preferences (doctor, time, special requests)
+
+#### Scenario: Appointment created without notes
+- GIVEN an appointment is created through the public booking form
+- WHEN no conversation context exists
+- THEN the `notes` field MAY be null
+- AND the appointment MUST still be created successfully
+
+### Requirement: Conversation Summary Field
+The system MUST provide a nullable `summary` text column on `whatsapp_conversations` to capture rolling conversation context for escalations.
+
+#### Scenario: Summary updated after message
+- GIVEN an inbound message is processed
+- WHEN the conversation context is updated
+- THEN the `summary` field MUST be updated with key decisions and preferences
+- AND the summary MUST be concise (max 500 characters)
+
+#### Scenario: Escalation includes summary
+- GIVEN a conversation is escalated to a human
+- WHEN the escalation is created
+- THEN the escalation context MUST include the conversation summary
+
 ### Requirement: Validated conservative model output
 The system MUST validate structured model/provider output before using it.
 
