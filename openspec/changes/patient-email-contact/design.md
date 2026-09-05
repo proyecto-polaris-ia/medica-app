@@ -32,8 +32,8 @@ WhatsApp -> event.fromPhone -> resolvePatient(phone) -> vínculo telefónico exi
 
 | Archivo | Acción | Descripción |
 |---|---|---|
-| `supabase/migrations/0007_patient_email_contact.sql` | Crear | Columna, checks e índice único parcial. |
-| `supabase/migrations/down/0007_patient_email_contact.down.sql` | Crear | Reversa que aborta ante pacientes sin teléfono. |
+| `supabase/migrations/0011_patient_email_contact.sql` | Crear | Columna, checks e índice único parcial. |
+| `supabase/migrations/down/0011_patient_email_contact.down.sql` | Crear | Reversa que aborta ante pacientes sin teléfono. |
 | `src/lib/booking/patient-resolution.ts` | Modificar | Algoritmo dual, enriquecimiento condicional y relectura tras `23505`. |
 | `app/api/admin/booking/book/route.ts` | Modificar | Validar identidad/contactos y devolver conflicto tipado. |
 | `src/components/booking/{ConfirmStep.tsx,BookingWizard.tsx,wizard-state.ts,PatientSearch.tsx}` | Modificar | Captura interna, payload, estado y búsqueda/presentación nullable. |

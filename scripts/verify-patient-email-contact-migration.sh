@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Reproducible, isolated Postgres proof for 0007. It never uses a Supabase
+# Reproducible, isolated Postgres proof for 0011. It never uses a Supabase
 # project or a shared database; the container is removed on every exit path.
 container="medica-patient-email-contact-${RANDOM}${RANDOM}"
 postgres=(docker exec -i "$container" psql -X -v ON_ERROR_STOP=1 -U postgres -d postgres)
@@ -25,7 +25,7 @@ CREATE ROLE authenticated;
 SQL
 "${postgres[@]}" < supabase/migrations/0001_agenda_tables.sql >/dev/null
 "${postgres[@]}" < supabase/migrations/0006_whatsapp_inbound_command_center.sql >/dev/null
-"${postgres[@]}" < supabase/migrations/0007_patient_email_contact.sql >/dev/null
+"${postgres[@]}" < supabase/migrations/0011_patient_email_contact.sql >/dev/null
 
 # The DB, rather than application validation, enforces normalized, unique,
 # non-empty contact data.
@@ -73,11 +73,11 @@ wait "$winner_pid"
 [[ $("${postgres[@]}" -Atq -c "SELECT email FROM patients WHERE id = '$patient_id';") == 'winner@example.com' ]]
 
 # The down migration refuses destructive rollback while an email-only patient exists.
-if "${postgres[@]}" < supabase/migrations/down/0007_patient_email_contact.down.sql >/dev/null 2>&1; then
+if "${postgres[@]}" < supabase/migrations/down/0011_patient_email_contact.down.sql >/dev/null 2>&1; then
   echo 'down migration unexpectedly accepted an email-only patient' >&2
   exit 1
 fi
 "${postgres[@]}" -c 'DELETE FROM patients WHERE phone_e164 IS NULL;' >/dev/null
-"${postgres[@]}" < supabase/migrations/down/0007_patient_email_contact.down.sql >/dev/null
+"${postgres[@]}" < supabase/migrations/down/0011_patient_email_contact.down.sql >/dev/null
 
-echo 'PASS: 0007 enforces contact invariants, links a newly resolved WhatsApp patient with nullable email, preserves a single concurrent conditional-update winner, and protects destructive rollback.'
+echo 'PASS: 0011 enforces contact invariants, links a newly resolved WhatsApp patient with nullable email, preserves a single concurrent conditional-update winner, and protects destructive rollback.'
