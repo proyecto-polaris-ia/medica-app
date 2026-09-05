@@ -132,6 +132,33 @@ decision without writing database rows or sending WhatsApp messages.
 - THEN the result MUST use decision `needs_human`
 - AND include an escalation reason
 
+### Requirement: Name-to-ID resolution for booking
+The system MUST resolve natural language service and provider names to their
+corresponding UUIDs when the agent returns a booking tool action with names
+instead of IDs.
+
+#### Scenario: User mentions doctor by name
+- GIVEN an inbound message requests an appointment with "Dra. Ana Martínez"
+- WHEN the agent returns a tool_action with providerName
+- THEN the system MUST resolve the name to a provider UUID
+- AND proceed with the booking flow using the resolved ID
+
+#### Scenario: Name resolution fails
+- GIVEN an inbound message mentions a service or provider name that cannot be resolved
+- WHEN the system attempts name-to-ID resolution
+- THEN the system MUST show a formatted list of available services and doctors
+- AND request the user to select from the available options
+
+### Requirement: Booking catalog injection
+The system MUST provide the booking catalog (services and providers) to the
+agent so it can use natural language names in tool actions.
+
+#### Scenario: Agent receives catalog
+- GIVEN a new inbound message is being processed
+- WHEN the agent is invoked
+- THEN the agent MUST receive the list of available services with names
+- AND the list of available providers with names
+
 ### Requirement: Validated conservative model output
 The system MUST validate structured model/provider output before using it.
 
