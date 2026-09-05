@@ -9,13 +9,15 @@ import { flowEngine } from '@/lib/flows/flow-engine';
 import { getFlowDefinition } from '@/lib/flows/definitions/book-appointment.flow';
 import type { FlowState, ExtractedEntities, FlowResult } from '@/lib/flows/types';
 import {
-  decideWhatsAppInboundMessage,
   type WhatsAppInboundAgentDecision,
   type WhatsAppInboundAgentProvider,
   type WhatsAppKnowledgeEntry,
   type WhatsAppDynamicToolResult,
 } from '@/lib/ai/whatsapp-inbound-agent';
-import { createWhatsAppLLMProvider } from '@/lib/ai/whatsapp-llm-provider';
+import {
+  classifyIntentSimple,
+  extractEntities,
+} from '@/lib/ai/whatsapp-intent-classifier';
 import {
   getFreeSlots,
 } from '@/lib/booking/availability';
@@ -96,7 +98,7 @@ export async function orchestrate(context: OrchestratorContext): Promise<Orchest
 }
 
 /**
- * Clasifica el intent del mensaje usando LLM.
+ * Clasifica el intent del mensaje usando clasificación simple (sin LLM).
  */
 async function classifyIntent(
   event: NormalizedWhatsAppInboundEvent,
@@ -117,34 +119,40 @@ async function classifyIntent(
     };
   }
 
-  // Cargar catálogo para el LLM
-  const [services, providers] = await Promise.all([listServices(), listProviders()]);
-  const bookingCatalog = {
-    services: services.map(s => ({ id: s.id, name: s.name })),
-    providers: providers.map(p => ({ id: p.id, name: p.name })),
+  // Clasificación simple sin LLM
+  const classification = classifyIntentSimple(event.body);
+  const entities = extractEntities(event.body);
+
+  // Convertir a formato de decisión
+  const decision: WhatsAppInboundAgentDecision = {
+    intent: classification.intent,
+    summary: classification.summary,
+    confidence: classification.confidence,
+    decision: classification.intent === 'support' ? 'needs_human' : 'tool_action',
+    responseText: '', // Se generará después
+    citedKnowledgeIds: [],
+    citedToolCallIds: [],
+    toolAction: classification.intent === 'book_appointment' || classification.intent === 'check_availability' ? {
+      name: 'check_availability',
+      args: {
+        localDate: entities.localDate,
+        serviceName: entities.serviceName,
+        providerName: entities.providerName,
+      },
+    } : undefined,
   };
 
-  return await decideWhatsAppInboundMessage(
-    {
-      messageText: event.body,
-      contact: {
-        id: conversation.id,
-        phone: event.fromPhone,
-        profileName: event.profileName,
-      },
-      conversation: {
-        id: conversation.id,
-        bookingContext: conversation.bookingContext,
-        lastIntent: conversation.lastIntent,
-        recentMessages: conversation.recentMessages,
-      },
-      bookingCatalog,
+  recordWhatsAppAiEvent({
+    type: 'ai.decision',
+    outcome: 'success',
+    diagnostics: {
+      intent: decision.intent,
+      confidence: decision.confidence,
+      method: 'simple_classifier',
     },
-    {
-      provider: agentProvider,
-      knowledgeEntries,
-    }
-  );
+  });
+
+  return decision;
 }
 
 /**
