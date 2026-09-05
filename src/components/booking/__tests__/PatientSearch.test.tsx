@@ -22,7 +22,7 @@ describe('PatientSearch', () => {
     render(<PatientSearch onSelect={vi.fn()} />);
 
     expect(
-      screen.getByPlaceholderText('Buscar paciente por nombre o teléfono')
+      screen.getByPlaceholderText('Buscar paciente por nombre, teléfono o correo')
     ).toBeInTheDocument();
   });
 
@@ -35,7 +35,7 @@ describe('PatientSearch', () => {
     render(<PatientSearch onSelect={onSelect} />);
 
     const input = screen.getByPlaceholderText(
-      'Buscar paciente por nombre o teléfono'
+      'Buscar paciente por nombre, teléfono o correo'
     );
     await userEvent.type(input, 'maria');
 
@@ -61,7 +61,7 @@ describe('PatientSearch', () => {
     render(<PatientSearch onSelect={onSelect} />);
 
     const input = screen.getByPlaceholderText(
-      'Buscar paciente por nombre o teléfono'
+      'Buscar paciente por nombre, teléfono o correo'
     );
     await userEvent.type(input, 'maria');
     vi.advanceTimersByTime(300);
@@ -80,7 +80,7 @@ describe('PatientSearch', () => {
     render(<PatientSearch onSelect={vi.fn()} />);
 
     const input = screen.getByPlaceholderText(
-      'Buscar paciente por nombre o teléfono'
+      'Buscar paciente por nombre, teléfono o correo'
     );
     await userEvent.type(input, 'x');
     vi.advanceTimersByTime(300);
@@ -89,4 +89,14 @@ describe('PatientSearch', () => {
       expect(screen.getByText(/sesión/i)).toBeInTheDocument();
     });
   });
+});
+
+it('shows an email when an internal patient has no phone', async () => {
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+  global.fetch = vi.fn().mockResolvedValue(Response.json({ patients: [{ id: 'email-1', fullName: 'Correo', phoneE164: null, email: 'correo@example.com' }] })) as typeof fetch;
+  render(<PatientSearch onSelect={vi.fn()} />);
+  await userEvent.type(screen.getByPlaceholderText('Buscar paciente por nombre, teléfono o correo'), 'correo');
+  vi.advanceTimersByTime(300);
+  expect(await screen.findByText('correo@example.com')).toBeInTheDocument();
+  vi.useRealTimers();
 });

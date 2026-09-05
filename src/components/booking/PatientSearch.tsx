@@ -54,7 +54,7 @@ export function PatientSearch({ onSelect }: { onSelect: (patient: Patient) => vo
         type="text"
         value={query}
         onChange={(e) => setQuery(e.target.value)}
-        placeholder="Buscar paciente por nombre o teléfono"
+        placeholder="Buscar paciente por nombre, teléfono o correo"
         className="block w-full rounded-lg border border-gray-300 px-3 py-2"
       />
 
@@ -73,7 +73,7 @@ export function PatientSearch({ onSelect }: { onSelect: (patient: Patient) => vo
               >
                 <span className="font-medium">{patient.fullName}</span>
                 <span className="ml-2 text-sm text-gray-500">
-                  {patient.phoneE164}
+                  {patient.phoneE164 ?? patient.email ?? 'Sin contacto'}
                 </span>
               </button>
             </li>
