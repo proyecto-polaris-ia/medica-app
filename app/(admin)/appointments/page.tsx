@@ -25,6 +25,8 @@ type Reference = {
 };
 
 type ViewMode = 'list' | 'calendar';
+type SortField = 'startAt' | 'endAt' | 'patient' | 'service' | 'provider' | 'status';
+type SortDirection = 'asc' | 'desc';
 
 const STATUS_OPTIONS = [
   'requested',
@@ -57,7 +59,7 @@ function fromLocalInput(value: string): string {
 
 export default function AppointmentsPage() {
   const searchParams = useSearchParams();
-  const providerFilter = searchParams?.get('providerId') ?? undefined;
+  const urlProviderFilter = searchParams?.get('providerId') ?? undefined;
 
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [patients, setPatients] = useState<Reference[]>([]);
@@ -71,6 +73,14 @@ export default function AppointmentsPage() {
   const [submitting, setSubmitting] = useState(false);
   const [view, setView] = useState<ViewMode>('list');
   const [visibleMonth, setVisibleMonth] = useState(getCurrentClinicMonth());
+  
+  const [serviceFilter, setServiceFilter] = useState('');
+  const [patientFilter, setPatientFilter] = useState('');
+  const [providerFilter, setProviderFilter] = useState(urlProviderFilter ?? '');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const [sortField, setSortField] = useState<SortField>('startAt');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
 
   const providerColor = useCallback(
     (providerId: string) =>
@@ -228,9 +238,73 @@ export default function AppointmentsPage() {
     return new Date(iso).toLocaleString('es-MX');
   }
 
-  const visibleAppointments = providerFilter
-    ? appointments.filter((a) => a.providerId === providerFilter)
-    : appointments;
+  function handleSort(field: SortField) {
+    if (sortField === field) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  }
+
+  function clearFilters() {
+    setServiceFilter('');
+    setPatientFilter('');
+    setProviderFilter('');
+    setDateFrom('');
+    setDateTo('');
+  }
+
+  const filteredAndSortedAppointments = useMemo(() => {
+    let result = [...appointments];
+
+    if (serviceFilter) {
+      result = result.filter((a) => a.serviceId === serviceFilter);
+    }
+    if (patientFilter) {
+      result = result.filter((a) => a.patientId === patientFilter);
+    }
+    if (providerFilter) {
+      result = result.filter((a) => a.providerId === providerFilter);
+    }
+    if (dateFrom) {
+      result = result.filter((a) => new Date(a.startAt) >= new Date(dateFrom));
+    }
+    if (dateTo) {
+      result = result.filter((a) => new Date(a.startAt) <= new Date(dateTo));
+    }
+
+    result.sort((a, b) => {
+      let comparison = 0;
+      
+      switch (sortField) {
+        case 'startAt':
+          comparison = new Date(a.startAt).getTime() - new Date(b.startAt).getTime();
+          break;
+        case 'endAt':
+          comparison = new Date(a.endAt).getTime() - new Date(b.endAt).getTime();
+          break;
+        case 'patient':
+          comparison = refName(patients, a.patientId ?? '').localeCompare(refName(patients, b.patientId ?? ''));
+          break;
+        case 'service':
+          comparison = refName(services, a.serviceId).localeCompare(refName(services, b.serviceId));
+          break;
+        case 'provider':
+          comparison = refName(providers, a.providerId).localeCompare(refName(providers, b.providerId));
+          break;
+        case 'status':
+          comparison = a.status.localeCompare(b.status);
+          break;
+      }
+      
+      return sortDirection === 'asc' ? comparison : -comparison;
+    });
+
+    return result;
+  }, [appointments, serviceFilter, patientFilter, providerFilter, dateFrom, dateTo, sortField, sortDirection, patients, services, providers]);
+
+  const hasActiveFilters = serviceFilter || patientFilter || providerFilter || dateFrom || dateTo;
 
   return (
     <div>
@@ -272,12 +346,94 @@ export default function AppointmentsPage() {
         </div>
       </div>
 
-      {providerFilter && (
-        <div className="mb-4 flex items-center justify-between rounded-md bg-blue-50 px-4 py-2 text-sm text-blue-800">
-          <span>Filtrando por proveedor</span>
-          <Link href="/appointments" className="font-medium underline">
-            Quitar filtro
-          </Link>
+      {view === 'list' && (
+        <div className="mb-4 rounded-lg border bg-white p-4 shadow-sm">
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-gray-700">Filtros</h2>
+            {hasActiveFilters && (
+              <button
+                onClick={clearFilters}
+                className="text-sm text-blue-600 hover:text-blue-800"
+              >
+                Limpiar filtros
+              </button>
+            )}
+          </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
+            <div>
+              <label className="block text-xs font-medium text-gray-600">
+                Servicio
+              </label>
+              <select
+                value={serviceFilter}
+                onChange={(e) => setServiceFilter(e.target.value)}
+                className="mt-1 block w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+              >
+                <option value="">Todos</option>
+                {services.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600">
+                Paciente
+              </label>
+              <select
+                value={patientFilter}
+                onChange={(e) => setPatientFilter(e.target.value)}
+                className="mt-1 block w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+              >
+                <option value="">Todos</option>
+                {patients.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600">
+                Proveedor
+              </label>
+              <select
+                value={providerFilter}
+                onChange={(e) => setProviderFilter(e.target.value)}
+                className="mt-1 block w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+              >
+                <option value="">Todos</option>
+                {providers.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600">
+                Desde
+              </label>
+              <input
+                type="date"
+                value={dateFrom}
+                onChange={(e) => setDateFrom(e.target.value)}
+                className="mt-1 block w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600">
+                Hasta
+              </label>
+              <input
+                type="date"
+                value={dateTo}
+                onChange={(e) => setDateTo(e.target.value)}
+                className="mt-1 block w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+              />
+            </div>
+          </div>
         </div>
       )}
 
@@ -294,26 +450,102 @@ export default function AppointmentsPage() {
 
       {loading && <LoadingState />}
       {error && <ErrorState message={error} onRetry={loadData} />}
-      {!loading && !error && view === 'list' && visibleAppointments.length === 0 && (
-        <EmptyState
-          message={
-            providerFilter
-              ? 'No hay citas registradas para este proveedor.'
-              : 'No hay citas registradas.'
-          }
+      {!loading && !error && view === 'list' && filteredAndSortedAppointments.length === 0 && (
+        <EmptyState 
+          message={hasActiveFilters 
+            ? 'No hay citas que coincidan con los filtros.' 
+            : 'No hay citas registradas.'} 
         />
       )}
-      {!loading && !error && view === 'list' && visibleAppointments.length > 0 && (
+      {!loading && !error && view === 'list' && filteredAndSortedAppointments.length > 0 && (
         <DataTable
           columns={[
-            { header: 'Paciente', cell: (a) => refName(patients, a.patientId ?? '') || 'Sin paciente' },
-            { header: 'Servicio', cell: (a) => refName(services, a.serviceId) },
-            { header: 'Proveedor', cell: (a) => refName(providers, a.providerId) },
-            { header: 'Inicio', cell: (a) => formatDate(a.startAt) },
-            { header: 'Fin', cell: (a) => formatDate(a.endAt) },
-            { header: 'Estado', cell: (a) => a.status },
+            { 
+              header: (
+                <button
+                  onClick={() => handleSort('startAt')}
+                  className="flex items-center gap-1 font-semibold"
+                >
+                  Inicio
+                  {sortField === 'startAt' && (
+                    <span>{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                  )}
+                </button>
+              ),
+              cell: (a) => formatDate(a.startAt)
+            },
+            { 
+              header: (
+                <button
+                  onClick={() => handleSort('endAt')}
+                  className="flex items-center gap-1 font-semibold"
+                >
+                  Fin
+                  {sortField === 'endAt' && (
+                    <span>{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                  )}
+                </button>
+              ),
+              cell: (a) => formatDate(a.endAt)
+            },
+            { 
+              header: (
+                <button
+                  onClick={() => handleSort('patient')}
+                  className="flex items-center gap-1 font-semibold"
+                >
+                  Paciente
+                  {sortField === 'patient' && (
+                    <span>{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                  )}
+                </button>
+              ),
+              cell: (a) => refName(patients, a.patientId ?? '') || 'Sin paciente'
+            },
+            { 
+              header: (
+                <button
+                  onClick={() => handleSort('service')}
+                  className="flex items-center gap-1 font-semibold"
+                >
+                  Servicio
+                  {sortField === 'service' && (
+                    <span>{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                  )}
+                </button>
+              ),
+              cell: (a) => refName(services, a.serviceId)
+            },
+            { 
+              header: (
+                <button
+                  onClick={() => handleSort('provider')}
+                  className="flex items-center gap-1 font-semibold"
+                >
+                  Proveedor
+                  {sortField === 'provider' && (
+                    <span>{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                  )}
+                </button>
+              ),
+              cell: (a) => refName(providers, a.providerId)
+            },
+            { 
+              header: (
+                <button
+                  onClick={() => handleSort('status')}
+                  className="flex items-center gap-1 font-semibold"
+                >
+                  Estado
+                  {sortField === 'status' && (
+                    <span>{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                  )}
+                </button>
+              ),
+              cell: (a) => a.status
+            },
           ]}
-          rows={visibleAppointments}
+          rows={filteredAndSortedAppointments}
           onEdit={openEdit}
           onDelete={handleDelete}
         />

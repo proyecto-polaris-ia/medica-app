@@ -3,6 +3,10 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import AppointmentsPage from './page';
 
+vi.mock('next/navigation', () => ({
+  useSearchParams: () => new URLSearchParams(),
+}));
+
 const PROVIDER_ID = '550e8400-e29b-41d4-a716-446655440001';
 const SERVICE_ID = '550e8400-e29b-41d4-a716-446655440002';
 const PATIENT_ID = '550e8400-e29b-41d4-a716-446655440003';
@@ -70,7 +74,7 @@ describe('/appointments integration', () => {
     render(<AppointmentsPage />);
 
     await waitFor(() => {
-      expect(screen.getByText('Paciente A')).toBeInTheDocument();
+      expect(screen.getAllByText('Paciente A').length).toBeGreaterThan(0);
     });
 
     await user.click(screen.getByRole('button', { name: /Calendario/ }));
