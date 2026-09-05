@@ -79,7 +79,18 @@ function parseLocalDate(value?: string) {
   if (!value) return new Date();
   const normalized = /^\d{4}-\d{2}-\d{2}$/.test(value) ? `${value}T12:00:00-06:00` : value;
   const parsed = new Date(normalized);
-  return Number.isNaN(parsed.getTime()) ? new Date() : parsed;
+  if (Number.isNaN(parsed.getTime())) return new Date();
+  
+  // Si la fecha está en el pasado, corregir al año actual
+  const now = new Date();
+  if (parsed < now) {
+    const currentYear = now.getFullYear();
+    parsed.setFullYear(currentYear);
+    // Si después de cambiar el año sigue en el pasado, usar fecha actual
+    if (parsed < now) return now;
+  }
+  
+  return parsed;
 }
 
 function readCandidate(context: Record<string, unknown> | null | undefined, index: number) {

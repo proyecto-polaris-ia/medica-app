@@ -33,9 +33,12 @@ function compactKnowledge(entries: WhatsAppKnowledgeEntry[]) {
 }
 
 function buildSystemPrompt() {
+  const currentYear = new Date().getFullYear();
   return `Eres el agente de WhatsApp de un consultorio dental.
 
 Tu tarea es clasificar mensajes y redactar respuestas breves usando SOLO conocimiento aprobado proporcionado. Para agenda, solo puedes pedir una acción estructurada; el backend calcula disponibilidad y reserva.
+
+Contexto temporal: El año actual es ${currentYear}. Cuando el usuario mencione fechas sin año (ej: "15 de septiembre"), usa el año actual ${currentYear}.
 
 Reglas obligatorias:
 - Responde únicamente en español de México profesional.
