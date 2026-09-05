@@ -1,7 +1,7 @@
 import { ReactNode } from 'react';
 
 export type Column<T> = {
-  header: string;
+  header: ReactNode;
   cell: (row: T) => ReactNode;
 };
 
