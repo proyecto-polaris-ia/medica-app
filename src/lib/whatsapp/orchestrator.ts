@@ -119,9 +119,17 @@ async function classifyIntent(
     };
   }
 
+  console.log('[Orchestrator] Classifying message:', event.body);
+
   // Clasificación simple sin LLM
   const classification = classifyIntentSimple(event.body);
   const entities = extractEntities(event.body);
+
+  console.log('[Orchestrator] Classification result:', {
+    intent: classification.intent,
+    confidence: classification.confidence,
+    entities,
+  });
 
   // Convertir a formato de decisión
   const decision: WhatsAppInboundAgentDecision = {

@@ -70,7 +70,17 @@ const defaultStore: WhatsAppStore = {
 
 // Feature flag para activar Flow Engine
 function isFlowEngineEnabled(): boolean {
-  return process.env.WHATSAPP_FLOW_ENGINE_ENABLED === 'true';
+  const value = process.env.WHATSAPP_FLOW_ENGINE_ENABLED?.toLowerCase().trim();
+  const enabled = value === 'true' || value === '1' || value === 'yes';
+  
+  // Log temporal para debuggear en producción
+  console.log('[FlowEngine] Feature flag check:', {
+    raw: process.env.WHATSAPP_FLOW_ENGINE_ENABLED,
+    normalized: value,
+    enabled,
+  });
+  
+  return enabled;
 }
 
 function unsupportedDecision(event: NormalizedWhatsAppInboundEvent): WhatsAppInboundAgentDecision {
