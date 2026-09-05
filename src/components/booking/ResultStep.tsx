@@ -144,7 +144,7 @@ export function ResultStep({
 
         <div className="pt-4">
           <Link
-            href="/bookings"
+            href="/booking"
             className="inline-flex items-center gap-2 text-sm font-medium text-green-700 underline hover:text-green-900"
           >
             <svg
