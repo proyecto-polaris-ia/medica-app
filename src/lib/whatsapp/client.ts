@@ -70,6 +70,13 @@ export async function sendWhatsAppTextMessage(
     const body = contentType.includes("application/json") ? await response.json() : await response.text();
 
     if (!response.ok) {
+      console.error('[WhatsApp Client] Send failed:', {
+        to: input.to,
+        bodyLength: input.body.length,
+        bodyPreview: input.body.slice(0, 200),
+        status: response.status,
+        responseBody: body,
+      });
       return {
         ok: false,
         status: response.status,

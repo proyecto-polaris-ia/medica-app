@@ -32,6 +32,9 @@ export type FlowState = {
   }>;
   attempts?: number;
   metadata?: Record<string, unknown>;
+  lastActivity?: string; // ISO timestamp de la última actividad
+  flowName?: string; // Nombre del flujo activo (ej: 'book_appointment')
+  pendingAction?: 'confirm_exit' | 'confirm_cancel'; // Acción pendiente de confirmación
 };
 
 // Definición de un estado en el flujo
