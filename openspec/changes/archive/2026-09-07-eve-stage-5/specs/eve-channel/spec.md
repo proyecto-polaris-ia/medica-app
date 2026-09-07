@@ -36,6 +36,25 @@ The WhatsApp adapter MUST be configured through `createWhatsAppAdapter` with `ac
 - WHEN inspected
 - THEN no plaintext token or secret is present, and the adapter relies on the `WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_VERIFY_TOKEN`, and `WHATSAPP_APP_SECRET` variables
 
+### Requirement: Channel degrades gracefully when credentials are missing
+
+The channel MUST only register the WhatsApp adapter when all four `WHATSAPP_*` credentials are present and non-empty, so `eve build` does not crash in credential-less environments (e.g. Vercel preview builds). When credentials are absent, the channel MUST mount with no adapters instead of throwing.
+
+#### Scenario: build succeeds without credentials
+- GIVEN no `WHATSAPP_*` variables set
+- WHEN `agent/channels/whatsapp.ts` is imported during `eve build`
+- THEN the module loads without throwing and the WhatsApp adapter is not registered
+
+#### Scenario: channel activates when credentials exist
+- GIVEN all four `WHATSAPP_*` variables set to non-empty values
+- WHEN the channel config is built
+- THEN the WhatsApp adapter is registered
+
+#### Scenario: partial credentials do not activate the channel
+- GIVEN only some `WHATSAPP_*` variables set
+- WHEN the channel config is built
+- THEN the WhatsApp adapter is not registered
+
 ### Requirement: Inbound message handlers route to the agent
 
 The channel MUST register a new-mention handler and a subscribed-message handler that subscribe the thread and hand the inbound message text to the Eve bridge via `send`.

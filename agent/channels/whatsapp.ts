@@ -3,13 +3,32 @@ import { createMemoryState } from "@chat-adapter/state-memory";
 import type { Message, Thread } from "chat";
 import { chatSdkChannel } from "eve/channels/chat-sdk";
 
+const WHATSAPP_CREDENTIAL_KEYS = [
+  "WHATSAPP_ACCESS_TOKEN",
+  "WHATSAPP_APP_SECRET",
+  "WHATSAPP_PHONE_NUMBER_ID",
+  "WHATSAPP_VERIFY_TOKEN",
+] as const;
+
+/**
+ * The WhatsApp adapter throws at construction time if any required credential
+ * is missing, which breaks `eve build` in credential-less environments (e.g.
+ * Vercel preview builds). Following the project's "external integrations MUST
+ * degrade gracefully when keys are missing" rule, the adapter is only
+ * registered when all four WHATSAPP_* variables are present; otherwise the
+ * channel mounts with no adapters and no webhook route until credentials exist.
+ */
+const hasWhatsAppCredentials = WHATSAPP_CREDENTIAL_KEYS.every(
+  (key) => typeof process.env[key] === "string" && process.env[key]!.length > 0
+);
+
 /**
  * WhatsApp channel connecting the Eve agent to Meta WhatsApp Cloud API.
  *
- * The WhatsApp adapter auto-detects credentials from the existing environment
- * variables: WHATSAPP_ACCESS_TOKEN, WHATSAPP_PHONE_NUMBER_ID,
- * WHATSAPP_VERIFY_TOKEN, and WHATSAPP_APP_SECRET. Streaming is disabled because
- * WhatsApp delivers single messages rather than streamed deltas.
+ * The WhatsApp adapter auto-detects credentials from the environment variables
+ * WHATSAPP_ACCESS_TOKEN, WHATSAPP_PHONE_NUMBER_ID, WHATSAPP_VERIFY_TOKEN, and
+ * WHATSAPP_APP_SECRET. Streaming is disabled because WhatsApp delivers single
+ * messages rather than streamed deltas.
  *
  * State uses an in-memory adapter for the channel's subscription/lock
  * bookkeeping; conversation/session durability is owned by Eve Workflows, in
@@ -17,9 +36,9 @@ import { chatSdkChannel } from "eve/channels/chat-sdk";
  */
 export const { bot, channel, send } = chatSdkChannel({
   userName: "Consultorio Dental",
-  adapters: {
-    whatsapp: createWhatsAppAdapter(),
-  },
+  adapters: hasWhatsAppCredentials
+    ? { whatsapp: createWhatsAppAdapter() }
+    : {},
   state: createMemoryState(),
   streaming: false,
 });

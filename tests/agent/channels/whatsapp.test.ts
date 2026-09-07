@@ -28,6 +28,18 @@ describe("Eve WhatsApp channel", () => {
     expect(source.includes("streaming")).toBe(true);
   });
 
+  it("degrades gracefully by gating the adapter behind complete credentials", () => {
+    const source = readFileSync(CHANNEL_FILE, "utf-8");
+
+    // The build must not throw without credentials, so the adapter creation is
+    // guarded behind a completeness check over all four WHATSAPP_* variables.
+    expect(source.includes("WHATSAPP_ACCESS_TOKEN")).toBe(true);
+    expect(source.includes("WHATSAPP_APP_SECRET")).toBe(true);
+    expect(source.includes("WHATSAPP_PHONE_NUMBER_ID")).toBe(true);
+    expect(source.includes("WHATSAPP_VERIFY_TOKEN")).toBe(true);
+    expect(source.includes("hasWhatsAppCredentials")).toBe(true);
+  });
+
   it("does not hardcode credentials", () => {
     const source = readFileSync(CHANNEL_FILE, "utf-8");
     expect(source).not.toMatch(/\b(EAA[A-Za-z0-9]{10,}|sk-[A-Za-z0-9]{20,})\b/);
