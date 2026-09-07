@@ -35,6 +35,7 @@ playwright/.cache/
 .atl/
 .config/
 .env*
+!.env.local.example
 .DS_Store
 opencode.json
 
