@@ -9,16 +9,16 @@ Stage 2 is complete and archived. The Eve framework capability spec now includes
 - `agent/tools/list-catalog.ts`
 - `agent/tools/check-availability.ts`
 - `agent/tools/search-knowledge.ts`
-- `agent/tools/__tests__/list-catalog.test.ts`
-- `agent/tools/__tests__/check-availability.test.ts`
-- `agent/tools/__tests__/search-knowledge.test.ts`
+- `tests/agent/tools/list-catalog.test.ts`
+- `tests/agent/tools/check-availability.test.ts`
+- `tests/agent/tools/search-knowledge.test.ts`
 - `agent/instructions.md` read-only tool guidance
 - `agent/eve-shim.d.ts` localized `eve/tools` TypeScript shim
 - Direct `zod` dependency in `package.json` / `package-lock.json`
 
 ## Verification Evidence
 
-- `npm run test -- agent/tools/__tests__` passed: 3 files / 11 tests.
+- `npm run test -- tests/agent/tools` passed: 3 files / 11 tests.
 - `npm run test` passed: 57 files / 394 tests.
 - `npm run typecheck` passed.
 - `npm run build` passed.
@@ -35,3 +35,5 @@ Stage 2 is complete and archived. The Eve framework capability spec now includes
 ## Outcome
 
 No CRITICAL issues. No stale unchecked tasks remain.
+
+- Moved all agent tests outside `agent/` to prevent Eve from treating test folders as agent capabilities during Vercel builds.

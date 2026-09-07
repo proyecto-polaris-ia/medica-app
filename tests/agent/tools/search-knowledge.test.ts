@@ -14,7 +14,7 @@ const getSupabaseAdmin = vi.fn(() => ({ from, insert, update, upsert, delete: de
 
 vi.mock("@/lib/supabase/server", () => ({ getSupabaseAdmin }));
 
-const { default: tool } = await import("../search-knowledge");
+const { default: tool } = await import("../../../agent/tools/search-knowledge");
 const execute = tool.execute as (input: { query: string }) => Promise<unknown>;
 
 describe("search-knowledge tool", () => {

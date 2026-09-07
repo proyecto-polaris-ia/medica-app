@@ -34,7 +34,7 @@ Use Eve 0.52 `defineTool` with Zod input schemas. Wrap existing `listServices`, 
 | Area | Impact | Description |
 |------|--------|-------------|
 | `agent/tools/` | New | Read-only Eve tools. |
-| `agent/tools/__tests__/` | New | Unit tests with mocked dependencies. |
+| `tests/agent/tools/` | New | Unit tests with mocked dependencies. |
 | `agent/instructions.md` | Modified | Tool usage guidance in Spanish. |
 | `package.json` / lockfile | Modified | Direct Zod dependency for tool schemas. |
 

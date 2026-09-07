@@ -9,7 +9,7 @@ vi.mock("@/lib/booking/catalog", () => ({
   listProviders,
 }));
 
-const { default: tool } = await import("../list-catalog");
+const { default: tool } = await import("../../../agent/tools/list-catalog");
 const execute = tool.execute as () => Promise<unknown>;
 
 describe("list-catalog tool", () => {

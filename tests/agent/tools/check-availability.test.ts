@@ -11,7 +11,7 @@ vi.mock("@/lib/booking/catalog", () => ({
   resolveProviderByName,
 }));
 
-const { default: tool } = await import("../check-availability");
+const { default: tool } = await import("../../../agent/tools/check-availability");
 const execute = tool.execute as (input: {
   serviceName: string;
   providerName: string;

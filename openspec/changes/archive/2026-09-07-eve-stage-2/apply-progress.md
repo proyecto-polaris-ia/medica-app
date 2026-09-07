@@ -12,7 +12,7 @@ Complete.
 - Created `agent/tools/search-knowledge.ts` to query only approved `whatsapp_knowledge_entries` and deterministically rank matches.
 - Updated `agent/instructions.md` with read-only tool guidance while preserving clinical guardrails.
 - Extended `agent/eve-shim.d.ts` for `eve/tools` because the current `tsconfig` still uses Node-style module resolution.
-- Added unit tests for all three tools under `agent/tools/__tests__/`.
+- Added unit tests for all three tools under `tests/agent/tools/`.
 
 ## Read-Only Evidence
 
@@ -23,7 +23,9 @@ Complete.
 
 ## Verification Snapshot
 
-- `npm run test -- agent/tools/__tests__` passed: 3 files / 11 tests.
+- `npm run test -- tests/agent/tools` passed: 3 files / 11 tests.
 - `npm run test` passed: 57 files / 394 tests.
 - `npm run typecheck` passed after adding the localized `eve/tools` shim.
 - `npm run build` passed.
+
+- Moved all agent tests outside `agent/` to prevent Eve from treating test folders as agent capabilities during Vercel builds.

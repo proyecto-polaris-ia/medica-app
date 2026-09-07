@@ -14,8 +14,8 @@ import { describe, expect, it } from "vitest";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-const AGENT_FILE = resolve(__dirname, "../agent.ts");
-const INSTRUCTIONS_FILE = resolve(__dirname, "../instructions.md");
+const AGENT_FILE = resolve(__dirname, "../../agent/agent.ts");
+const INSTRUCTIONS_FILE = resolve(__dirname, "../../agent/instructions.md");
 
 describe("Eve agent scaffold", () => {
   it("exports a valid model and a 30-minute session timeout", async () => {
@@ -25,7 +25,7 @@ describe("Eve agent scaffold", () => {
     let approach = "import";
 
     try {
-      const mod = await import("../agent");
+      const mod = await import("../../agent/agent");
       const config = mod.default;
       model = config?.model;
       sessionTimeoutMs = config?.limits?.sessionTimeoutMs;

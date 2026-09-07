@@ -30,6 +30,6 @@ Stage 1 added the Eve runtime scaffold. Stage 2 adds model-callable read tools o
 ## Verification
 
 Run:
-- `npm run test -- agent/tools/__tests__`
+- `npm run test -- tests/agent/tools`
 - `npm run typecheck`
 - `npm run build`
