@@ -204,3 +204,46 @@ The Eve agent MUST expose a `get-next-available` tool that resolves service and 
 - GIVEN the agent instructions are read
 - WHEN the tool guidance section is inspected
 - THEN it names `resolve-patient`, `book-appointment`, and `get-next-available` while preserving the clinical guardrails
+
+### Requirement: Booking Flow Skill
+
+The Eve agent MUST provide `agent/skills/booking-flow.md`, written in Spanish de México, describing an ordered booking procedure that queries availability with `check-availability`, presents real slots, books only after confirmation via `book-appointment`, and recovers from conflicts with `get-next-available`, while never inventing horarios.
+
+#### Scenario: Booking skill orders the flow and is bounded by tools
+- GIVEN `agent/skills/booking-flow.md` is read
+- WHEN its procedure is inspected
+- THEN it orders intent, data collection, availability, presentation, confirm-and-book, and conflict handling
+- AND it names `check-availability`, `book-appointment`, and `get-next-available`
+- AND it instructs never inventing availability
+
+### Requirement: Clinical Escalation Skill
+
+The Eve agent MUST provide `agent/skills/clinical-escalation.md`, written in Spanish de México, enumerating immediate-escalation triggers (strong pain, swelling, unstoppable bleeding, infection, trauma, allergy, adverse reaction, systemic conditions, and medication/prescription/diagnosis requests) and providing an escalation procedure and reply template that forbids clinical advice.
+
+#### Scenario: Escalation skill triggers, template, and no-advice rule present
+- GIVEN `agent/skills/clinical-escalation.md` is read
+- WHEN its content is inspected
+- THEN it lists the urgent-symptom and inappropriate-request triggers
+- AND it includes a reusable escalation reply template
+- AND it instructs the agent not to diagnose, prescribe, or give clinical instructions
+
+### Requirement: Knowledge Answers Skill
+
+The Eve agent MUST provide `agent/skills/knowledge-answers.md`, written in Spanish de México, describing when to use `search-knowledge` for general questions, when to route to booking or escalation instead, and instructing the agent to answer only from returned knowledge and admit when nothing is found.
+
+#### Scenario: Knowledge skill scopes usage and forbids invention
+- GIVEN `agent/skills/knowledge-answers.md` is read
+- WHEN its content is inspected
+- THEN it instructs using `search-knowledge` for general questions
+- AND it routes booking requests to the booking flow and symptoms to escalation
+- AND it instructs not inventing answers and offering escalation when nothing is found
+
+### Requirement: Skill References in Instructions
+
+`agent/instructions.md` MUST reference the three skills by filename together with their load triggers (booking intent → `booking-flow.md`; symptoms/pain/medication → `clinical-escalation.md`; general/service questions → `knowledge-answers.md`) while preserving the five clinical guardrails.
+
+#### Scenario: Instructions name each skill with a trigger and preserve guardrails
+- GIVEN `agent/instructions.md` is read
+- WHEN the skills section is inspected
+- THEN it names `booking-flow.md`, `clinical-escalation.md`, and `knowledge-answers.md` with their respective triggers
+- AND the five clinical guardrails remain present
