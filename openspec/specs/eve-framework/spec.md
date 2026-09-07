@@ -163,3 +163,44 @@ The Eve agent MUST expose a `search-knowledge` tool that searches only approved 
 - WHEN the tool guidance section is inspected
 - THEN it names `list-catalog`, `check-availability`, and `search-knowledge`
 - AND it preserves the existing clinical guardrails
+
+### Requirement: Write Patient Resolution Tool
+
+The Eve agent MUST expose a `resolve-patient` tool that resolves existing patients or creates new patients through existing deterministic booking services. The tool MUST return structured success or error data and MUST reject identity conflicts.
+
+#### Scenario: Patient is resolved or created
+- GIVEN valid patient contact details
+- WHEN the agent calls `resolve-patient`
+- THEN the tool returns patient identity data with `success: true` or a structured error for conflicts/validation failures
+
+### Requirement: Write Appointment Booking Tool
+
+The Eve agent MUST expose a `book-appointment` tool that resolves service, provider, and patient data, validates the requested interval, and writes appointments only through the existing atomic booking service.
+
+#### Scenario: Confirmed booking is persisted
+- GIVEN a valid future slot, patient, service, and provider
+- WHEN the agent calls `book-appointment`
+- THEN the tool persists the appointment through existing booking logic and returns structured confirmation data
+
+#### Scenario: Booking conflict is surfaced
+- GIVEN the requested provider interval is already occupied
+- WHEN the booking service reports a conflict
+- THEN `book-appointment` returns `success: false` and `conflict: true`
+
+### Requirement: Next Available Tool
+
+The Eve agent MUST expose a `get-next-available` tool that resolves service and provider names and returns the next real available slot from existing availability logic.
+
+#### Scenario: Next slot is returned or unavailable is explicit
+- GIVEN a valid service, provider, and start date
+- WHEN the agent calls `get-next-available`
+- THEN the tool returns either a real ISO/formatted slot or an explicit unavailable result that tells the agent not to invent horarios
+
+### Requirement: Bounded Write Tool Instructions
+
+`agent/instructions.md` MUST tell the agent to use write tools only after collecting and confirming required booking data, and MUST state that appointment confirmation is only allowed after `book-appointment` returns `success: true`.
+
+#### Scenario: Write guidance preserves guardrails
+- GIVEN the agent instructions are read
+- WHEN the tool guidance section is inspected
+- THEN it names `resolve-patient`, `book-appointment`, and `get-next-available` while preserving the clinical guardrails
