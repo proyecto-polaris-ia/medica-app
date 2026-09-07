@@ -43,22 +43,22 @@ The WhatsApp adapter MUST be configured through `createWhatsAppAdapter` with `ac
 
 ### Requirement: Channel degrades gracefully when credentials are missing
 
-The channel MUST only register the WhatsApp adapter when all four `WHATSAPP_*` credentials are present and non-empty, so `eve build` does not crash in credential-less environments (e.g. Vercel preview builds). When credentials are absent, the channel MUST mount with no adapters instead of throwing.
+The channel MUST always construct the WhatsApp adapter (so the adapter key is always present and the webhook route is always registered — eve's build-time validation rejects a channel module that emits no routes), while resolving each credential from its `WHATSAPP_*` environment variable with a non-empty placeholder fallback. This keeps `eve build` from crashing in credential-less environments (e.g. Vercel preview builds) while degrading gracefully at runtime.
 
 #### Scenario: build succeeds without credentials
 - GIVEN no `WHATSAPP_*` variables set
 - WHEN `agent/channels/whatsapp.ts` is imported during `eve build`
-- THEN the module loads without throwing and the WhatsApp adapter is not registered
+- THEN the module loads without throwing and the WhatsApp webhook route stays registered
 
-#### Scenario: channel activates when credentials exist
-- GIVEN all four `WHATSAPP_*` variables set to non-empty values
+#### Scenario: channel uses real credentials when present
+- GIVEN the four `WHATSAPP_*` variables set to non-empty values
 - WHEN the channel config is built
-- THEN the WhatsApp adapter is registered
+- THEN the adapter resolves access token, app secret, phone number id, and verify token from the environment
 
-#### Scenario: partial credentials do not activate the channel
-- GIVEN only some `WHATSAPP_*` variables set
+#### Scenario: missing credentials fall back without crashing
+- GIVEN only some or none of the `WHATSAPP_*` variables set
 - WHEN the channel config is built
-- THEN the WhatsApp adapter is not registered
+- THEN the adapter is constructed with placeholder values instead of throwing
 
 ### Requirement: Inbound message handlers route to the agent
 

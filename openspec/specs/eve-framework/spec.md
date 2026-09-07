@@ -270,18 +270,18 @@ The WhatsApp adapter MUST resolve `accessToken`, `phoneNumberId`, `verifyToken`,
 
 ### Requirement: WhatsApp Channel Graceful Degradation
 
-The WhatsApp channel MUST only register its adapter when all four `WHATSAPP_*` credentials are present and non-empty, so `eve build` succeeds in credential-less environments. When credentials are absent, the channel MUST mount with no adapters rather than throwing at build time.
+The WhatsApp channel MUST always construct its adapter (so the webhook route stays registered — eve rejects a channel module that emits no routes), resolving each credential from its `WHATSAPP_*` environment variable with a non-empty placeholder fallback. This keeps `eve build` from crashing in credential-less environments.
 
 #### Scenario: build succeeds without credentials
 - GIVEN no `WHATSAPP_*` variables set
 - WHEN `agent/channels/whatsapp.ts` is imported during `eve build`
-- THEN the module loads without throwing and the WhatsApp adapter is not registered
+- THEN the module loads without throwing and the WhatsApp webhook route stays registered
 
-#### Scenario: channel activates only with complete credentials
-- GIVEN all four `WHATSAPP_*` variables set to non-empty values
+#### Scenario: real credentials are used when present
+- GIVEN the four `WHATSAPP_*` variables set to non-empty values
 - WHEN the channel config is built
-- THEN the WhatsApp adapter is registered
-- AND with partial credentials the adapter is not registered
+- THEN the adapter resolves access token, app secret, phone number id, and verify token from the environment
+- AND with partial credentials the adapter is constructed with placeholder values instead of throwing
 
 ### Requirement: WhatsApp Channel Non-Interference
 

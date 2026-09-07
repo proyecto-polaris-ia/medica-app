@@ -30,16 +30,19 @@ describe("Eve WhatsApp channel", () => {
     expect(source.includes("streaming")).toBe(true);
   });
 
-  it("degrades gracefully by gating the adapter behind complete credentials", () => {
+  it("always constructs the adapter with credential fallbacks so the route stays registered", () => {
     const source = readFileSync(CHANNEL_FILE, "utf-8");
 
-    // The build must not throw without credentials, so the adapter creation is
-    // guarded behind a completeness check over all four WHATSAPP_* variables.
+    // Eve derives the webhook route from the adapter keys, so the WhatsApp
+    // adapter must always be constructed (never fully omitted). Credentials are
+    // resolved with a placeholder fallback so the adapter factory, which throws
+    // on missing values, does not throw in credential-less builds.
     expect(source.includes("WHATSAPP_ACCESS_TOKEN")).toBe(true);
     expect(source.includes("WHATSAPP_APP_SECRET")).toBe(true);
     expect(source.includes("WHATSAPP_PHONE_NUMBER_ID")).toBe(true);
     expect(source.includes("WHATSAPP_VERIFY_TOKEN")).toBe(true);
-    expect(source.includes("hasWhatsAppCredentials")).toBe(true);
+    expect(source.includes("credential")).toBe(true);
+    expect(source).toMatch(/createWhatsAppAdapter\(\{/);
   });
 
   it("does not hardcode credentials", () => {
