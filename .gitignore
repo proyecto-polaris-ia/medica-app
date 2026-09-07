@@ -45,3 +45,5 @@ opencode.json
 
 # local agent memory
 .engram/
+.eve/
+.output/
