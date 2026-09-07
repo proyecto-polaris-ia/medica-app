@@ -53,3 +53,11 @@ bot.onNewMention(async (thread: Thread, message: Message) => {
 bot.onSubscribedMessage(async (thread: Thread, message: Message) => {
   await send(message.text, { thread });
 });
+
+/**
+ * Eve resolves an authored channel module by its default export. The
+ * `chatSdkChannel` bridge exposes the `defineChannel(...)` result on `channel`,
+ * so we re-export it as the module default while keeping `bot`/`send` named for
+ * the inbound handlers above.
+ */
+export default channel;

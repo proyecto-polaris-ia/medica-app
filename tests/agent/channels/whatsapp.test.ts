@@ -22,6 +22,8 @@ describe("Eve WhatsApp channel", () => {
 
     expect(source.includes("chatSdkChannel")).toBe(true);
     expect(source).toMatch(/export\s+const\s*\{\s*bot,\s*channel,\s*send\s*\}/);
+    // Eve resolves an authored channel by its default export.
+    expect(source).toMatch(/export\s+default\s+channel/);
     expect(source.includes("onNewMention")).toBe(true);
     expect(source.includes("onSubscribedMessage")).toBe(true);
     expect(source.includes("createWhatsAppAdapter")).toBe(true);

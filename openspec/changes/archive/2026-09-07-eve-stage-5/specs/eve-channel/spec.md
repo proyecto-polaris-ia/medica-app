@@ -27,6 +27,11 @@ The project MUST depend on `@chat-adapter/whatsapp` and `@chat-adapter/state-mem
 - THEN it exposes `bot`, `channel`, and `send`
 - AND the configuration includes a WhatsApp adapter and a memory state adapter
 
+#### Scenario: channel is the module default export
+- GIVEN `agent/channels/whatsapp.ts`
+- WHEN inspected
+- THEN the `channel` bridge member is re-exported as the module `default` export, because Eve resolves an authored channel module by its default export
+
 ### Requirement: WhatsApp adapter reads credentials from environment
 
 The WhatsApp adapter MUST be configured through `createWhatsAppAdapter` with `accessToken`, `phoneNumberId`, `verifyToken`, and `appSecret` resolved from the existing `WHATSAPP_*` environment variables (which the adapter auto-detects). The channel MUST not hardcode credentials.
