@@ -247,3 +247,56 @@ The Eve agent MUST provide `agent/skills/knowledge-answers.md`, written in Spani
 - WHEN the skills section is inspected
 - THEN it names `booking-flow.md`, `clinical-escalation.md`, and `knowledge-answers.md` with their respective triggers
 - AND the five clinical guardrails remain present
+
+### Requirement: WhatsApp Channel Bridge
+
+The Eve agent MUST provide `agent/channels/whatsapp.ts` exporting a `chatSdkChannel` bridge built with a WhatsApp adapter (`createWhatsAppAdapter`) and a memory state adapter (`createMemoryState`), with `streaming` disabled and handlers for new mentions and subscribed messages that subscribe the thread and hand message text to the agent via `send`.
+
+#### Scenario: Bridge, adapters, and handlers are present
+- GIVEN `agent/channels/whatsapp.ts` is read
+- WHEN its source is inspected
+- THEN it exports `bot`, `channel`, and `send`
+- AND it configures the WhatsApp adapter and memory state with `streaming: false`
+- AND it registers `onNewMention` and `onSubscribedMessage` handlers
+
+### Requirement: WhatsApp Credentials From Environment
+
+The WhatsApp adapter MUST resolve `accessToken`, `phoneNumberId`, `verifyToken`, and `appSecret` from the `WHATSAPP_*` environment variables without hardcoding credentials in source.
+
+#### Scenario: No plaintext credentials in source
+- GIVEN `agent/channels/whatsapp.ts`
+- WHEN inspected
+- THEN no token or secret literal is present
+
+### Requirement: WhatsApp Channel Graceful Degradation
+
+The WhatsApp channel MUST always construct its adapter (so the webhook route stays registered — eve rejects a channel module that emits no routes), resolving each credential from its `WHATSAPP_*` environment variable with a non-empty placeholder fallback. This keeps `eve build` from crashing in credential-less environments.
+
+#### Scenario: build succeeds without credentials
+- GIVEN no `WHATSAPP_*` variables set
+- WHEN `agent/channels/whatsapp.ts` is imported during `eve build`
+- THEN the module loads without throwing and the WhatsApp webhook route stays registered
+
+#### Scenario: real credentials are used when present
+- GIVEN the four `WHATSAPP_*` variables set to non-empty values
+- WHEN the channel config is built
+- THEN the adapter resolves access token, app secret, phone number id, and verify token from the environment
+- AND with partial credentials the adapter is constructed with placeholder values instead of throwing
+
+### Requirement: WhatsApp Channel Non-Interference
+
+Stage 5 MUST NOT modify `app/api/whatsapp/webhook/route.ts` or any file under `src/lib/whatsapp/`.
+
+#### Scenario: Legacy webhook and WhatsApp code untouched
+- GIVEN the Stage 5 diff
+- WHEN inspected
+- THEN no file under `app/api/whatsapp/` or `src/lib/whatsapp/` is modified
+
+### Requirement: Chat SDK Dependency Pinning
+
+The project MUST depend on `@chat-adapter/whatsapp`, `@chat-adapter/state-memory`, and their shared `chat` package, pinned to the `4.34.0` line that Eve 0.52.2 compiles internally.
+
+#### Scenario: Versions match the Eve Chat SDK line
+- GIVEN `package.json`
+- WHEN inspected
+- THEN the `@chat-adapter/*` packages are pinned to `4.34.0`
