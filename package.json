@@ -14,6 +14,7 @@
     "whatsapp:simulate": "node scripts/whatsapp-simulate-inbound.mjs"
   },
   "dependencies": {
+    "@ai-sdk/anthropic": "^3.0.116",
     "@chat-adapter/state-memory": "^4.34.0",
     "@chat-adapter/state-redis": "^4.34.0",
     "@chat-adapter/whatsapp": "^4.34.0",
