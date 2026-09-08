@@ -3,6 +3,10 @@ import { defineAgent } from "eve";
 
 const apiKey = process.env.WHATSAPP_AGENT_LLM_API_KEY ?? "";
 const baseURL = process.env.WHATSAPP_AGENT_LLM_BASE_URL ?? "";
+const modelId = process.env.WHATSAPP_AGENT_LLM_MODEL ?? "deepseek-v4-flash";
+
+// Extract just the model name if it includes a provider prefix (e.g., "opencode-go/deepseek-v4-flash" -> "deepseek-v4-flash")
+const modelName = modelId.includes("/") ? modelId.split("/")[1] : modelId;
 
 const openaiProvider = createOpenAICompatible({
   apiKey,
@@ -11,6 +15,6 @@ const openaiProvider = createOpenAICompatible({
 });
 
 export default defineAgent({
-  model: openaiProvider(process.env.WHATSAPP_AGENT_LLM_MODEL ?? "opencode-go/deepseek-v4-flash"),
+  model: openaiProvider(modelName),
   limits: { sessionTimeoutMs: 1800000 },
 });
