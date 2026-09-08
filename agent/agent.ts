@@ -14,7 +14,13 @@ const openaiProvider = createOpenAICompatible({
   name: "openai-compatible",
 });
 
+// DeepSeek V4 Flash has a 64K token context window
+const CONTEXT_WINDOW_TOKENS = 64000;
+
 export default defineAgent({
-  model: openaiProvider(modelName),
+  model: {
+    model: openaiProvider(modelName),
+    modelContextWindowTokens: CONTEXT_WINDOW_TOKENS,
+  },
   limits: { sessionTimeoutMs: 1800000 },
 });
