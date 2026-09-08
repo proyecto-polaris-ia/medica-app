@@ -300,3 +300,45 @@ The project MUST depend on `@chat-adapter/whatsapp`, `@chat-adapter/state-memory
 - GIVEN `package.json`
 - WHEN inspected
 - THEN the `@chat-adapter/*` packages are pinned to `4.34.0`
+
+### Requirement: WhatsApp Agent Routing Feature Flag
+
+`app/api/whatsapp/webhook/route.ts` MUST route verified inbound messages to the Eve agent when `WHATSAPP_EVE_ENABLED` is truthy (`true`, `1`, or `yes`, case-insensitive) and to the legacy agent otherwise, without weakening signature verification.
+
+#### Scenario: flag enables Eve, absence routes legacy
+- GIVEN a verified message POST
+- WHEN the flag is truthy
+- THEN the route forwards to `/eve/v1/whatsapp`
+- AND when the flag is unset or `false` the route processes through the legacy path
+
+#### Scenario: invalid signature rejected before routing
+- GIVEN a message POST with an invalid signature
+- WHEN the route receives it
+- THEN neither agent is invoked and an error status is returned
+
+### Requirement: Legacy Fallback on Eve Forward Failure
+
+When routing to Eve, the route MUST fall back to the legacy processing path if the forward request throws, so no inbound message is dropped.
+
+#### Scenario: forward failure falls back to legacy
+- GIVEN a flagged message and an Eve forward that throws
+- WHEN the route handles the message
+- THEN the message is processed through the legacy path
+
+### Requirement: WhatsApp Routing Observability
+
+The route MUST emit a structured log record naming the active agent (`eve` or `legacy`) plus the correlation id and, when available, the inbound message id.
+
+#### Scenario: route decision is logged
+- GIVEN a message POST is handled
+- WHEN the active agent is selected
+- THEN a structured log record includes the agent name and correlation id
+
+### Requirement: Eve Deployment Runbook
+
+`docs/eve-runbook.md` MUST document the feature-flag enable/disable commands, the rollback procedure, monitoring surfaces, and common issues.
+
+#### Scenario: runbook covers rollback and monitoring
+- GIVEN `docs/eve-runbook.md`
+- WHEN inspected
+- THEN it includes enable/disable commands, rollback referencing `WHATSAPP_EVE_ENABLED`, monitoring guidance, and issue resolutions
