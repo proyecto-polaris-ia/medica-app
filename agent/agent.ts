@@ -1,6 +1,6 @@
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
-import { defineAgent } from "eve";
-import { defineDynamic } from "eve/dist/src/public/definitions/agent.js";
+// @ts-ignore - defineDynamic is available at runtime but TypeScript can't resolve it
+import { defineAgent, defineDynamic } from "eve";
 
 const apiKey = process.env.WHATSAPP_AGENT_LLM_API_KEY ?? "";
 const baseURL = process.env.WHATSAPP_AGENT_LLM_BASE_URL ?? "";
