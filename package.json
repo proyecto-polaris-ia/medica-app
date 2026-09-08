@@ -6,7 +6,7 @@
     "node": "24.x"
   },
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev -p 3001",
     "build": "next build",
     "start": "next start",
     "test": "vitest run",
@@ -14,11 +14,14 @@
     "whatsapp:simulate": "node scripts/whatsapp-simulate-inbound.mjs"
   },
   "dependencies": {
+    "@ai-sdk/openai": "^3.0.109",
     "@chat-adapter/state-memory": "^4.34.0",
     "@chat-adapter/state-redis": "^4.34.0",
     "@chat-adapter/whatsapp": "^4.34.0",
     "@supabase/ssr": "^0.6.1",
     "@supabase/supabase-js": "2.109.0",
+    "ai": "^7.0.93",
+    "ai-sdk-provider-opencode-sdk": "^3.0.6",
     "eve": "^0.52.2",
     "next": "15.5.24",
     "react": "19.0.0",
@@ -39,5 +42,9 @@
     "tailwindcss": "^4.3.3",
     "typescript": "5.6.3",
     "vitest": "2.1.9"
+  },
+  "allowScripts": {
+    "esbuild@0.21.5": true,
+    "fsevents@2.3.3": true
   }
 }
