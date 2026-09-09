@@ -1,0 +1,11 @@
+change: eve-reschedule-appointment
+status: in_progress
+artifact_store: openspec
+created: 2026-09-08
+phases:
+  proposal: complete
+  spec: complete
+  design: complete
+  tasks: complete
+  apply: complete
+  verify: complete

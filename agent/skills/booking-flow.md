@@ -1,6 +1,6 @@
 # Flujo de Agendamiento de Citas
 
-Cuando un paciente quiera agendar una cita, sigue estos pasos en orden.
+Cuando un paciente quiera agendar una cita nueva, sigue estos pasos en orden. Si quiere mover, cambiar horario o reprogramar una cita existente, sigue primero la sección de reprogramación.
 
 ## Paso 1: Confirmar intención
 
@@ -56,9 +56,23 @@ Si hay un conflicto al agendar (el horario ya no está disponible):
 - Usa la tool `get-next-available` para encontrar la próxima disponibilidad real.
 - Ofrece la alternativa al paciente.
 
+## Reprogramación de citas existentes
+
+Si el paciente pide mover, cambiar horario o reprogramar una cita existente:
+
+1. Identifica la cita original. Usa el `appointmentId` si está disponible en el contexto; si no, reúne paciente, servicio, doctor, fecha y horario original.
+2. Consulta disponibilidad real para el nuevo día u horario con `check-availability`.
+3. Presenta solo horarios devueltos por la base de datos.
+4. Cuando el paciente confirme el nuevo horario, usa `reschedule-appointment`.
+5. Solo puedes decir que la cita quedó reprogramada si `reschedule-appointment` devuelve `success: true`.
+6. Si no puedes identificar con seguridad la cita original, no uses `book-appointment`; pide aclaración o escala a humano.
+
+Nunca uses `book-appointment` para mover una cita existente, porque esa tool crea una cita nueva.
+
 ## Notas importantes
 
 - NUNCA inventes horarios; SIEMPRE consulta la base de datos con `check-availability` o `get-next-available`.
+- NUNCA confirmes una reprogramación sin `reschedule-appointment` con `success: true`.
 - Si el paciente no tiene preferencia de doctor, consulta disponibilidad con "Cualquiera".
 - Si el paciente menciona síntomas clínicos (dolor fuerte, urgencia, infección), escala a humano inmediatamente siguiendo el skill `clinical-escalation.md`.
 - Si el paciente pregunta por precios, indica que los precios se confirman en la consulta. No des precios definitivos por WhatsApp.
