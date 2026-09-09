@@ -23,10 +23,10 @@ describe("Eve stage-4 skills", () => {
   it("creates the booking-flow skill with ordered tool guidance", () => {
     const text = read("booking-flow.md").toLowerCase();
 
-    for (const marker of ["check-availability", "book-appointment", "get-next-available"]) {
+    for (const marker of ["check-availability", "book-appointment", "get-next-available", "reschedule-appointment"]) {
       expect(text.includes(marker), `booking-flow.md must reference ${marker}`).toBe(true);
     }
-    for (const marker of ["paso 1", "paso 2", "inventes horarios"]) {
+    for (const marker of ["paso 1", "paso 2", "inventes horarios", "reprogramación"]) {
       expect(text.includes(marker), `booking-flow.md must include ${marker}`).toBe(true);
     }
   });
