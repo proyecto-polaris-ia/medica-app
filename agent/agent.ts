@@ -9,11 +9,16 @@ const modelId = process.env.WHATSAPP_AGENT_LLM_MODEL ?? "deepseek-v4-flash";
 // Extract just the model name if it includes a provider prefix (e.g., "opencode-go/deepseek-v4-flash" -> "deepseek-v4-flash")
 const modelName = modelId.includes("/") ? modelId.split("/")[1] : modelId;
 
-const openaiProvider = createOpenAICompatible({
-  apiKey,
-  baseURL,
-  name: "openai-compatible",
-});
+const createOpenCodeProvider = (sessionId: string) =>
+  createOpenAICompatible({
+    apiKey,
+    baseURL,
+    name: "openai-compatible",
+    headers: {
+      "User-Agent": "medica-app-eve/0.1",
+      "x-opencode-session": sessionId,
+    },
+  });
 
 // DeepSeek V4 Flash has a 64K token context window
 const CONTEXT_WINDOW_TOKENS = 64000;
@@ -21,8 +26,8 @@ const CONTEXT_WINDOW_TOKENS = 64000;
 export default defineAgent({
   model: defineDynamic({
     events: {
-      "session.started": () => ({
-        model: openaiProvider(modelName),
+      "step.started": (_event: unknown, ctx: { session: { id: string } }) => ({
+        model: createOpenCodeProvider(ctx.session.id)(modelName),
         modelContextWindowTokens: CONTEXT_WINDOW_TOKENS,
       }),
     },
