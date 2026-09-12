@@ -16,7 +16,10 @@ vi.mock("@/lib/booking/reschedule", () => ({ rescheduleAppointment }));
 const { default: tool } = await import("../../../agent/tools/reschedule-appointment");
 const execute = tool.execute as (input: {
   appointmentId?: string;
-  patientPhone: string;
+  patientPhone?: string;
+  patientEmail?: string;
+  trustedContactSource?: "whatsapp";
+  trustedPatientPhone?: string;
   patientName?: string;
   serviceName: string;
   providerName: string;
@@ -25,7 +28,7 @@ const execute = tool.execute as (input: {
   newStartAt: string;
   newEndAt: string;
   notes?: string;
-}) => Promise<unknown>;
+}, ctx?: unknown) => Promise<unknown>;
 
 function setupCatalog() {
   resolveServiceByName.mockResolvedValue({ id: "svc-1", name: "Limpieza dental", durationMinutes: 60 });
@@ -64,6 +67,11 @@ describe("reschedule-appointment tool", () => {
       newEndAt: "2026-09-15T22:00:00.000Z",
     });
 
+    expect(resolvePatient).toHaveBeenCalledWith({
+      phone: "+525543312353",
+      email: undefined,
+      fullName: "Daniel Rodriguez",
+    });
     expect(rescheduleAppointment).toHaveBeenCalledWith({
       appointmentId: "appt-1",
       patientId: "pat-1",
@@ -85,6 +93,57 @@ describe("reschedule-appointment tool", () => {
         status: "requested",
       },
     });
+  });
+
+
+
+  it("uses trusted WhatsApp sender phone over an alternate patient phone and forwards email", async () => {
+    setupCatalog();
+    rescheduleAppointment.mockResolvedValue({
+      ok: true,
+      appointment: {
+        id: "appt-2",
+        patientId: "pat-1",
+        serviceId: "svc-1",
+        providerId: "doc-1",
+        startAt: "2026-09-15T22:00:00.000Z",
+        endAt: "2026-09-15T23:00:00.000Z",
+        status: "requested",
+        notes: null,
+      },
+    });
+
+    await execute({
+      appointmentId: "appt-2",
+      patientPhone: "+5210000000000",
+      patientEmail: "Daniel@Example.COM",
+      patientName: "Daniel Rodriguez",
+      serviceName: "limpieza",
+      providerName: "ana",
+      newStartAt: "2026-09-15T22:00:00.000Z",
+      newEndAt: "2026-09-15T23:00:00.000Z",
+    }, { session: { auth: { current: { attributes: { trustedContactSource: "whatsapp", trustedPatientPhone: "+527224999206" } }, initiator: null } } });
+
+    expect(resolvePatient).toHaveBeenCalledWith({
+      phone: "+527224999206",
+      email: "Daniel@Example.COM",
+      fullName: "Daniel Rodriguez",
+    });
+  });
+
+  it("asks for patient phone before writing when no trusted channel phone exists", async () => {
+    await expect(execute({
+      appointmentId: "appt-1",
+      serviceName: "limpieza",
+      providerName: "ana",
+      newStartAt: "2026-09-15T21:00:00.000Z",
+      newEndAt: "2026-09-15T22:00:00.000Z",
+    })).resolves.toEqual({
+      success: false,
+      error: "Necesito el teléfono del paciente para reprogramar la cita.",
+    });
+    expect(resolvePatient).not.toHaveBeenCalled();
+    expect(rescheduleAppointment).not.toHaveBeenCalled();
   });
 
   it("requires original appointment identity before writing", async () => {

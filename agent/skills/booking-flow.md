@@ -14,6 +14,8 @@ Necesitas obtener estos datos del paciente:
 - Doctor preferido (opcional, puede ser cualquiera disponible).
 - Fecha preferida.
 - Horario preferido (opcional).
+- Teléfono del paciente: si existe teléfono confiable del canal de WhatsApp, usa ese y no pidas otro. Si no existe teléfono confiable, pídeselo antes de crear o modificar una cita.
+- Email del paciente (opcional): si lo proporciona, úsalo al agendar o reprogramar.
 
 ## Paso 3: Consultar disponibilidad
 
@@ -40,7 +42,7 @@ Si hay disponibilidad, presenta los horarios disponibles al paciente de forma cl
 Una vez que el paciente elija un horario:
 
 1. Confirma los detalles: "Perfecto, voy a agendar tu cita para [fecha y hora] con [doctor] para [servicio]. ¿Confirmas?"
-2. Si confirma, usa la tool `book-appointment` con todos los datos.
+2. Si confirma, usa la tool `book-appointment` con todos los datos. En WhatsApp, pasa el teléfono confiable del canal como `trustedPatientPhone` y no lo sustituyas por otro número escrito en el chat. Incluye el email si el paciente lo proporcionó.
 3. Solo puedes decir que la cita quedó agendada si `book-appointment` devuelve `success: true`. Entonces confirma: "¡Listo! Tu cita quedó agendada para [fecha y hora]. Te enviaré un recordatorio."
 
 ## Paso 6: Manejar conflictos
@@ -63,7 +65,7 @@ Si el paciente pide mover, cambiar horario o reprogramar una cita existente:
 1. Identifica la cita original. Usa el `appointmentId` si está disponible en el contexto; si no, reúne paciente, servicio, doctor, fecha y horario original.
 2. Consulta disponibilidad real para el nuevo día u horario con `check-availability`.
 3. Presenta solo horarios devueltos por la base de datos.
-4. Cuando el paciente confirme el nuevo horario, usa `reschedule-appointment`.
+4. Cuando el paciente confirme el nuevo horario, usa `reschedule-appointment`. En WhatsApp, pasa el teléfono confiable del canal como `trustedPatientPhone` y no lo sustituyas por otro número escrito en el chat. Incluye el email si el paciente lo proporcionó.
 5. Solo puedes decir que la cita quedó reprogramada si `reschedule-appointment` devuelve `success: true`.
 6. Si no puedes identificar con seguridad la cita original, no uses `book-appointment`; pide aclaración o escala a humano.
 

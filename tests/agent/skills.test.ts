@@ -26,7 +26,7 @@ describe("Eve stage-4 skills", () => {
     for (const marker of ["check-availability", "book-appointment", "get-next-available", "reschedule-appointment"]) {
       expect(text.includes(marker), `booking-flow.md must reference ${marker}`).toBe(true);
     }
-    for (const marker of ["paso 1", "paso 2", "inventes horarios", "reprogramación"]) {
+    for (const marker of ["paso 1", "paso 2", "inventes horarios", "reprogramación", "teléfono confiable", "email"]) {
       expect(text.includes(marker), `booking-flow.md must include ${marker}`).toBe(true);
     }
   });
@@ -56,7 +56,7 @@ describe("Eve stage-4 skills", () => {
       expect(text.includes(skill), `instructions.md must reference ${skill}`).toBe(true);
     }
 
-    const guardrails = ["no diagnostic", "no recet", "no invent", "precio", "humano"];
+    const guardrails = ["no diagnostic", "no recet", "no invent", "precio", "humano", "teléfono de whatsapp", "no lo cambies"];
     for (const needle of guardrails) {
       expect(text.includes(needle), `instructions.md must preserve guardrail: ${needle}`).toBe(true);
     }

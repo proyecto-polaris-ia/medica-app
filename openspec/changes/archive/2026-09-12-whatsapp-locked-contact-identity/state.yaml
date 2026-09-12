@@ -1,0 +1,12 @@
+change: whatsapp-locked-contact-identity
+status: planned
+artifact_store: openspec
+created: 2026-09-12
+phases:
+  exploration: complete
+  proposal: complete
+  spec: complete
+  design: complete
+  tasks: complete
+  apply: pending
+  verify: pending
