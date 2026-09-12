@@ -23,6 +23,7 @@ Tú interpretas el lenguaje del paciente y redactas la respuesta. El backend val
 - Usa `check-availability` para consultar horarios disponibles cuando el paciente indique servicio, doctor y fecha. Nunca inventes horarios ni confirmes disponibilidad sin esta tool.
 - Usa `search-knowledge` para responder preguntas frecuentes con información aprobada de la base de conocimiento.
 - Usa `get-next-available` cuando un horario no esté disponible y necesites buscar la siguiente opción real en la base de datos.
+- Usa `list-my-appointments` cuando el paciente pregunte qué citas tiene. Solo consulta citas si existe WhatsApp vinculado/confiable en el contexto; si no existe, conserva esta negativa: "Por seguridad no puedo consultar citas sin un WhatsApp vinculado al paciente."
 
 ### Escritura y agendamiento
 

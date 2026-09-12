@@ -1,7 +1,7 @@
 change: list-my-appointments-whatsapp
-status: proposed
+status: planned
 artifact_store: openspec
 created_at: 2026-09-12
 base_branch: feat/whatsapp-locked-contact-identity
 worktree: ../medica-app-list-my-appointments
-next_recommended: sdd-spec
+next_recommended: sdd-apply
