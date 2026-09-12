@@ -28,6 +28,9 @@ describe("Eve WhatsApp channel", () => {
     expect(source.includes("onSubscribedMessage")).toBe(true);
     expect(source.includes("createWhatsAppAdapter")).toBe(true);
     expect(source.includes("streaming")).toBe(true);
+    expect(source.includes("buildTrustedContactSendPayload")).toBe(true);
+    expect(source.includes("buildTrustedContactAuth")).toBe(true);
+    expect(source).toMatch(/send\(buildTrustedContactSendPayload\(message\)/);
   });
 
   it("always constructs the adapter with credential fallbacks so the route stays registered", () => {
@@ -48,5 +51,42 @@ describe("Eve WhatsApp channel", () => {
   it("does not hardcode credentials", () => {
     const source = readFileSync(CHANNEL_FILE, "utf-8");
     expect(source).not.toMatch(/\b(EAA[A-Za-z0-9]{10,}|sk-[A-Za-z0-9]{20,})\b/);
+  });
+});
+
+
+describe("trusted WhatsApp contact context", () => {
+  it("formats sender phone and business number as channel-owned context", async () => {
+    const mod = await import("../../../agent/trusted-contact-context");
+
+    const payload = mod.buildTrustedContactSendPayload({
+      text: "quiero agendar",
+      author: { userId: "527224999206" },
+      raw: { phoneNumberId: "1203450929527847" },
+    });
+
+    expect(typeof payload).toBe("object");
+    if (typeof payload === "string") throw new Error("expected trusted contact payload");
+    expect(payload).toEqual({
+      message: "quiero agendar",
+      context: [expect.stringContaining("trusted_channel_contact")],
+    });
+    expect(payload.context[0]).toContain("source=whatsapp");
+    expect(payload.context[0]).toContain("patientPhone=+527224999206");
+    expect(payload.context[0]).toContain("businessPhoneNumberId=1203450929527847");
+
+    expect(mod.buildTrustedContactAuth({
+      text: "quiero agendar",
+      author: { userId: "527224999206" },
+      raw: { phoneNumberId: "1203450929527847" },
+    })).toMatchObject({
+      attributes: {
+        trustedContactSource: "whatsapp",
+        trustedPatientPhone: "+527224999206",
+        businessPhoneNumberId: "1203450929527847",
+      },
+      principalId: "+527224999206",
+      principalType: "whatsapp_contact",
+    });
   });
 });

@@ -1,6 +1,8 @@
 import { defineTool } from "eve/tools";
 import { z } from "zod";
 
+import { selectPatientPhone, type TrustedContactToolContext } from "../trusted-contact-context";
+
 import { resolveProviderByName, resolveServiceByName } from "@/lib/booking/catalog";
 import {
   PatientIdentityConflictError,
@@ -12,7 +14,10 @@ const CLINIC_TIMEZONE = "America/Mexico_City";
 
 const rescheduleInputSchema = z.object({
   appointmentId: z.string().optional().describe("ID de la cita original, cuando esté disponible"),
-  patientPhone: z.string().describe("Teléfono del paciente en formato E.164"),
+  patientPhone: z.string().optional().describe("Teléfono del paciente en formato E.164. No lo uses si existe trustedPatientPhone de WhatsApp."),
+  patientEmail: z.string().email().optional().describe("Email del paciente, si fue proporcionado"),
+  trustedContactSource: z.enum(["whatsapp"]).optional().describe("Canal confiable que originó el mensaje"),
+  trustedPatientPhone: z.string().optional().describe("Teléfono confiable del remitente de WhatsApp"),
   patientName: z.string().trim().min(1).optional().describe("Nombre del paciente"),
   serviceName: z.string().min(1).describe("Nombre del servicio de la cita original"),
   providerName: z.string().min(1).describe("Nombre del doctor de la cita original"),
@@ -84,7 +89,7 @@ export default defineTool({
   description:
     "Reprograma una cita dental existente a un nuevo horario validado. Actualiza la cita original; no crea duplicados.",
   inputSchema: rescheduleInputSchema,
-  async execute(input: RescheduleInput) {
+  async execute(input: RescheduleInput, ctx: TrustedContactToolContext) {
     const range = validateDateRange(input);
     if ("error" in range) return { success: false, error: range.error };
 
@@ -95,8 +100,12 @@ export default defineTool({
       const provider = await resolveProviderByName(input.providerName);
       if (!provider) return { success: false, error: `Doctor no encontrado: ${input.providerName}` };
 
+      const patientPhone = selectPatientPhone(input, "Necesito el teléfono del paciente para reprogramar la cita.", ctx);
+      if ("error" in patientPhone) return { success: false, error: patientPhone.error };
+
       const patient = await resolvePatient({
-        phone: input.patientPhone,
+        phone: patientPhone.phone,
+        email: input.patientEmail,
         fullName: input.patientName,
       });
 

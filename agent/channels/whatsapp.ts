@@ -3,6 +3,8 @@ import { createMemoryState } from "@chat-adapter/state-memory";
 import type { Message, Thread } from "chat";
 import { chatSdkChannel } from "eve/channels/chat-sdk";
 
+import { buildTrustedContactAuth, buildTrustedContactSendPayload } from "../trusted-contact-context";
+
 const WHATSAPP_CREDENTIAL_KEYS = [
   "WHATSAPP_ACCESS_TOKEN",
   "WHATSAPP_APP_SECRET",
@@ -52,12 +54,18 @@ export const { bot, channel, send } = chatSdkChannel({
 // Handler for new threads (first message).
 bot.onNewMention(async (thread: Thread, message: Message) => {
   await thread.subscribe();
-  await send(message.text, { thread });
+  await send(buildTrustedContactSendPayload(message), {
+    auth: buildTrustedContactAuth(message),
+    thread,
+  });
 });
 
 // Handler for messages in already-subscribed threads.
 bot.onSubscribedMessage(async (thread: Thread, message: Message) => {
-  await send(message.text, { thread });
+  await send(buildTrustedContactSendPayload(message), {
+    auth: buildTrustedContactAuth(message),
+    thread,
+  });
 });
 
 /**

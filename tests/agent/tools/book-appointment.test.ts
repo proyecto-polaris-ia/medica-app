@@ -20,14 +20,17 @@ vi.mock("@/lib/supabase/server", () => ({ getSupabaseAdmin: () => ({ from }) }))
 
 const { default: tool } = await import("../../../agent/tools/book-appointment");
 const execute = tool.execute as (input: {
-  patientPhone: string;
+  patientPhone?: string;
+  patientEmail?: string;
+  trustedContactSource?: "whatsapp";
+  trustedPatientPhone?: string;
   patientName?: string;
   serviceName: string;
   providerName: string;
   startAt: string;
   endAt: string;
   notes?: string;
-}) => Promise<unknown>;
+}, ctx?: unknown) => Promise<unknown>;
 
 function setupCatalog() {
   resolveServiceByName.mockResolvedValue({ id: "svc-1", name: "Limpieza dental", durationMinutes: 45 });
@@ -58,6 +61,11 @@ describe("book-appointment tool", () => {
       notes: "Primera visita",
     });
 
+    expect(resolvePatient).toHaveBeenCalledWith({
+      phone: "+5215512345678",
+      email: undefined,
+      fullName: "Juan Pérez",
+    });
     expect(bookAppointment).toHaveBeenCalledWith({
       patientId: "pat-1",
       serviceId: "svc-1",
@@ -76,6 +84,45 @@ describe("book-appointment tool", () => {
         status: "requested",
       },
     });
+  });
+
+
+
+  it("uses trusted WhatsApp sender phone over an alternate patient phone and forwards email", async () => {
+    setupCatalog();
+    bookAppointment.mockResolvedValue({ ok: true });
+    maybeSingle.mockResolvedValue({ data: { id: "appt-2", status: "requested" }, error: null });
+
+    await execute({
+      patientPhone: "+5210000000000",
+      patientEmail: "Daniel@Example.COM",
+      patientName: "Daniel Rodriguez",
+      serviceName: "limpieza",
+      providerName: "ana",
+      startAt: "2026-09-15T17:00:00.000Z",
+      endAt: "2026-09-15T17:45:00.000Z",
+    }, { session: { auth: { current: { attributes: { trustedContactSource: "whatsapp", trustedPatientPhone: "+527224999206" } }, initiator: null } } });
+
+    expect(resolvePatient).toHaveBeenCalledWith({
+      phone: "+527224999206",
+      email: "Daniel@Example.COM",
+      fullName: "Daniel Rodriguez",
+    });
+  });
+
+  it("asks for patient phone before writing when no trusted channel phone exists", async () => {
+    await expect(execute({
+      patientName: "Juan Pérez",
+      serviceName: "limpieza",
+      providerName: "ana",
+      startAt: "2026-09-15T16:00:00.000Z",
+      endAt: "2026-09-15T16:45:00.000Z",
+    })).resolves.toEqual({
+      success: false,
+      error: "Necesito el teléfono del paciente para agendar la cita.",
+    });
+    expect(resolvePatient).not.toHaveBeenCalled();
+    expect(bookAppointment).not.toHaveBeenCalled();
   });
 
   it("returns conflict true when the booking service detects an occupied slot", async () => {
