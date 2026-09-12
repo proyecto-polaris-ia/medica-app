@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createWhatsAppAiCorrelationContext, recordWhatsAppAiEvent } from '@/lib/observability/whatsapp-ai';
 import { processWhatsAppWebhookPayload } from '@/lib/whatsapp/inbound-service';
+import { sendWhatsAppTypingIndicator } from '@/lib/whatsapp/client';
 import { isEveWhatsAppEnabled } from '@/lib/whatsapp/eve-flag';
 import { verifyWhatsAppWebhookSignature } from '@/lib/whatsapp/signature';
 import { WhatsAppStoreConfigurationError } from '@/lib/whatsapp/store';
@@ -32,6 +33,7 @@ export async function POST(request: NextRequest) {
   try { payload = JSON.parse(rawBody); } catch { return NextResponse.json({ error: 'Invalid JSON payload' }, { status: 400 }); }
 
   const messageId = extractMessageId(payload);
+  await showTypingIndicator(messageId, context);
 
   if (isEveWhatsAppEnabled(process.env.WHATSAPP_EVE_ENABLED)) {
     logRouteDecision(context, 'eve', messageId);
@@ -83,12 +85,29 @@ async function handleLegacy(payload: unknown, context: WhatsAppAiCorrelationCont
 
 function extractMessageId(payload: unknown): string | undefined {
   try {
-    const entry = (payload as { entry?: Array<{ changes?: Array<{ value?: { messages?: Array<{ id?: string }> } }> }> })?.entry?.[0];
+    const entry = (payload as { entry?: Array<{ changes?: Array<{ value?: { messages?: Array<{ id?: string; type?: string }> } }> }> })?.entry?.[0];
     const value = entry?.changes?.[0]?.value;
-    const messageId = value?.messages?.[0]?.id;
+    const message = value?.messages?.[0];
+    if (message?.type !== 'text') return undefined;
+    const messageId = message.id;
     return typeof messageId === 'string' ? messageId : undefined;
   } catch {
     return undefined;
+  }
+}
+
+async function showTypingIndicator(messageId: string | undefined, context: WhatsAppAiCorrelationContext) {
+  if (!messageId) return;
+
+  const result = await sendWhatsAppTypingIndicator({ messageId });
+  if (!result.ok) {
+    console.warn('[WhatsApp] typing indicator failed', {
+      correlationId: context.correlationId,
+      messageId,
+      skipped: result.skipped,
+      status: result.status,
+      error: result.error,
+    });
   }
 }
 
