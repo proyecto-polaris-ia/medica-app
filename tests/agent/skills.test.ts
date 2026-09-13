@@ -56,7 +56,7 @@ describe("Eve stage-4 skills", () => {
       expect(text.includes(skill), `instructions.md must reference ${skill}`).toBe(true);
     }
 
-    const guardrails = ["no diagnostic", "no recet", "no invent", "precio", "humano", "teléfono de whatsapp", "no lo cambies"];
+    const guardrails = ["no diagnostic", "no recet", "no invent", "precio", "humano", "teléfono de whatsapp", "no lo cambies", "list-my-appointments", "whatsapp vinculado"];
     for (const needle of guardrails) {
       expect(text.includes(needle), `instructions.md must preserve guardrail: ${needle}`).toBe(true);
     }

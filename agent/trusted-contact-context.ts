@@ -164,3 +164,12 @@ export function selectPatientPhone(
 
   return { error: missingPhoneMessage };
 }
+
+export function requireTrustedWhatsAppPhone(
+  ctx: TrustedContactToolContext | undefined,
+  error = "Por seguridad no puedo consultar citas sin un WhatsApp vinculado al paciente.",
+): { phone: string } | { error: string } {
+  const phone = trustedPhoneFromContext(ctx);
+  if (!phone) return { error };
+  return { phone };
+}
