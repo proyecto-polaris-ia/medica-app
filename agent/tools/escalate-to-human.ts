@@ -48,6 +48,12 @@ export default defineTool({
           created: escalation.created,
           status: "open",
         },
+        humanAlert: {
+          configured: escalation.humanAlertPhoneConfigured,
+          sent: Boolean(escalation.humanAlertSend?.ok),
+          skipped: escalation.humanAlertSend?.skipped ?? !escalation.humanAlertPhoneConfigured,
+          error: escalation.humanAlertSend?.error,
+        },
         message: "Escalación creada. Indica al paciente que una persona del consultorio dará seguimiento.",
       };
     } catch (error) {
