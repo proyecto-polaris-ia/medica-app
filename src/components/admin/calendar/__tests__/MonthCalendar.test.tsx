@@ -12,6 +12,9 @@ describe('MonthCalendar', () => {
       {
         id: 'appt-1',
         label: 'Limpieza — Paciente A',
+        patientId: 'patient-1',
+        patientName: 'Paciente A',
+        serviceName: 'Limpieza',
         startLabel: '09:00',
         color: '#1f77b4',
         status: 'confirmed',
@@ -80,6 +83,27 @@ describe('MonthCalendar', () => {
     expect(onSelectBlock).toHaveBeenCalledWith('appt-1');
   });
 
+
+
+  it('calls onSelectPatient when the patient name is clicked', async () => {
+    const onSelectBlock = vi.fn();
+    const onSelectPatient = vi.fn();
+    render(
+      <MonthCalendar
+        year={2026}
+        month={6}
+        blocksByDay={blocksByDay}
+        onSelectBlock={onSelectBlock}
+        onSelectPatient={onSelectPatient}
+      />
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: /Ver expediente de Paciente A/ }));
+
+    expect(onSelectPatient).toHaveBeenCalledWith('patient-1');
+    expect(onSelectBlock).not.toHaveBeenCalled();
+  });
+
   it('uses the fallback color for a provider without a color', () => {
     render(
       <MonthCalendar
@@ -90,6 +114,9 @@ describe('MonthCalendar', () => {
             {
               id: 'appt-2',
               label: 'Consulta — Paciente B',
+              patientId: 'patient-2',
+              patientName: 'Paciente B',
+              serviceName: 'Consulta',
               startLabel: '10:00',
               color: '#64748b',
               status: 'confirmed',
@@ -114,6 +141,9 @@ describe('MonthCalendar', () => {
             {
               id: 'appt-3',
               label: 'Cancelada',
+              patientId: null,
+              patientName: 'Sin paciente',
+              serviceName: 'Cancelada',
               startLabel: '11:00',
               color: '#1f77b4',
               status: 'cancelled',

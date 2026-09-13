@@ -1,0 +1,5 @@
+status: active
+change: patient-record-summary
+issue: 55
+artifact_store: openspec
+created_at: 2026-09-12

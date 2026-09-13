@@ -57,6 +57,18 @@ function buildFetchMock() {
         json: () => Promise.resolve({ services: [{ id: SERVICE_ID, name: 'Limpieza' }] }),
       });
     }
+    if (url === `/api/admin/patients/${PATIENT_ID}/record`) {
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({
+          record: {
+            patient: { id: PATIENT_ID, fullName: 'Paciente A', phoneE164: '+5215512345678', email: 'paciente@example.com', notes: null, createdAt: '2026-09-01T10:00:00.000Z', updatedAt: '2026-09-01T10:00:00.000Z' },
+            upcomingAppointments: [],
+            attendedAppointments: [],
+          },
+        }),
+      });
+    }
     return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
   });
 }
@@ -126,6 +138,21 @@ describe('/appointments integration', () => {
 
     expect(screen.getByText('Editar cita')).toBeInTheDocument();
   }, 15000);
+
+
+
+  it('opens the patient record modal from the appointment list patient name', async () => {
+    const fetchMock = buildFetchMock();
+    global.fetch = fetchMock;
+    const user = userEvent.setup();
+
+    render(<AppointmentsPage />);
+
+    await user.click(await screen.findByRole('button', { name: 'Paciente A' }));
+
+    expect(await screen.findByText('Expediente del paciente')).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith(`/api/admin/patients/${PATIENT_ID}/record`);
+  });
 
   it('renders the Notas column with a truncated preview', async () => {
     const fetchMock = buildFetchMock();

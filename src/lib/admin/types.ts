@@ -90,6 +90,18 @@ export type AppointmentInput = {
   notes?: string | null;
 };
 
+
+export type PatientRecordAppointment = Appointment & {
+  serviceName: string;
+  providerName: string;
+};
+
+export type PatientRecord = {
+  patient: Patient;
+  upcomingAppointments: PatientRecordAppointment[];
+  attendedAppointments: PatientRecordAppointment[];
+};
+
 export type ProviderAppointment = {
   id: string;
   patientId: string | null;
