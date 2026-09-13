@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { DataTable } from '@/components/admin/DataTable';
 import { EmptyState } from '@/components/admin/EmptyState';
 import { ErrorState } from '@/components/admin/ErrorState';
@@ -140,6 +141,19 @@ export default function PatientsPage() {
       {!loading && !error && patients.length > 0 && (
         <DataTable
           columns={[
+            {
+              header: 'Expediente',
+              cell: (p) => (
+                <Link
+                  href={`/patients/${p.id}`}
+                  aria-label={`Ver expediente de ${p.fullName}`}
+                  title={`Ver expediente de ${p.fullName}`}
+                  className="text-lg text-green-700 hover:text-green-900"
+                >
+                  📋
+                </Link>
+              ),
+            },
             { header: 'Nombre', cell: (p) => p.fullName },
             { header: 'Teléfono', cell: (p) => p.phoneE164 || '-' },
             { header: 'Correo', cell: (p) => p.email || '-' },

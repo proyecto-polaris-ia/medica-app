@@ -11,6 +11,7 @@ import { LoadingState } from '@/components/admin/LoadingState';
 import { MonthCalendar } from '@/components/admin/calendar/MonthCalendar';
 import { CalendarNav } from '@/components/admin/calendar/CalendarNav';
 import { ProviderLegend } from '@/components/admin/calendar/ProviderLegend';
+import { PatientRecordModal } from '@/components/admin/PatientRecordModal';
 import type { Appointment, Provider } from '@/lib/admin/types';
 import {
   clinicMonthRangeUtc,
@@ -74,6 +75,7 @@ export default function AppointmentsPage() {
   const [submitting, setSubmitting] = useState(false);
   const [view, setView] = useState<ViewMode>('list');
   const [visibleMonth, setVisibleMonth] = useState(getCurrentClinicMonth());
+  const [recordPatientId, setRecordPatientId] = useState<string | null>(null);
   
   const [serviceFilter, setServiceFilter] = useState('');
   const [patientFilter, setPatientFilter] = useState('');
@@ -94,6 +96,7 @@ export default function AppointmentsPage() {
       id: appointment.id,
       patientName: refName(patients, appointment.patientId ?? '') || 'Sin paciente',
       serviceName: refName(services, appointment.serviceId),
+      patientId: appointment.patientId,
       providerId: appointment.providerId,
       startAt: appointment.startAt,
       endAt: appointment.endAt,
@@ -183,6 +186,12 @@ export default function AppointmentsPage() {
     const appointment = appointments.find((a) => a.id === id);
     if (appointment) {
       openEdit(appointment);
+    }
+  }
+
+  function openPatientRecord(patientId: string | null) {
+    if (patientId) {
+      setRecordPatientId(patientId);
     }
   }
 
@@ -507,7 +516,19 @@ export default function AppointmentsPage() {
                   )}
                 </button>
               ),
-              cell: (a) => refName(patients, a.patientId ?? '') || 'Sin paciente'
+              cell: (a) => {
+                const patientName = refName(patients, a.patientId ?? '') || 'Sin paciente';
+                if (!a.patientId) return patientName;
+                return (
+                  <button
+                    type="button"
+                    onClick={() => openPatientRecord(a.patientId)}
+                    className="font-medium text-blue-600 hover:text-blue-800 hover:underline"
+                  >
+                    {patientName}
+                  </button>
+                );
+              }
             },
             { 
               header: (
@@ -568,6 +589,7 @@ export default function AppointmentsPage() {
           month={visibleMonth.month}
           blocksByDay={blocksByDay}
           onSelectBlock={handleSelectBlock}
+          onSelectPatient={openPatientRecord}
         />
       )}
 
@@ -684,6 +706,13 @@ export default function AppointmentsPage() {
             />
           </div>
         </FormModal>
+      )}
+
+      {recordPatientId && (
+        <PatientRecordModal
+          patientId={recordPatientId}
+          onClose={() => setRecordPatientId(null)}
+        />
       )}
     </div>
   );

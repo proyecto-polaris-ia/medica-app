@@ -39,6 +39,15 @@ describe('/patients email contact UI', () => {
     expect(screen.getAllByText('-')).toHaveLength(2);
   });
 
+
+
+  it('links each patient to the patient record page', async () => {
+    render(<PatientsPage />);
+
+    const link = await screen.findByRole('link', { name: /Ver expediente de María García/ });
+    expect(link).toHaveAttribute('href', '/patients/pat-email');
+  });
+
   it('submits an email-only patient with a null phone', async () => {
     const user = userEvent.setup();
     render(<PatientsPage />);

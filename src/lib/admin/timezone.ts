@@ -144,6 +144,9 @@ export function getCurrentClinicMonth(): { year: number; month: number } {
 export type CalendarBlock = {
   id: string;
   label: string;
+  patientId: string | null;
+  patientName: string;
+  serviceName: string;
   startLabel: string;
   color: string;
   status: import('./types').AppointmentStatus;
@@ -158,6 +161,7 @@ export function groupAppointmentsByDay(
     startAt: string;
     endAt: string;
     status: import('./types').AppointmentStatus;
+    patientId?: string | null;
   }>,
   providerColor: (providerId: string) => string
 ): Record<string, CalendarBlock[]> {
@@ -168,6 +172,9 @@ export function groupAppointmentsByDay(
     const block: CalendarBlock = {
       id: appointment.id,
       label: `${appointment.serviceName} — ${appointment.patientName || 'Sin paciente'}`,
+      patientId: 'patientId' in appointment ? appointment.patientId ?? null : null,
+      patientName: appointment.patientName || 'Sin paciente',
+      serviceName: appointment.serviceName,
       startLabel: clinicTimeLabel(appointment.startAt),
       color: providerColor(appointment.providerId),
       status: appointment.status,

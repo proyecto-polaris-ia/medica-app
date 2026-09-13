@@ -9,6 +9,7 @@ type MonthCalendarProps = {
   month: number;
   blocksByDay: Record<string, CalendarBlock[]>;
   onSelectBlock: (id: string) => void;
+  onSelectPatient?: (patientId: string) => void;
 };
 
 export function MonthCalendar({
@@ -16,6 +17,7 @@ export function MonthCalendar({
   month,
   blocksByDay,
   onSelectBlock,
+  onSelectPatient,
 }: MonthCalendarProps) {
   const grid = getCalendarGrid(year, month);
 
@@ -40,6 +42,7 @@ export function MonthCalendar({
             inMonth={cell.inMonth}
             blocks={cell.dayKey ? blocksByDay[cell.dayKey] ?? [] : []}
             onSelectBlock={onSelectBlock}
+            onSelectPatient={onSelectPatient}
           />
         ))}
       </div>

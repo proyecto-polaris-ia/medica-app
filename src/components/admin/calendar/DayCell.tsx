@@ -9,9 +9,10 @@ type DayCellProps = {
   inMonth: boolean;
   blocks: CalendarBlock[];
   onSelectBlock: (id: string) => void;
+  onSelectPatient?: (patientId: string) => void;
 };
 
-export function DayCell({ day, inMonth, blocks, onSelectBlock }: DayCellProps) {
+export function DayCell({ day, inMonth, blocks, onSelectBlock, onSelectPatient }: DayCellProps) {
   const visibleBlocks = blocks.slice(0, MAX_VISIBLE_BLOCKS);
   const overflowCount = blocks.length - visibleBlocks.length;
 
@@ -32,10 +33,17 @@ export function DayCell({ day, inMonth, blocks, onSelectBlock }: DayCellProps) {
       <span className="mb-1 text-xs font-medium text-gray-700">{day}</span>
       <div className="flex flex-1 flex-col gap-1">
         {visibleBlocks.map((block) => (
-          <button
+          <div
             key={block.id}
-            type="button"
+            role="button"
+            tabIndex={0}
             onClick={() => onSelectBlock(block.id)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                onSelectBlock(block.id);
+              }
+            }}
             style={{ backgroundColor: block.color || FALLBACK_COLOR }}
             className={[
               'rounded px-1.5 py-0.5 text-left text-xs text-white',
@@ -44,8 +52,23 @@ export function DayCell({ day, inMonth, blocks, onSelectBlock }: DayCellProps) {
             aria-label={`${block.startLabel} ${block.label}`}
           >
             <span className="font-medium">{block.startLabel}</span>{' '}
-            <span className="truncate">{block.label}</span>
-          </button>
+            <span>{block.serviceName}</span>{' — '}
+            {block.patientId && onSelectPatient ? (
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onSelectPatient(block.patientId!);
+                }}
+                className="font-semibold underline decoration-white/70 underline-offset-2 hover:decoration-white"
+                aria-label={`Ver expediente de ${block.patientName}`}
+              >
+                {block.patientName}
+              </button>
+            ) : (
+              <span className="truncate">{block.patientName}</span>
+            )}
+          </div>
         ))}
         {overflowCount > 0 && (
           <span className="text-xs text-gray-500">+{overflowCount} más</span>
