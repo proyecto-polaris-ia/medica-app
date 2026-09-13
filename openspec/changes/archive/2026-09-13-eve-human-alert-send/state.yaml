@@ -1,0 +1,9 @@
+change: eve-human-alert-send
+status: applied
+artifactStore: openspec
+issue: 61
+phases:
+  proposal: complete
+  spec: complete
+  design: complete
+  tasks: applied

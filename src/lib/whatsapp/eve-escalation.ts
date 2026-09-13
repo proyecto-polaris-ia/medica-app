@@ -1,9 +1,11 @@
 import { getSupabaseAdmin } from '@/lib/supabase/server';
 import type { WhatsAppInboundIntent } from '@/lib/ai/whatsapp-inbound-agent';
+import { sendWhatsAppTextMessage, type WhatsAppSendResult } from './client';
 import type { NormalizedWhatsAppInboundEvent } from './normalize';
 import {
   createWhatsAppEscalation,
   createWhatsAppIntent,
+  insertWhatsAppOutboundMessage,
   markWhatsAppInboundMessageProcessed,
   persistWhatsAppInboundEvent,
   updateWhatsAppConversationStatus,
@@ -21,6 +23,8 @@ export type CreateEveEscalationInput = {
   intent?: WhatsAppInboundIntent;
   occurredAt?: string;
   idempotencyKey?: string;
+  humanAlertPhone?: string;
+  sendText?: typeof sendWhatsAppTextMessage;
 };
 
 export type CreateEveEscalationResult = {
@@ -29,6 +33,8 @@ export type CreateEveEscalationResult = {
   contactId: string;
   conversationId: string;
   messageId: string;
+  humanAlertSend?: WhatsAppSendResult;
+  humanAlertPhoneConfigured: boolean;
 };
 
 const CLINICAL_URGENT = /dolor\s+(fuerte|intenso|insoportable)|urgenc|emergenc|infecci[oó]n|hinchaz[oó]n|sangrado|alerg/i;
@@ -67,6 +73,23 @@ async function existingEscalation(messageId: string): Promise<{ id: string } | n
   return (data as { id: string } | null) ?? null;
 }
 
+function buildHumanAlertText(input: {
+  patientPhone: string;
+  profileName?: string;
+  reason: string;
+  summary: string;
+  priority: EveEscalationPriority;
+}): string {
+  const patientName = input.profileName?.trim() || 'Paciente sin nombre';
+  return [
+    `Escalación WhatsApp (${input.priority})`,
+    `Paciente: ${patientName}`,
+    `Teléfono: ${input.patientPhone}`,
+    `Motivo: ${input.reason}`,
+    `Resumen: ${input.summary}`,
+  ].join('\n');
+}
+
 function buildSyntheticEvent(input: CreateEveEscalationInput): NormalizedWhatsAppInboundEvent {
   const occurredAt = input.occurredAt ?? new Date().toISOString();
   return {
@@ -103,6 +126,7 @@ export async function createEveWhatsAppEscalation(
       contactId: persisted.contactId,
       conversationId: persisted.conversationId,
       messageId: persisted.messageId,
+      humanAlertPhoneConfigured: Boolean(input.humanAlertPhone ?? process.env.WHATSAPP_HUMAN_ALERT_PHONE),
     };
   }
 
@@ -132,6 +156,28 @@ export async function createEveWhatsAppEscalation(
     status: 'escalated',
     lastIntent: input.intent ?? 'support',
   });
+
+  const humanAlertPhone = input.humanAlertPhone ?? process.env.WHATSAPP_HUMAN_ALERT_PHONE;
+  const humanAlertText = buildHumanAlertText({
+    patientPhone: input.patientPhone,
+    profileName: input.profileName,
+    reason,
+    summary,
+    priority,
+  });
+  const humanAlertSend = humanAlertPhone
+    ? await (input.sendText ?? sendWhatsAppTextMessage)({ to: humanAlertPhone, body: humanAlertText })
+    : undefined;
+
+  if (humanAlertPhone) {
+    await insertWhatsAppOutboundMessage({
+      persisted,
+      body: humanAlertText,
+      sendResult: humanAlertSend,
+      purpose: 'human_alert',
+    });
+  }
+
   await markWhatsAppInboundMessageProcessed({ messageId: persisted.messageId, status: 'escalated' });
 
   return {
@@ -140,5 +186,7 @@ export async function createEveWhatsAppEscalation(
     contactId: persisted.contactId,
     conversationId: persisted.conversationId,
     messageId: persisted.messageId,
+    humanAlertSend,
+    humanAlertPhoneConfigured: Boolean(humanAlertPhone),
   };
 }

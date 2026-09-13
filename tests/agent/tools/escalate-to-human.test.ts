@@ -25,6 +25,8 @@ describe('escalate-to-human tool', () => {
       contactId: 'contact-1',
       conversationId: 'conversation-1',
       messageId: 'message-1',
+      humanAlertPhoneConfigured: true,
+      humanAlertSend: { ok: true, status: 200 },
     });
   });
 
@@ -45,7 +47,11 @@ describe('escalate-to-human tool', () => {
       patientMessage: 'Me duele mucho',
       intent: 'support',
     });
-    expect(result).toMatchObject({ success: true, escalation: { id: 'esc-1', status: 'open' } });
+    expect(result).toMatchObject({
+      success: true,
+      escalation: { id: 'esc-1', status: 'open' },
+      humanAlert: { configured: true, sent: true, skipped: false },
+    });
   });
 
   it('refuses to create an escalation without a trusted WhatsApp phone', async () => {
