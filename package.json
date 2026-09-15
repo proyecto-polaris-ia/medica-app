@@ -42,7 +42,8 @@
     "postcss": "^8.5.26",
     "tailwindcss": "^4.3.3",
     "typescript": "5.6.3",
-    "vitest": "2.1.9"
+    "vitest": "2.1.9",
+    "xlsx": "^0.18.5"
   },
   "allowScripts": {
     "esbuild@0.21.5": true,
