@@ -45,10 +45,7 @@ openspec/
 Ver `.agents/skills/_shared/openspec-convention.md` para la convención de
 archivos.
 
-## Estado
 
-- [x] Documentación inicial (spec general + spec MVP).
-- [ ] Scaffold de código (Next.js + Supabase).
-- [ ] Migraciones de schema (agenda + WhatsApp).
-- [ ] Agente dual (conocimiento estático + booking dinámico).
-- [ ] Config webhook en Meta.
+<a href="https://github.com/Gentleman-Programming/gentle-ai">
+  <img width="220" src="https://raw.githubusercontent.com/Gentleman-Programming/gentle-ai/main/docs/assets/brand/built-with-gentle-ai.png" alt="Built with Gentle-AI" />
+</a>
