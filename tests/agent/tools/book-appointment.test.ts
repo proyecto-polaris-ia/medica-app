@@ -32,6 +32,14 @@ const execute = tool.execute as (input: {
   notes?: string;
 }, ctx?: unknown) => Promise<unknown>;
 
+// Future UTC datetime so booking fixtures never expire as wall-clock time advances.
+function futureIso(daysFromNow: number, hour: number, minute = 0): string {
+  const d = new Date();
+  d.setUTCDate(d.getUTCDate() + daysFromNow);
+  d.setUTCHours(hour, minute, 0, 0);
+  return d.toISOString();
+}
+
 function setupCatalog() {
   resolveServiceByName.mockResolvedValue({ id: "svc-1", name: "Limpieza dental", durationMinutes: 45 });
   resolveProviderByName.mockResolvedValue({ id: "doc-1", name: "Dra. Ana Martínez" });
@@ -56,8 +64,8 @@ describe("book-appointment tool", () => {
       patientName: "Juan Pérez",
       serviceName: "limpieza",
       providerName: "ana",
-      startAt: "2026-09-15T16:00:00.000Z",
-      endAt: "2026-09-15T16:45:00.000Z",
+      startAt: futureIso(7, 16, 0),
+      endAt: futureIso(7, 16, 45),
       notes: "Primera visita",
     });
 
@@ -70,8 +78,8 @@ describe("book-appointment tool", () => {
       patientId: "pat-1",
       serviceId: "svc-1",
       providerId: "doc-1",
-      startAt: new Date("2026-09-15T16:00:00.000Z"),
-      endAt: new Date("2026-09-15T16:45:00.000Z"),
+      startAt: new Date(futureIso(7, 16, 0)),
+      endAt: new Date(futureIso(7, 16, 45)),
       notes: "Primera visita",
     });
     expect(result).toMatchObject({
@@ -99,8 +107,8 @@ describe("book-appointment tool", () => {
       patientName: "Daniel Rodriguez",
       serviceName: "limpieza",
       providerName: "ana",
-      startAt: "2026-09-15T17:00:00.000Z",
-      endAt: "2026-09-15T17:45:00.000Z",
+      startAt: futureIso(7, 17, 0),
+      endAt: futureIso(7, 17, 45),
     }, { session: { auth: { current: { attributes: { trustedContactSource: "whatsapp", trustedPatientPhone: "+527224999206" } }, initiator: null } } });
 
     expect(resolvePatient).toHaveBeenCalledWith({
@@ -115,8 +123,8 @@ describe("book-appointment tool", () => {
       patientName: "Juan Pérez",
       serviceName: "limpieza",
       providerName: "ana",
-      startAt: "2026-09-15T16:00:00.000Z",
-      endAt: "2026-09-15T16:45:00.000Z",
+      startAt: futureIso(7, 16, 0),
+      endAt: futureIso(7, 16, 45),
     })).resolves.toEqual({
       success: false,
       error: "Necesito el teléfono del paciente para agendar la cita.",
@@ -134,8 +142,8 @@ describe("book-appointment tool", () => {
       patientName: "Juan Pérez",
       serviceName: "limpieza",
       providerName: "ana",
-      startAt: "2026-09-15T16:00:00.000Z",
-      endAt: "2026-09-15T16:45:00.000Z",
+      startAt: futureIso(7, 16, 0),
+      endAt: futureIso(7, 16, 45),
     })).resolves.toEqual({
       success: false,
       conflict: true,
@@ -148,8 +156,8 @@ describe("book-appointment tool", () => {
       patientPhone: "+5215512345678",
       serviceName: "limpieza",
       providerName: "ana",
-      startAt: "2026-09-15T16:45:00.000Z",
-      endAt: "2026-09-15T16:00:00.000Z",
+      startAt: futureIso(7, 16, 45),
+      endAt: futureIso(7, 16, 0),
     })).resolves.toEqual({ success: false, error: "La fecha de fin debe ser posterior a la fecha de inicio." });
     expect(bookAppointment).not.toHaveBeenCalled();
   });
@@ -161,8 +169,8 @@ describe("book-appointment tool", () => {
       patientPhone: "+5215512345678",
       serviceName: "ortodoncia",
       providerName: "ana",
-      startAt: "2026-09-15T16:00:00.000Z",
-      endAt: "2026-09-15T16:45:00.000Z",
+      startAt: futureIso(7, 16, 0),
+      endAt: futureIso(7, 16, 45),
     })).resolves.toEqual({ success: false, error: "Servicio no encontrado: ortodoncia" });
   });
 });

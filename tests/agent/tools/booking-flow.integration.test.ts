@@ -34,6 +34,14 @@ const resolvePatientExec = resolvePatientTool.execute as (input: { phone: string
 const bookAppointmentExec = bookAppointmentTool.execute as (input: any) => Promise<any>;
 const getNextAvailable = nextAvailableTool.execute as (input: { serviceName: string; providerName: string; afterDate: string }) => Promise<any>;
 
+// Future UTC datetime so booking-flow fixtures never expire as wall-clock time advances.
+function futureIso(daysFromNow: number, hour: number, minute = 0): string {
+  const d = new Date();
+  d.setUTCDate(d.getUTCDate() + daysFromNow);
+  d.setUTCHours(hour, minute, 0, 0);
+  return d.toISOString();
+}
+
 function setupCommonMocks() {
   resolveServiceByName.mockResolvedValue({ id: "svc-1", name: "Limpieza dental", durationMinutes: 45 });
   resolveProviderByName.mockResolvedValue({ id: "doc-1", name: "Dra. Ana Martínez" });
@@ -52,14 +60,14 @@ describe("Eve complete booking flow integration", () => {
   });
 
   it("checks availability, resolves a new patient, and books the selected slot", async () => {
-    getFreeSlots.mockResolvedValue([{ start_at: new Date("2026-09-15T16:00:00.000Z"), end_at: new Date("2026-09-15T16:45:00.000Z") }]);
+    getFreeSlots.mockResolvedValue([{ start_at: new Date(futureIso(7, 16, 0)), end_at: new Date(futureIso(7, 16, 45)) }]);
     maybeSingle
       .mockResolvedValueOnce({ data: null, error: null })
       .mockResolvedValueOnce({ data: { id: "pat-1", full_name: "Juan Pérez", phone_e164: "+5215512345678", email: null }, error: null })
       .mockResolvedValueOnce({ data: { id: "appt-1", status: "requested" }, error: null });
     bookAppointment.mockResolvedValue({ ok: true });
 
-    const availability = await checkAvailability({ serviceName: "limpieza", providerName: "ana", date: "2026-09-15" });
+    const availability = await checkAvailability({ serviceName: "limpieza", providerName: "ana", date: futureIso(7, 12, 0).slice(0, 10) });
     expect(availability.available).toBe(true);
 
     const patient = await resolvePatientExec({ phone: "+5215512345678", fullName: "Juan Pérez" });
@@ -70,8 +78,8 @@ describe("Eve complete booking flow integration", () => {
       patientName: "Juan Pérez",
       serviceName: "limpieza",
       providerName: "ana",
-      startAt: "2026-09-15T16:00:00.000Z",
-      endAt: "2026-09-15T16:45:00.000Z",
+      startAt: futureIso(7, 16, 0),
+      endAt: futureIso(7, 16, 45),
     });
 
     expect(booking).toMatchObject({ success: true, appointment: { id: "appt-1", status: "requested" } });
@@ -80,7 +88,7 @@ describe("Eve complete booking flow integration", () => {
 
   it("handles booking conflict and recovers with next available slot", async () => {
     bookAppointment.mockResolvedValueOnce({ type: "conflict", message: "This time slot is no longer available. Please select another time." }).mockResolvedValueOnce({ ok: true });
-    findNextAvailable.mockResolvedValue({ start_at: new Date("2026-09-16T17:30:00.000Z"), end_at: new Date("2026-09-16T18:15:00.000Z") });
+    findNextAvailable.mockResolvedValue({ start_at: new Date(futureIso(8, 17, 30)), end_at: new Date(futureIso(8, 18, 15)) });
     maybeSingle.mockResolvedValue({ data: { id: "appt-next", status: "requested" }, error: null });
 
     const conflict = await bookAppointmentExec({
@@ -88,12 +96,12 @@ describe("Eve complete booking flow integration", () => {
       patientName: "Juan Pérez",
       serviceName: "limpieza",
       providerName: "ana",
-      startAt: "2026-09-15T16:00:00.000Z",
-      endAt: "2026-09-15T16:45:00.000Z",
+      startAt: futureIso(7, 16, 0),
+      endAt: futureIso(7, 16, 45),
     });
     expect(conflict).toEqual({ success: false, conflict: true, error: "This time slot is no longer available. Please select another time." });
 
-    const next = await getNextAvailable({ serviceName: "limpieza", providerName: "ana", afterDate: "2026-09-15" });
+    const next = await getNextAvailable({ serviceName: "limpieza", providerName: "ana", afterDate: futureIso(7, 12, 0).slice(0, 10) });
     expect(next).toMatchObject({ success: true, available: true });
 
     const bookedNext = await bookAppointmentExec({
