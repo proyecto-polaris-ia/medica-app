@@ -17,6 +17,15 @@ export async function PATCH(
       phoneE164: body.phoneE164 as string | null | undefined,
       email: body.email as string | null | undefined,
       notes: body.notes as string | null | undefined,
+      birthDate: body.birthDate as string | null | undefined,
+      sex: body.sex as 'male' | 'female' | 'other' | null | undefined,
+      address: body.address as string | null | undefined,
+      occupation: body.occupation as string | null | undefined,
+      referralSource: body.referralSource as string | null | undefined,
+      secondaryPhone: body.secondaryPhone as string | null | undefined,
+      emergencyContactName: body.emergencyContactName as string | null | undefined,
+      emergencyContactPhone: body.emergencyContactPhone as string | null | undefined,
+      emergencyContactRelationship: body.emergencyContactRelationship as string | null | undefined,
     });
     return Response.json({ patient });
   });
