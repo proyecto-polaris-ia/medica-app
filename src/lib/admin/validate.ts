@@ -40,6 +40,14 @@ export function parseNonEmptyString(value: unknown, field: string): string {
   return value.trim();
 }
 
+export function parseOptionalString(value: unknown): string | null {
+  if (typeof value !== 'string') {
+    return null;
+  }
+  const trimmed = value.trim();
+  return trimmed.length === 0 ? null : trimmed;
+}
+
 export function parsePositiveInt(value: unknown, field = 'duration'): number {
   if (typeof value !== 'number' || !Number.isInteger(value) || value <= 0) {
     throw new ValidationError(field, `Invalid ${field}`);
@@ -127,5 +135,62 @@ export type AppointmentStatus =
   | 'rescheduled'
   | 'no_show'
   | 'attended';
+
+export function parseDate(value: unknown, field = 'date'): string | null {
+  if (typeof value !== 'string') {
+    return null;
+  }
+  const trimmed = value.trim();
+  if (trimmed.length === 0) {
+    return null;
+  }
+  const parsed = new Date(trimmed);
+  if (Number.isNaN(parsed.getTime())) {
+    throw new ValidationError(field, `Invalid ${field}`);
+  }
+  const iso = parsed.toISOString().slice(0, 10);
+  return iso;
+}
+
+const SEX_VALUES: string[] = ['male', 'female', 'other'];
+
+export function parseSex(value: unknown): 'male' | 'female' | 'other' | null {
+  if (typeof value !== 'string') {
+    return null;
+  }
+  const trimmed = value.trim();
+  if (trimmed.length === 0) {
+    return null;
+  }
+  if (!SEX_VALUES.includes(trimmed)) {
+    throw new ValidationError('sex', 'Invalid sex');
+  }
+  return trimmed as 'male' | 'female' | 'other';
+}
+
+export function parseStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.filter((item): item is string => typeof item === 'string');
+}
+
+export function parseStatus<T extends string>(
+  value: unknown,
+  allowed: readonly T[],
+  field = 'status'
+): T | null {
+  if (typeof value !== 'string') {
+    return null;
+  }
+  const trimmed = value.trim();
+  if (trimmed.length === 0) {
+    return null;
+  }
+  if (!allowed.includes(trimmed as T)) {
+    throw new ValidationError(field, `Invalid ${field}`);
+  }
+  return trimmed as T;
+}
 
 export { parseOptionalEmail } from '@/lib/booking/patient-contact';

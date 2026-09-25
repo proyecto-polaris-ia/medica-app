@@ -25,6 +25,18 @@ import { deletePatient, updatePatient } from '@/lib/admin/patients';
 const USER = { id: 'user-1', email: 'a@b.c' };
 const PATIENT_ID = '550e8400-e29b-41d4-a716-446655440000';
 
+const EMPTY_FICHA = {
+  birthDate: undefined,
+  sex: undefined,
+  address: undefined,
+  occupation: undefined,
+  referralSource: undefined,
+  secondaryPhone: undefined,
+  emergencyContactName: undefined,
+  emergencyContactPhone: undefined,
+  emergencyContactRelationship: undefined,
+};
+
 describe('PATCH /api/admin/patients/[id]', () => {
   beforeEach(() => {
     vi.resetAllMocks();
@@ -81,6 +93,7 @@ describe('PATCH /api/admin/patients/[id]', () => {
     expect(res.status).toBe(200);
     expect(updatePatient).toHaveBeenCalledWith(PATIENT_ID, {
       fullName: 'María', phoneE164: null, email: 'maria@example.com', notes: undefined,
+      ...EMPTY_FICHA,
     });
   });
 
@@ -98,6 +111,7 @@ describe('PATCH /api/admin/patients/[id]', () => {
     expect(res.status).toBe(200);
     expect(updatePatient).toHaveBeenCalledWith(PATIENT_ID, {
       fullName: 'María', phoneE164: '+5215512345678', email: 'maria@example.com', notes: undefined,
+      ...EMPTY_FICHA,
     });
   });
 
@@ -133,6 +147,79 @@ describe('PATCH /api/admin/patients/[id]', () => {
 
     expect(res.status).toBe(400);
     expect(body.field).toBe('phoneE164');
+  });
+
+  it('updates identification ficha fields', async () => {
+    (updatePatient as ReturnType<typeof vi.fn>).mockResolvedValue({
+      id: PATIENT_ID,
+      fullName: 'María',
+      birthDate: '1990-05-15',
+      sex: 'female',
+      address: 'Calle 1',
+      occupation: 'Doctora',
+      referralSource: 'Google',
+      secondaryPhone: '+5215598765432',
+      emergencyContactName: 'Juan',
+      emergencyContactPhone: '+5215512345678',
+      emergencyContactRelationship: 'esposo',
+    });
+
+    const res = await PATCH(
+      new Request(`http://localhost/api/admin/patients/${PATIENT_ID}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          fullName: 'María',
+          birthDate: '1990-05-15',
+          sex: 'female',
+          address: 'Calle 1',
+          occupation: 'Doctora',
+          referralSource: 'Google',
+          secondaryPhone: '+5215598765432',
+          emergencyContactName: 'Juan',
+          emergencyContactPhone: '+5215512345678',
+          emergencyContactRelationship: 'esposo',
+        }),
+      }),
+      { params: Promise.resolve({ id: PATIENT_ID }) }
+    );
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body.patient.sex).toBe('female');
+    expect(updatePatient).toHaveBeenCalledWith(PATIENT_ID, {
+      fullName: 'María',
+      phoneE164: undefined,
+      email: undefined,
+      notes: undefined,
+      birthDate: '1990-05-15',
+      sex: 'female',
+      address: 'Calle 1',
+      occupation: 'Doctora',
+      referralSource: 'Google',
+      secondaryPhone: '+5215598765432',
+      emergencyContactName: 'Juan',
+      emergencyContactPhone: '+5215512345678',
+      emergencyContactRelationship: 'esposo',
+    });
+  });
+
+  it('returns 400 for invalid sex', async () => {
+    (updatePatient as ReturnType<typeof vi.fn>).mockRejectedValue(
+      new ValidationError('sex', 'Invalid sex')
+    );
+
+    const res = await PATCH(
+      new Request(`http://localhost/api/admin/patients/${PATIENT_ID}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ fullName: 'María', sex: 'unknown' }),
+      }),
+      { params: Promise.resolve({ id: PATIENT_ID }) }
+    );
+    const body = await res.json();
+
+    expect(res.status).toBe(400);
+    expect(body.error).toBe('invalid_request');
+    expect(body.field).toBe('sex');
   });
 });
 
