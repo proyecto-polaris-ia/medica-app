@@ -1,9 +1,20 @@
+export type Sex = 'male' | 'female' | 'other';
+
 export type Patient = {
   id: string;
   fullName: string;
   phoneE164: string | null;
   email: string | null;
   notes: string | null;
+  birthDate: string | null;
+  sex: Sex | null;
+  address: string | null;
+  occupation: string | null;
+  referralSource: string | null;
+  secondaryPhone: string | null;
+  emergencyContactName: string | null;
+  emergencyContactPhone: string | null;
+  emergencyContactRelationship: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -13,6 +24,15 @@ export type PatientInput = {
   phoneE164?: string | null;
   email?: string | null;
   notes?: string | null;
+  birthDate?: string | null;
+  sex?: Sex | null;
+  address?: string | null;
+  occupation?: string | null;
+  referralSource?: string | null;
+  secondaryPhone?: string | null;
+  emergencyContactName?: string | null;
+  emergencyContactPhone?: string | null;
+  emergencyContactRelationship?: string | null;
 };
 
 export type Provider = {
@@ -90,6 +110,71 @@ export type AppointmentInput = {
   notes?: string | null;
 };
 
+
+export type PregnancyStatus = 'not_applicable' | 'no' | 'yes';
+export type SmokingStatus = 'never' | 'former' | 'current';
+export type AlcoholStatus = 'never' | 'occasional' | 'frequent';
+
+export type MedicalHistory = {
+  patientId: string;
+  allergies: string[];
+  systemicConditions: string[];
+  medications: string[];
+  pregnancyStatus: PregnancyStatus | null;
+  coagulationDisorders: string | null;
+  anticoagulants: string | null;
+  surgeries: string | null;
+  infectiousDiseases: string | null;
+  smoking: SmokingStatus | null;
+  alcohol: AlcoholStatus | null;
+  dentalHistory: string | null;
+  oralHabits: string[];
+  clinicalNotes: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type MedicalHistoryInput = {
+  allergies?: string[];
+  systemicConditions?: string[];
+  medications?: string[];
+  pregnancyStatus?: PregnancyStatus | null;
+  coagulationDisorders?: string | null;
+  anticoagulants?: string | null;
+  surgeries?: string | null;
+  infectiousDiseases?: string | null;
+  smoking?: SmokingStatus | null;
+  alcohol?: AlcoholStatus | null;
+  dentalHistory?: string | null;
+  oralHabits?: string[];
+  clinicalNotes?: string | null;
+};
+
+export type ClinicalVisit = {
+  id: string;
+  patientId: string;
+  appointmentId: string | null;
+  providerId: string | null;
+  subjective: string;
+  objective: string | null;
+  assessment: string | null;
+  plan: string | null;
+  treatment: string | null;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ClinicalVisitInput = {
+  appointmentId?: string | null;
+  providerId?: string | null;
+  subjective?: string;
+  objective?: string | null;
+  assessment?: string | null;
+  plan?: string | null;
+  treatment?: string | null;
+  notes?: string | null;
+};
 
 export type PatientRecordAppointment = Appointment & {
   serviceName: string;
