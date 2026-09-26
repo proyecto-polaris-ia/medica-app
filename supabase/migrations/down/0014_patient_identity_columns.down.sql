@@ -1,0 +1,6 @@
+-- No-op intencional.
+-- Las columnas de ficha de identificación son propiedad de la migración
+-- 0013_clinical_record; su rollback corresponde a
+-- down/0013_clinical_record.down.sql. Esta migración solo reconcilia entornos
+-- donde 0013 quedó parcialmente aplicada, por lo que no debe eliminar objetos
+-- que no creó.

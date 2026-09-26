@@ -30,6 +30,14 @@ const execute = tool.execute as (input: {
   notes?: string;
 }, ctx?: unknown) => Promise<unknown>;
 
+// Future UTC datetime so reschedule fixtures never expire as wall-clock time advances.
+function futureIso(daysFromNow: number, hour: number, minute = 0): string {
+  const d = new Date();
+  d.setUTCDate(d.getUTCDate() + daysFromNow);
+  d.setUTCHours(hour, minute, 0, 0);
+  return d.toISOString();
+}
+
 function setupCatalog() {
   resolveServiceByName.mockResolvedValue({ id: "svc-1", name: "Limpieza dental", durationMinutes: 60 });
   resolveProviderByName.mockResolvedValue({ id: "doc-1", name: "Dra. Ana Martínez" });
@@ -50,8 +58,8 @@ describe("reschedule-appointment tool", () => {
         patientId: "pat-1",
         serviceId: "svc-1",
         providerId: "doc-1",
-        startAt: "2026-09-15T21:00:00.000Z",
-        endAt: "2026-09-15T22:00:00.000Z",
+        startAt: futureIso(7, 21, 0),
+        endAt: futureIso(7, 22, 0),
         status: "requested",
         notes: null,
       },
@@ -63,8 +71,8 @@ describe("reschedule-appointment tool", () => {
       patientName: "Daniel Rodriguez",
       serviceName: "limpieza",
       providerName: "ana",
-      newStartAt: "2026-09-15T21:00:00.000Z",
-      newEndAt: "2026-09-15T22:00:00.000Z",
+      newStartAt: futureIso(7, 21, 0),
+      newEndAt: futureIso(7, 22, 0),
     });
 
     expect(resolvePatient).toHaveBeenCalledWith({
@@ -79,8 +87,8 @@ describe("reschedule-appointment tool", () => {
       providerId: "doc-1",
       currentStartAt: undefined,
       currentEndAt: undefined,
-      newStartAt: new Date("2026-09-15T21:00:00.000Z"),
-      newEndAt: new Date("2026-09-15T22:00:00.000Z"),
+      newStartAt: new Date(futureIso(7, 21, 0)),
+      newEndAt: new Date(futureIso(7, 22, 0)),
       notes: undefined,
     });
     expect(result).toMatchObject({
@@ -106,8 +114,8 @@ describe("reschedule-appointment tool", () => {
         patientId: "pat-1",
         serviceId: "svc-1",
         providerId: "doc-1",
-        startAt: "2026-09-15T22:00:00.000Z",
-        endAt: "2026-09-15T23:00:00.000Z",
+        startAt: futureIso(7, 22, 0),
+        endAt: futureIso(7, 23, 0),
         status: "requested",
         notes: null,
       },
@@ -120,8 +128,8 @@ describe("reschedule-appointment tool", () => {
       patientName: "Daniel Rodriguez",
       serviceName: "limpieza",
       providerName: "ana",
-      newStartAt: "2026-09-15T22:00:00.000Z",
-      newEndAt: "2026-09-15T23:00:00.000Z",
+      newStartAt: futureIso(7, 22, 0),
+      newEndAt: futureIso(7, 23, 0),
     }, { session: { auth: { current: { attributes: { trustedContactSource: "whatsapp", trustedPatientPhone: "+527224999206" } }, initiator: null } } });
 
     expect(resolvePatient).toHaveBeenCalledWith({
@@ -136,8 +144,8 @@ describe("reschedule-appointment tool", () => {
       appointmentId: "appt-1",
       serviceName: "limpieza",
       providerName: "ana",
-      newStartAt: "2026-09-15T21:00:00.000Z",
-      newEndAt: "2026-09-15T22:00:00.000Z",
+      newStartAt: futureIso(7, 21, 0),
+      newEndAt: futureIso(7, 22, 0),
     })).resolves.toEqual({
       success: false,
       error: "Necesito el teléfono del paciente para reprogramar la cita.",
@@ -151,8 +159,8 @@ describe("reschedule-appointment tool", () => {
       patientPhone: "+525543312353",
       serviceName: "limpieza",
       providerName: "ana",
-      newStartAt: "2026-09-15T21:00:00.000Z",
-      newEndAt: "2026-09-15T22:00:00.000Z",
+      newStartAt: futureIso(7, 21, 0),
+      newEndAt: futureIso(7, 22, 0),
     })).resolves.toEqual({ success: false, error: "Para reprogramar necesito identificar la cita original." });
     expect(rescheduleAppointment).not.toHaveBeenCalled();
   });
@@ -169,8 +177,8 @@ describe("reschedule-appointment tool", () => {
       patientPhone: "+525543312353",
       serviceName: "limpieza",
       providerName: "ana",
-      newStartAt: "2026-09-15T21:00:00.000Z",
-      newEndAt: "2026-09-15T22:00:00.000Z",
+      newStartAt: futureIso(7, 21, 0),
+      newEndAt: futureIso(7, 22, 0),
     })).resolves.toEqual({
       success: false,
       conflict: true,
