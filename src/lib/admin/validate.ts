@@ -1,3 +1,8 @@
+import type {
+  TreatmentPlanItemStatus,
+  TreatmentPlanStatus,
+} from './types';
+
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -191,6 +196,86 @@ export function parseStatus<T extends string>(
     throw new ValidationError(field, `Invalid ${field}`);
   }
   return trimmed as T;
+}
+
+const TREATMENT_PLAN_STATUS_VALUES: string[] = [
+  'draft',
+  'presented',
+  'accepted',
+  'in_progress',
+  'completed',
+  'cancelled',
+];
+
+export function parseTreatmentPlanStatus(
+  value: unknown,
+  field = 'status'
+): TreatmentPlanStatus {
+  if (
+    typeof value !== 'string' ||
+    value.trim().length === 0 ||
+    !TREATMENT_PLAN_STATUS_VALUES.includes(value.trim())
+  ) {
+    throw new ValidationError(field, `Invalid ${field}`);
+  }
+  return value.trim() as TreatmentPlanStatus;
+}
+
+const TREATMENT_PLAN_ITEM_STATUS_VALUES: string[] = ['pending', 'done'];
+
+export function parseTreatmentPlanItemStatus(
+  value: unknown,
+  field = 'status'
+): TreatmentPlanItemStatus {
+  if (
+    typeof value !== 'string' ||
+    value.trim().length === 0 ||
+    !TREATMENT_PLAN_ITEM_STATUS_VALUES.includes(value.trim())
+  ) {
+    throw new ValidationError(field, `Invalid ${field}`);
+  }
+  return value.trim() as TreatmentPlanItemStatus;
+}
+
+export function parseMoney(value: unknown, field = 'unitPrice'): number {
+  if (
+    typeof value !== 'number' ||
+    Number.isNaN(value) ||
+    !Number.isFinite(value)
+  ) {
+    throw new ValidationError(field, `Invalid ${field}`);
+  }
+  if (value < 0) {
+    throw new ValidationError(field, `Invalid ${field}`);
+  }
+  const str = value.toString();
+  const decimalIndex = str.indexOf('.');
+  if (decimalIndex !== -1 && str.length - decimalIndex - 1 > 2) {
+    throw new ValidationError(field, `Invalid ${field}`);
+  }
+  return value;
+}
+
+const FDI_TOOTH_RE = /^[1-8][1-8]$/;
+
+export function parseFdiTooth(
+  value: unknown,
+  field = 'tooth'
+): string | null {
+  if (value === null || value === undefined) {
+    return null;
+  }
+  if (typeof value !== 'string' || !FDI_TOOTH_RE.test(value)) {
+    throw new ValidationError(field, `Invalid ${field}`);
+  }
+  return value;
+}
+
+export function parseQuantity(value: unknown, field = 'quantity'): number {
+  if (typeof value !== 'number' || !Number.isInteger(value) || value <= 0) {
+    throw new ValidationError(field, `Invalid ${field}`);
+  }
+  return value;
 }
 
 export { parseOptionalEmail } from '@/lib/booking/patient-contact';
