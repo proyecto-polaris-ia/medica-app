@@ -24,7 +24,7 @@ The system MUST expose a server-side admin API that returns the patient's identi
 
 ### Requirement: Patient data section
 
-The patient record view MUST show the patient's full name, phone, email, notes, registration date, and ficha de identificación (birth date, sex, address, occupation, referral source, secondary phone, emergency contact name, emergency contact phone, emergency contact relationship) with explicit empty values when optional fields are missing. The ficha de identificación fields MUST be editable through the patient update API. The patient record view MUST be organized in tabs: Datos, Historia, Consultas and Citas.
+The patient record view MUST show the patient's full name, phone, email, notes, registration date, and ficha de identificación (birth date, sex, address, occupation, referral source, secondary phone, emergency contact name, emergency contact phone, emergency contact relationship) with explicit empty values when optional fields are missing. The ficha de identificación fields MUST be editable through the patient update API. The patient record view MUST be organized in tabs: Datos, Historia, Consultas, Citas and Plan de tratamiento.
 
 #### Scenario: Missing optional contact fields
 
@@ -43,6 +43,18 @@ The patient record view MUST show the patient's full name, phone, email, notes, 
 - GIVEN an authenticated admin viewing the Datos tab
 - WHEN they update ficha de identificación fields and save
 - THEN the system MUST persist the changes and reflect them in the patient record
+
+#### Scenario: Plan de tratamiento tab is visible
+
+- GIVEN an authenticated admin viewing the patient record
+- WHEN the tabs render
+- THEN the system MUST display a "Plan de tratamiento" tab alongside Datos, Historia, Consultas and Citas
+
+#### Scenario: Plan de tratamiento tab lists patient plans
+
+- GIVEN an authenticated admin viewing the patient record of a patient with treatment plans
+- WHEN they select the "Plan de tratamiento" tab
+- THEN the system MUST display the list of treatment plans with status, responsible dentist, and total amount
 
 ### Requirement: Future appointments section
 
