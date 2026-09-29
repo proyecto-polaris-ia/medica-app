@@ -210,3 +210,77 @@ export type ProviderSnapshot = {
   recentClients: RecentClient[];
   clientsHref: string;
 };
+
+export type TreatmentPlanStatus =
+  | 'draft'
+  | 'presented'
+  | 'accepted'
+  | 'in_progress'
+  | 'completed'
+  | 'cancelled';
+
+export type TreatmentPlanItemStatus = 'pending' | 'done';
+
+export type TreatmentPlan = {
+  id: string;
+  patientId: string;
+  providerId: string;
+  clinicalVisitId: string | null;
+  name: string;
+  status: TreatmentPlanStatus;
+  totalAmount: number;
+  acceptedAt: string | null;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type TreatmentPlanItem = {
+  id: string;
+  treatmentPlanId: string;
+  description: string;
+  serviceId: string | null;
+  tooth: string | null;
+  quantity: number;
+  unitPrice: number;
+  status: TreatmentPlanItemStatus;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type TreatmentPlanWithItems = TreatmentPlan & {
+  items: TreatmentPlanItem[];
+};
+
+export type TreatmentPlanInput = {
+  providerId: string;
+  clinicalVisitId?: string | null;
+  name: string;
+  notes?: string | null;
+  items?: TreatmentPlanItemInput[];
+};
+
+export type TreatmentPlanUpdateInput = {
+  providerId?: string;
+  clinicalVisitId?: string | null;
+  name?: string;
+  notes?: string | null;
+  status?: TreatmentPlanStatus;
+};
+
+export type TreatmentPlanItemInput = {
+  description: string;
+  serviceId?: string | null;
+  tooth?: string | null;
+  quantity?: number;
+  unitPrice: number;
+};
+
+export type TreatmentPlanItemUpdateInput = {
+  description?: string;
+  serviceId?: string | null;
+  tooth?: string | null;
+  quantity?: number;
+  unitPrice?: number;
+  status?: TreatmentPlanItemStatus;
+};
