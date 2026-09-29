@@ -58,10 +58,12 @@ function buildFetchMock(overrides: {
   record?: Record<string, unknown>;
   history?: Record<string, unknown>;
   visits?: Record<string, unknown>[];
+  treatmentPlans?: Record<string, unknown>[];
 } = {}) {
   const record = overrides.record ?? BASE_RECORD;
   const history = overrides.history ?? EMPTY_HISTORY;
   const visits = overrides.visits ?? [];
+  const treatmentPlans = overrides.treatmentPlans ?? [];
 
   return vi.fn().mockImplementation((url: string | URL, init?: RequestInit) => {
     const urlString = url.toString();
@@ -76,6 +78,10 @@ function buildFetchMock(overrides: {
 
     if (urlString === `/api/admin/patients/${PATIENT_ID}/clinical-visits` && !init?.method) {
       return Promise.resolve({ ok: true, json: () => Promise.resolve({ clinicalVisits: visits }) });
+    }
+
+    if (urlString === `/api/admin/patients/${PATIENT_ID}/treatment-plans` && !init?.method) {
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ treatmentPlans }) });
     }
 
     if (urlString === `/api/admin/patients/${PATIENT_ID}/clinical-visits` && init?.method === 'POST') {
@@ -119,7 +125,7 @@ describe('/patients/[id] clinical record UI', () => {
     window.confirm = vi.fn(() => true);
   });
 
-  it('renders tabs Datos, Historia, Consultas and Citas', async () => {
+  it('renders tabs Datos, Historia, Consultas, Citas and Plan de tratamiento', async () => {
     global.fetch = buildFetchMock();
     render(<PatientRecordPage />);
 
@@ -130,6 +136,7 @@ describe('/patients/[id] clinical record UI', () => {
     expect(screen.getByRole('tab', { name: 'Historia' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'Consultas' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'Citas' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Plan de tratamiento' })).toBeInTheDocument();
   });
 
   it('shows a red warning badge when the patient has allergies', async () => {
@@ -323,6 +330,41 @@ describe('/patients/[id] clinical record UI', () => {
         subjective: 'Dolor de muela',
       });
     });
+  });
+
+  it('lists treatment plans in the Plan de tratamiento tab', async () => {
+    const user = userEvent.setup();
+    const fetchMock = buildFetchMock({
+      treatmentPlans: [
+        {
+          id: 'plan-1',
+          patientId: PATIENT_ID,
+          providerId: 'prov-1',
+          clinicalVisitId: null,
+          name: 'Plan de limpieza',
+          status: 'draft',
+          totalAmount: 1200,
+          acceptedAt: null,
+          notes: null,
+          createdAt: '2026-09-05T10:00:00Z',
+          updatedAt: '2026-09-05T10:00:00Z',
+        },
+      ],
+    });
+    global.fetch = fetchMock;
+    render(<PatientRecordPage />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: 'Plan de tratamiento' })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('tab', { name: 'Plan de tratamiento' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Plan de limpieza')).toBeInTheDocument();
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(`/api/admin/patients/${PATIENT_ID}/treatment-plans`);
   });
 
   it('keeps the Citas tab using the existing record endpoint', async () => {

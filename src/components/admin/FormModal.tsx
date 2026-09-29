@@ -12,7 +12,7 @@ export function FormModal({
   children: ReactNode;
   onClose: () => void;
   onSubmit: () => void;
-  submitLabel: string;
+  submitLabel?: string;
   isSubmitting: boolean;
 }) {
   return (
@@ -29,14 +29,16 @@ export function FormModal({
           >
             Cancelar
           </button>
-          <button
-            type="button"
-            onClick={onSubmit}
-            disabled={isSubmitting}
-            className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
-          >
-            {isSubmitting ? 'Guardando...' : submitLabel}
-          </button>
+          {submitLabel && (
+            <button
+              type="button"
+              onClick={onSubmit}
+              disabled={isSubmitting}
+              className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+            >
+              {isSubmitting ? 'Guardando...' : submitLabel}
+            </button>
+          )}
         </div>
       </div>
     </div>

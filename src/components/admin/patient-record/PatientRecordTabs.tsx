@@ -12,8 +12,10 @@ import { PatientHistoryTab } from './PatientHistoryTab';
 import { PatientVisitsTab } from './PatientVisitsTab';
 import { PatientAppointmentsTab } from './PatientAppointmentsTab';
 import { MedicalHistoryBadge } from './MedicalHistoryBadge';
+import { TreatmentPlansTab } from './TreatmentPlansTab';
+import type { TreatmentPlan } from '@/lib/admin/types';
 
-type TabId = 'data' | 'history' | 'visits' | 'appointments';
+type TabId = 'data' | 'history' | 'visits' | 'appointments' | 'plans';
 
 type PatientRecordTabsProps = {
   patient: Patient;
@@ -22,9 +24,13 @@ type PatientRecordTabsProps = {
   clinicalVisits: ClinicalVisit[];
   visitsLoading: boolean;
   visitsError: string | null;
+  treatmentPlans: TreatmentPlan[];
+  treatmentPlansLoading: boolean;
+  treatmentPlansError: string | null;
   onPatientUpdated: (patient: Patient) => void;
   onHistoryUpdated: (history: MedicalHistory) => void;
   onVisitsChanged: () => void;
+  onPlansChanged: () => void;
 };
 
 const TABS: { id: TabId; label: string }[] = [
@@ -32,6 +38,7 @@ const TABS: { id: TabId; label: string }[] = [
   { id: 'history', label: 'Historia' },
   { id: 'visits', label: 'Consultas' },
   { id: 'appointments', label: 'Citas' },
+  { id: 'plans', label: 'Plan de tratamiento' },
 ];
 
 export function PatientRecordTabs({
@@ -41,9 +48,13 @@ export function PatientRecordTabs({
   clinicalVisits,
   visitsLoading,
   visitsError,
+  treatmentPlans,
+  treatmentPlansLoading,
+  treatmentPlansError,
   onPatientUpdated,
   onHistoryUpdated,
   onVisitsChanged,
+  onPlansChanged,
 }: PatientRecordTabsProps) {
   const [activeTab, setActiveTab] = useState<TabId>('data');
 
@@ -96,6 +107,15 @@ export function PatientRecordTabs({
           />
         )}
         {activeTab === 'appointments' && <PatientAppointmentsTab record={record} />}
+        {activeTab === 'plans' && (
+          <TreatmentPlansTab
+            patientId={patient.id}
+            treatmentPlans={treatmentPlans}
+            loading={treatmentPlansLoading}
+            error={treatmentPlansError}
+            onPlansChanged={onPlansChanged}
+          />
+        )}
       </div>
     </div>
   );

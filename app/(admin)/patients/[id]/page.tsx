@@ -11,6 +11,7 @@ import type {
   MedicalHistory,
   Patient,
   PatientRecord,
+  TreatmentPlan,
 } from '@/lib/admin/types';
 
 const EMPTY_HISTORY: MedicalHistory = {
@@ -40,6 +41,9 @@ export default function PatientRecordPage() {
   const [clinicalVisits, setClinicalVisits] = useState<ClinicalVisit[]>([]);
   const [visitsLoading, setVisitsLoading] = useState(false);
   const [visitsError, setVisitsError] = useState<string | null>(null);
+  const [treatmentPlans, setTreatmentPlans] = useState<TreatmentPlan[]>([]);
+  const [treatmentPlansLoading, setTreatmentPlansLoading] = useState(false);
+  const [treatmentPlansError, setTreatmentPlansError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -88,10 +92,27 @@ export default function PatientRecordPage() {
     }
   }
 
+  async function loadTreatmentPlans() {
+    if (!patientId) return;
+    setTreatmentPlansLoading(true);
+    setTreatmentPlansError(null);
+    try {
+      const res = await fetch(`/api/admin/patients/${patientId}/treatment-plans`);
+      if (!res.ok) throw new Error('Error al cargar los planes de tratamiento');
+      const data = await res.json();
+      setTreatmentPlans(data.treatmentPlans);
+    } catch (err) {
+      setTreatmentPlansError(err instanceof Error ? err.message : 'Error desconocido');
+    } finally {
+      setTreatmentPlansLoading(false);
+    }
+  }
+
   useEffect(() => {
     loadRecord();
     loadMedicalHistory();
     loadClinicalVisits();
+    loadTreatmentPlans();
   }, [patientId]);
 
   function handlePatientUpdated(patient: Patient) {
@@ -124,9 +145,13 @@ export default function PatientRecordPage() {
           clinicalVisits={clinicalVisits}
           visitsLoading={visitsLoading}
           visitsError={visitsError}
+          treatmentPlans={treatmentPlans}
+          treatmentPlansLoading={treatmentPlansLoading}
+          treatmentPlansError={treatmentPlansError}
           onPatientUpdated={handlePatientUpdated}
           onHistoryUpdated={handleHistoryUpdated}
           onVisitsChanged={loadClinicalVisits}
+          onPlansChanged={loadTreatmentPlans}
         />
       )}
     </div>
