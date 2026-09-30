@@ -284,3 +284,72 @@ export type TreatmentPlanItemUpdateInput = {
   unitPrice?: number;
   status?: TreatmentPlanItemStatus;
 };
+
+export type PaymentMethod = 'cash' | 'card' | 'transfer' | 'other';
+
+export type Payment = {
+  id: string;
+  patientId: string;
+  treatmentPlanId: string | null;
+  amount: number;
+  method: PaymentMethod;
+  paidAt: string;
+  reference: string | null;
+  notes: string | null;
+  createdBy: string | null;
+  voidedAt: string | null;
+  voidedBy: string | null;
+  voidReason: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type PaymentInput = {
+  treatmentPlanId?: string | null;
+  amount: number;
+  method: PaymentMethod;
+  paidAt: string;
+  reference?: string | null;
+  notes?: string | null;
+};
+
+export type PaymentUpdateInput = Partial<
+  Pick<
+    PaymentInput,
+    'treatmentPlanId' | 'amount' | 'method' | 'paidAt' | 'reference' | 'notes'
+  >
+>;
+
+export type PaymentReversalInput = {
+  reason: string;
+};
+
+export type PlanBalance = {
+  treatmentPlanId: string;
+  name: string;
+  status: TreatmentPlanStatus;
+  totalAmount: number;
+  paidAmount: number;
+  balance: number;
+  baseDate: string;
+  baseDateSource: 'accepted_at' | 'created_at';
+  daysPastDue: number;
+  isPastDue: boolean;
+};
+
+export type PatientReceivableSummary = {
+  patientId: string;
+  totalEligibleAmount: number;
+  paidAmount: number;
+  unallocatedPaidAmount: number;
+  balance: number;
+  creditAmount: number;
+  planBalances: PlanBalance[];
+  lastPaymentAt: string | null;
+};
+
+export type AccountsReceivableRow = PatientReceivableSummary & {
+  patientName: string;
+  patientPhoneE164: string | null;
+  pastDuePlans: PlanBalance[];
+};
