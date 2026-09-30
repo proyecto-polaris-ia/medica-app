@@ -5,7 +5,10 @@ import type {
   ClinicalVisit,
   MedicalHistory,
   Patient,
+  PatientReceivableSummary,
   PatientRecord,
+  Payment,
+  TreatmentPlan,
 } from '@/lib/admin/types';
 import { PatientDataTab } from './PatientDataTab';
 import { PatientHistoryTab } from './PatientHistoryTab';
@@ -13,9 +16,9 @@ import { PatientVisitsTab } from './PatientVisitsTab';
 import { PatientAppointmentsTab } from './PatientAppointmentsTab';
 import { MedicalHistoryBadge } from './MedicalHistoryBadge';
 import { TreatmentPlansTab } from './TreatmentPlansTab';
-import type { TreatmentPlan } from '@/lib/admin/types';
+import { PatientPaymentsTab } from './PatientPaymentsTab';
 
-type TabId = 'data' | 'history' | 'visits' | 'appointments' | 'plans';
+type TabId = 'data' | 'history' | 'visits' | 'appointments' | 'plans' | 'payments';
 
 type PatientRecordTabsProps = {
   patient: Patient;
@@ -27,10 +30,15 @@ type PatientRecordTabsProps = {
   treatmentPlans: TreatmentPlan[];
   treatmentPlansLoading: boolean;
   treatmentPlansError: string | null;
+  payments: Payment[];
+  paymentsSummary: PatientReceivableSummary;
+  paymentsLoading: boolean;
+  paymentsError: string | null;
   onPatientUpdated: (patient: Patient) => void;
   onHistoryUpdated: (history: MedicalHistory) => void;
   onVisitsChanged: () => void;
   onPlansChanged: () => void;
+  onPaymentsChanged: () => void;
 };
 
 const TABS: { id: TabId; label: string }[] = [
@@ -39,6 +47,7 @@ const TABS: { id: TabId; label: string }[] = [
   { id: 'visits', label: 'Consultas' },
   { id: 'appointments', label: 'Citas' },
   { id: 'plans', label: 'Plan de tratamiento' },
+  { id: 'payments', label: 'Pagos' },
 ];
 
 export function PatientRecordTabs({
@@ -51,10 +60,15 @@ export function PatientRecordTabs({
   treatmentPlans,
   treatmentPlansLoading,
   treatmentPlansError,
+  payments,
+  paymentsSummary,
+  paymentsLoading,
+  paymentsError,
   onPatientUpdated,
   onHistoryUpdated,
   onVisitsChanged,
   onPlansChanged,
+  onPaymentsChanged,
 }: PatientRecordTabsProps) {
   const [activeTab, setActiveTab] = useState<TabId>('data');
 
@@ -114,6 +128,16 @@ export function PatientRecordTabs({
             loading={treatmentPlansLoading}
             error={treatmentPlansError}
             onPlansChanged={onPlansChanged}
+          />
+        )}
+        {activeTab === 'payments' && (
+          <PatientPaymentsTab
+            patientId={patient.id}
+            payments={payments}
+            summary={paymentsSummary}
+            loading={paymentsLoading}
+            error={paymentsError}
+            onPaymentsChanged={onPaymentsChanged}
           />
         )}
       </div>
