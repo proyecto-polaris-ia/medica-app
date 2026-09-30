@@ -23,6 +23,7 @@ export default async function AdminLayout({
     { href: '/dashboard', label: 'Dashboard' },
     { href: '/appointments', label: 'Citas' },
     { href: '/patients', label: 'Pacientes' },
+    { href: '/accounts-receivable', label: 'Cartera' },
     { href: '/providers', label: 'Proveedores' },
     { href: '/services', label: 'Servicios' },
     { href: '/business-hours', label: 'Horarios' },
