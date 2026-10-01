@@ -4,6 +4,16 @@ export type WhatsAppSendTextInput = {
   phoneNumberId?: string;
 };
 
+export type WhatsAppTemplateParameter = { type: 'text'; text: string };
+
+export type WhatsAppSendTemplateInput = {
+  to: string;
+  templateName: string;
+  languageCode?: string;
+  bodyParameters: WhatsAppTemplateParameter[];
+  phoneNumberId?: string;
+};
+
 export type WhatsAppSendResult = {
   ok: boolean;
   skipped?: boolean;
@@ -158,6 +168,83 @@ export async function sendWhatsAppTypingIndicator(
       ok: false,
       status: null,
       error: error instanceof Error ? error.message : "WhatsApp typing indicator request failed.",
+    };
+  }
+}
+
+/**
+ * Send a WhatsApp **template/HSM** message (Meta-compliant proactive outbound).
+ * Mirrors `sendWhatsAppTextMessage`'s credential-resolution + error contract.
+ * Degrades gracefully to `{ ok: false, skipped: true }` when credentials are missing.
+ */
+export async function sendWhatsAppTemplateMessage(
+  input: WhatsAppSendTemplateInput,
+  fetchImpl: WhatsAppFetch = fetch
+): Promise<WhatsAppSendResult> {
+  const { accessToken, phoneNumberId, graphVersion } = resolveCredentials(input.phoneNumberId);
+  if (!accessToken || !phoneNumberId) {
+    return {
+      ok: false,
+      skipped: true,
+      status: null,
+      error: "WhatsApp Cloud API credentials are not configured.",
+    };
+  }
+
+  try {
+    const response = await fetchImpl(`https://graph.facebook.com/${graphVersion}/${phoneNumberId}/messages`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        messaging_product: "whatsapp",
+        recipient_type: "individual",
+        to: input.to,
+        type: "template",
+        template: {
+          name: input.templateName,
+          language: { code: input.languageCode || "es_MX" },
+          components: [
+            {
+              type: "body",
+              parameters: input.bodyParameters,
+            },
+          ],
+        },
+      }),
+    });
+
+    const contentType = response.headers.get("content-type") || "";
+    const body = contentType.includes("application/json") ? await response.json() : await response.text();
+
+    if (!response.ok) {
+      console.error('[WhatsApp Client] Template send failed:', {
+        to: input.to,
+        templateName: input.templateName,
+        status: response.status,
+        responseBody: body,
+      });
+      return {
+        ok: false,
+        status: response.status,
+        error: `WhatsApp Cloud API request failed with status ${response.status}.`,
+        response: body,
+      };
+    }
+
+    return {
+      ok: true,
+      status: response.status,
+      providerMessageId: extractProviderMessageId(body),
+      response: body,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      status: null,
+      error: error instanceof Error ? error.message : "WhatsApp Cloud API request failed.",
     };
   }
 }
