@@ -10,9 +10,22 @@ import type {
   ClinicalVisit,
   MedicalHistory,
   Patient,
+  PatientReceivableSummary,
   PatientRecord,
+  Payment,
   TreatmentPlan,
 } from '@/lib/admin/types';
+
+const EMPTY_PAYMENT_SUMMARY: PatientReceivableSummary = {
+  patientId: '',
+  totalEligibleAmount: 0,
+  paidAmount: 0,
+  unallocatedPaidAmount: 0,
+  balance: 0,
+  creditAmount: 0,
+  planBalances: [],
+  lastPaymentAt: null,
+};
 
 const EMPTY_HISTORY: MedicalHistory = {
   patientId: '',
@@ -44,6 +57,10 @@ export default function PatientRecordPage() {
   const [treatmentPlans, setTreatmentPlans] = useState<TreatmentPlan[]>([]);
   const [treatmentPlansLoading, setTreatmentPlansLoading] = useState(false);
   const [treatmentPlansError, setTreatmentPlansError] = useState<string | null>(null);
+  const [payments, setPayments] = useState<Payment[]>([]);
+  const [paymentsSummary, setPaymentsSummary] = useState<PatientReceivableSummary>(EMPTY_PAYMENT_SUMMARY);
+  const [paymentsLoading, setPaymentsLoading] = useState(false);
+  const [paymentsError, setPaymentsError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -92,6 +109,25 @@ export default function PatientRecordPage() {
     }
   }
 
+  async function loadPayments() {
+    if (!patientId) return;
+    setPaymentsLoading(true);
+    setPaymentsError(null);
+    try {
+      const res = await fetch(`/api/admin/patients/${patientId}/payments`);
+      if (!res.ok) throw new Error('Error al cargar pagos');
+      const data = await res.json();
+      setPayments(data.payments ?? []);
+      setPaymentsSummary(data.summary ?? { ...EMPTY_PAYMENT_SUMMARY, patientId });
+    } catch (err) {
+      setPaymentsError(err instanceof Error ? err.message : 'Error desconocido');
+      setPayments([]);
+      setPaymentsSummary({ ...EMPTY_PAYMENT_SUMMARY, patientId });
+    } finally {
+      setPaymentsLoading(false);
+    }
+  }
+
   async function loadTreatmentPlans() {
     if (!patientId) return;
     setTreatmentPlansLoading(true);
@@ -113,6 +149,7 @@ export default function PatientRecordPage() {
     loadMedicalHistory();
     loadClinicalVisits();
     loadTreatmentPlans();
+    loadPayments();
   }, [patientId]);
 
   function handlePatientUpdated(patient: Patient) {
@@ -148,10 +185,15 @@ export default function PatientRecordPage() {
           treatmentPlans={treatmentPlans}
           treatmentPlansLoading={treatmentPlansLoading}
           treatmentPlansError={treatmentPlansError}
+          payments={payments}
+          paymentsSummary={paymentsSummary}
+          paymentsLoading={paymentsLoading}
+          paymentsError={paymentsError}
           onPatientUpdated={handlePatientUpdated}
           onHistoryUpdated={handleHistoryUpdated}
           onVisitsChanged={loadClinicalVisits}
           onPlansChanged={loadTreatmentPlans}
+          onPaymentsChanged={loadPayments}
         />
       )}
     </div>

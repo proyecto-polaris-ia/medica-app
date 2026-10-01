@@ -59,11 +59,27 @@ function buildFetchMock(overrides: {
   history?: Record<string, unknown>;
   visits?: Record<string, unknown>[];
   treatmentPlans?: Record<string, unknown>[];
+  paymentsResponse?: Record<string, unknown>;
+  paymentsOk?: boolean;
 } = {}) {
   const record = overrides.record ?? BASE_RECORD;
   const history = overrides.history ?? EMPTY_HISTORY;
   const visits = overrides.visits ?? [];
   const treatmentPlans = overrides.treatmentPlans ?? [];
+  const paymentsResponse = overrides.paymentsResponse ?? {
+    payments: [],
+    summary: {
+      patientId: PATIENT_ID,
+      totalEligibleAmount: 0,
+      paidAmount: 0,
+      unallocatedPaidAmount: 0,
+      balance: 0,
+      creditAmount: 0,
+      planBalances: [],
+      lastPaymentAt: null,
+    },
+  };
+  const paymentsOk = overrides.paymentsOk ?? true;
 
   return vi.fn().mockImplementation((url: string | URL, init?: RequestInit) => {
     const urlString = url.toString();
@@ -82,6 +98,13 @@ function buildFetchMock(overrides: {
 
     if (urlString === `/api/admin/patients/${PATIENT_ID}/treatment-plans` && !init?.method) {
       return Promise.resolve({ ok: true, json: () => Promise.resolve({ treatmentPlans }) });
+    }
+
+    if (urlString === `/api/admin/patients/${PATIENT_ID}/payments` && !init?.method) {
+      return Promise.resolve({
+        ok: paymentsOk,
+        json: () => Promise.resolve(paymentsResponse),
+      });
     }
 
     if (urlString === `/api/admin/patients/${PATIENT_ID}/clinical-visits` && init?.method === 'POST') {
@@ -125,7 +148,7 @@ describe('/patients/[id] clinical record UI', () => {
     window.confirm = vi.fn(() => true);
   });
 
-  it('renders tabs Datos, Historia, Consultas, Citas and Plan de tratamiento', async () => {
+  it('renders tabs Datos, Historia, Consultas, Citas, Plan de tratamiento and Pagos', async () => {
     global.fetch = buildFetchMock();
     render(<PatientRecordPage />);
 
@@ -137,6 +160,30 @@ describe('/patients/[id] clinical record UI', () => {
     expect(screen.getByRole('tab', { name: 'Consultas' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'Citas' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'Plan de tratamiento' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Pagos' })).toBeInTheDocument();
+  });
+
+  it('shows a recoverable payments error without hiding the other patient record tabs', async () => {
+    const user = userEvent.setup();
+    global.fetch = buildFetchMock({ paymentsOk: false });
+    render(<PatientRecordPage />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: 'Pagos' })).toBeInTheDocument();
+    });
+
+    expect(screen.getByRole('tab', { name: 'Datos' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Historia' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Consultas' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Citas' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Plan de tratamiento' })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('tab', { name: 'Pagos' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Error al cargar pagos')).toBeInTheDocument();
+    });
+    expect(screen.getByRole('button', { name: 'Intentar de nuevo' })).toBeInTheDocument();
   });
 
   it('shows a red warning badge when the patient has allergies', async () => {

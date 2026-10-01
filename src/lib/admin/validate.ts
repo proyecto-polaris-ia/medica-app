@@ -1,4 +1,5 @@
 import type {
+  PaymentMethod,
   TreatmentPlanItemStatus,
   TreatmentPlanStatus,
 } from './types';
@@ -276,6 +277,73 @@ export function parseQuantity(value: unknown, field = 'quantity'): number {
     throw new ValidationError(field, `Invalid ${field}`);
   }
   return value;
+}
+
+const PAYMENT_METHOD_VALUES: PaymentMethod[] = [
+  'cash',
+  'card',
+  'transfer',
+  'other',
+];
+
+export function parsePaymentMethod(
+  value: unknown,
+  field = 'method'
+): PaymentMethod {
+  if (
+    typeof value !== 'string' ||
+    value.trim().length === 0 ||
+    !PAYMENT_METHOD_VALUES.includes(value.trim() as PaymentMethod)
+  ) {
+    throw new ValidationError(field, `Invalid ${field}`);
+  }
+  return value.trim() as PaymentMethod;
+}
+
+export function parseMoneyPositive(value: unknown, field = 'amount'): number {
+  const amount = parseMoney(value, field);
+  if (amount <= 0) {
+    throw new ValidationError(field, `Invalid ${field}`);
+  }
+  return amount;
+}
+
+export function parsePaidAt(value: unknown, field = 'paidAt'): string {
+  const date = parseIsoDate(value, field);
+  return date.toISOString();
+}
+
+export function parseVoidReason(value: unknown, field = 'reason'): string {
+  if (typeof value !== 'string' || value.trim().length === 0) {
+    throw new ValidationError(field, `Invalid ${field}`);
+  }
+  return value.trim();
+}
+
+const DEFAULT_THRESHOLD_DAYS = 30;
+
+export function parseThresholdDays(
+  value: unknown,
+  field = 'thresholdDays'
+): number {
+  if (value === undefined || value === null || value === '') {
+    return DEFAULT_THRESHOLD_DAYS;
+  }
+
+  const numericValue =
+    typeof value === 'string' && value.trim().length > 0
+      ? Number(value.trim())
+      : value;
+
+  if (
+    typeof numericValue !== 'number' ||
+    !Number.isInteger(numericValue) ||
+    numericValue <= 0
+  ) {
+    throw new ValidationError(field, `Invalid ${field}`);
+  }
+
+  return numericValue;
 }
 
 export { parseOptionalEmail } from '@/lib/booking/patient-contact';
