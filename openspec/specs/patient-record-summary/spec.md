@@ -25,7 +25,7 @@ The system MUST expose a server-side admin API that returns the patient's identi
 ### Requirement: Patient data section
 
 La vista del expediente del paciente MUST mostrar nombre completo, teléfono, email, notas, fecha de registro y ficha de identificación (fecha de nacimiento, sexo, dirección, ocupación, fuente de referencia, teléfono secundario, nombre de contacto de emergencia, teléfono de contacto de emergencia y relación del contacto de emergencia) con valores vacíos explícitos cuando falten campos opcionales. Los campos de ficha de identificación MUST ser editables mediante la API de actualización de paciente. La vista del expediente MUST organizarse en pestañas: `Datos`, `Historia`, `Consultas`, `Citas`, `Plan de tratamiento` y `Pagos`.
-(Previously: La vista del expediente organizaba las pestañas `Datos`, `Historia`, `Consultas` y `Citas`, sin la pestaña financiera `Pagos`.)
+(Previously: La vista del expediente organizaba las pestañas `Datos`, `Historia`, `Consultas` y `Citas`, sin las pestañas `Plan de tratamiento` y `Pagos`.)
 
 #### Scenario: Campos de contacto opcionales faltantes
 
@@ -45,11 +45,18 @@ La vista del expediente del paciente MUST mostrar nombre completo, teléfono, em
 - WHEN actualiza campos de la ficha de identificación y guarda
 - THEN el sistema MUST persistir los cambios y reflejarlos en el expediente del paciente
 
-#### Scenario: Las pestañas incluyen pagos
+#### Scenario: Las pestañas incluyen plan de tratamiento y pagos
 
 - GIVEN un administrador autenticado consulta un expediente de paciente
 - WHEN la navegación del expediente se renderiza
 - THEN las pestañas MUST incluir `Datos`, `Historia`, `Consultas`, `Citas`, `Plan de tratamiento` y `Pagos`
+
+#### Scenario: Plan de tratamiento tab lists patient plans
+
+- GIVEN an authenticated admin viewing the patient record of a patient with treatment plans
+- WHEN they select the "Plan de tratamiento" tab
+- THEN the system MUST display the list of treatment plans with status, responsible dentist, and total amount
+
 ### Requirement: Future appointments section
 
 The patient record view MUST show future appointments for the patient sorted by start time ascending, excluding cancelled, rescheduled, no-show, and attended appointments. This section is accessible under the Citas tab.
@@ -69,6 +76,7 @@ The patient record view MUST show appointments for the patient with status `atte
 - GIVEN attended appointments for the patient
 - WHEN the record renders
 - THEN the most recent attended appointment MUST appear first
+
 ### Requirement: Pestaña Pagos en expediente del paciente
 
 El expediente del paciente MUST incluir una pestaña `Pagos` para usuarios administrativos autenticados. La pestaña MUST mostrar el saldo global del paciente, saldos por plan de tratamiento, pagos a cuenta sin plan asociado, historial de pagos y controles para registrar o reversar pagos manuales según las reglas de la capacidad `payments`.
@@ -107,4 +115,3 @@ El expediente del paciente MUST incluir una pestaña `Pagos` para usuarios admin
 - WHEN falla la carga de pagos o saldos
 - THEN la pestaña `Pagos` MUST mostrar un estado de error recuperable
 - AND MUST NOT ocultar las demás secciones del expediente
-
