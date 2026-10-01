@@ -48,17 +48,58 @@ describe("Eve stage-4 skills", () => {
     expect(text.includes("no inventes")).toBe(true);
   });
 
-  it("updates instructions to reference the three skills and preserve guardrails", () => {
+  it("creates the payment-collection skill with intent routing and no-money-movement guardrails", () => {
+    const text = read("payment-collection.md").toLowerCase();
+
+    // Tools referenced
+    for (const tool of ["get-patient-balance", "list-overdue-balances", "register-payment-intent"]) {
+      expect(text.includes(tool), `payment-collection.md must reference ${tool}`).toBe(true);
+    }
+
+    // Guardrails (case-insensitive marker strings).
+    for (const guardrail of [
+      "no negoci",
+      "descuento",
+      "waiver",
+      "links de pago",
+      "stripe",
+      "mercado pago",
+      "saldo",
+      "contacto verificado",
+    ]) {
+      expect(text.includes(guardrail), `payment-collection.md must reference guardrail: ${guardrail}`).toBe(true);
+    }
+  });
+
+  it("updates instructions to reference the four skills and preserve guardrails", () => {
     expect(existsSync(INSTRUCTIONS_FILE), "agent/instructions.md must exist").toBe(true);
     const text = readFileSync(INSTRUCTIONS_FILE, "utf-8").toLowerCase();
 
-    for (const skill of ["booking-flow.md", "clinical-escalation.md", "knowledge-answers.md"]) {
+    for (const skill of [
+      "booking-flow.md",
+      "clinical-escalation.md",
+      "knowledge-answers.md",
+      "payment-collection.md",
+    ]) {
       expect(text.includes(skill), `instructions.md must reference ${skill}`).toBe(true);
     }
 
     const guardrails = ["no diagnostic", "no recet", "no invent", "precio", "humano", "teléfono de whatsapp", "no lo cambies", "list-my-appointments", "whatsapp vinculado"];
     for (const needle of guardrails) {
       expect(text.includes(needle), `instructions.md must preserve guardrail: ${needle}`).toBe(true);
+    }
+
+    // Mora guardrails must be present (case-insensitive markers).
+    for (const moraNeedle of [
+      "colecciones",
+      "no negoci",
+      "no muev",
+      "link",
+      "saldo",
+      "stripe",
+      "listaccountsreceivable",
+    ]) {
+      expect(text.includes(moraNeedle), `instructions.md must include Mora guardrail: ${moraNeedle}`).toBe(true);
     }
   });
 });
