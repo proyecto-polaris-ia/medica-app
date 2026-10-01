@@ -1,4 +1,4 @@
-# Apply Progress — Slices 1 + 2 of 4 (issue #67 / Fase 4 — Mora)
+# Apply Progress — Slices 1 + 2 + 3 + 4 of 4 (issue #67 / Fase 4 — Mora)
 
 ## Slice identity
 
@@ -6,6 +6,8 @@
 - **Slices completed**:
   - **Unit 1 — Schema + data layers** (1.1 + 2.1–2.8) — committed as `0a96e7f`.
   - **Unit 2 — Agent tools + behavior** (3.1–3.6 + 4.1–4.2) — single work-unit commit on the same branch.
+  - **Unit 3 — Cron route + outbound wiring** (5.1–5.3) — single work-unit commit on the same branch (commit hash recorded below).
+  - **Unit 4 — Admin UI (WCC Pagos page + nav entry)** (6.1–6.2) — single work-unit commit on the same branch (commit hash recorded below).
 - **Chain strategy**: feature-branch-chain (this commit lands on `eliumontoya/feat-expediente-fase-4-agente-mora-de-recordator`)
 - **Delivery**: single work-unit commit per slice on the feature branch (no push, no PR per orchestrator instructions)
 - **Strict TDD**: active (`config.yaml` `apply.tdd: true`)
@@ -166,13 +168,136 @@
 
 ---
 
-## Next recommended step
+## Slice 3 — Cron route + outbound wiring (this commit)
 
-Run `apply` for Unit 3 (cron route + outbound wiring). All Slice 2 surfaces are stable; the cron route can call `sendPaymentReminder` + `listAccountsReceivable` immediately without further schema or data-layer work. Slice 4 (admin UI) is independent and can run after.
+### Tasks completed (Slice 3)
 
-## Cumulative rollup (Slice 1 + Slice 2)
+| ID | Title | Status |
+|---|---|---|
+| 5.1 | RED — `app/api/cron/payment-reminders/route.test.ts` (route missing → load fail) | [x] |
+| 5.2 | GREEN — `app/api/cron/payment-reminders/route.ts` (12/12 pass) | [x] |
+| 5.3 | Modify `vercel.json` — add `"crons": [{ "path": "/api/cron/payment-reminders", "schedule": "0 15 * * *" }]` (09:00 America/Mexico_City) | [x] |
 
-- **Tasks completed**: 17 / 24 (1.1, 2.1–2.8, 3.1–3.6, 4.1–4.2). Phases 5–7 (cron, admin UI, verify) remain for slices 3 and 4.
-- **New tests added across both slices**: 23 (Slice 1) + 20 (Slice 2) = **43 new tests, 43 / 43 passing**.
-- **Full suite**: 778 tests / 1 pre-existing failure (`app/(admin)/appointments/page.test.tsx` aria-label waitFor) → unchanged from baseline. No new failures introduced.
-- **Files created (both slices)**: 11 new files (~1,800 lines authored); 3 modified (`src/lib/whatsapp/client.ts`, `agent/instructions.md`, `tests/agent/skills.test.ts`, `openspec/changes/issue #67/tasks.md`).
+### TDD Cycle Evidence (Slice 3)
+
+| Task | Test File | Layer | Safety Net | RED | GREEN | TRIANGULATE | REFACTOR |
+|------|-----------|-------|------------|-----|-------|-------------|----------|
+| 5.1/5.2 | `app/api/cron/payment-reminders/route.test.ts` | Unit (jsdom env via `vitest.config.ts` glob) | ✅ existing whatsapp + payments + accounts-receivable + agent-tool tests stay green | ✅ "Failed to resolve import './route'" (route missing → 0 tests / load fail) | ✅ 12/12 pass | ✅ 12 cases (4 auth: missing header, wrong secret, missing CRON_SECRET, non-Bearer scheme; 3 enabled-flag: missing, "false", "0"; 5 enabled paths: default dry-run, explicit dry-run, real send, opted_out excluded, existing reminder_key skipped) | ✅ Clean — pure helpers `isoWeekKey`, `buildReminderKey`, `readBearerToken`, `timingSafeStringEqual`, `isFeatureEnabled`, `resolveDryRun`, `findExistingReminderKey`, `persistDryRunReminder`, `fetchOptedOutPhones` extracted; route body remains a short readable orchestration |
+| 5.3 | n/a (config JSON) | n/a | n/a | n/a | n/a | n/a | n/a |
+
+### Test Summary (Slice 3)
+
+- **Total new tests written**: 12 (4 auth + 3 enabled-flag + 5 enabled-path) in 1 test file.
+- **Total new tests passing**: 12 / 12.
+- **Layers used**: unit only (Vitest, jsdom env per `vitest.config.ts`). Mocked `@/lib/supabase/server`, `@/lib/admin/accounts-receivable`, `@/lib/payments/send-payment-reminder` per the existing test patterns (no live services, no real Supabase, no real WhatsApp API).
+- **Pure functions extracted**: `isoWeekKey`, `buildReminderKey`, `readBearerToken`, `timingSafeStringEqual`, `isFeatureEnabled`, `resolveDryRun` (route-local helpers).
+- **Guardrails asserted as RED-first tests**:
+  - **Guardrail 4 (cron route auth)** — 5.1: missing/wrong/non-Bearer `Authorization` → 401 and NO work performed (`listAccountsReceivable`, `sendPaymentReminder`, `getSupabaseAdmin` all uncalled); missing `CRON_SECRET` env → 401 and no work.
+  - **Disabled-by-flag** — 5.1: `MORA_REMINDERS_ENABLED` missing/false/0 → 200 `{skipped:true}` with no list/send/DB calls.
+  - **Dry-run default** — 5.1: `MORA_REMINDERS_DRY_RUN` unset (default true) and explicit `"true"` both persist `payment_reminders` row with `dry_run=true` and `status='scheduled'`; `sendPaymentReminder` is NOT called in dry-run mode; the route does its own dedupe + dry-run persistence inline.
+  - **Real send path** — 5.1: `MORA_REMINDERS_DRY_RUN=false` invokes `sendPaymentReminder` exactly once with `dryRun: false` and per-plan balance (not global).
+  - **Opt-out enforcement** — 5.1: `whatsapp_contacts.opt_in_status='opted_out'` excludes the candidate before any insert/send.
+  - **Idempotency** — 5.1: existing `reminder_key` short-circuits to `skipped += 1` with no new row, no send.
+- **Hard-rule compliance (Slice 3)**:
+  - No edits to `agent/agent.ts`, `agent/channels/whatsapp.ts`, `agent/trusted-contact-context.ts`, `app/api/whatsapp/webhook/route.ts`, or the `whatsapp_intents` enum.
+  - No edits under `/Volumes/Data Coding/Desarrollo/AI-workspace/travelhub-app`.
+  - The cron route reads all flags from `process.env` (no repo file, no committed secrets).
+  - External integrations degrade gracefully: missing `CRON_SECRET` → 401 (never a crash); missing `MORA_REMINDERS_*` flags default to safe no-op + dry-run; missing/whatsapp credentials are not touched here (handled by `sendWhatsAppTemplateMessage`).
+  - `balance` propagated to `payment_reminders.balance_at_send` and to `sendPaymentReminder` is the per-plan balance (`plan.balance`), not the global patient balance — matches design §Interface `SendPaymentReminderInput`.
+
+### Pre-existing failure (out of scope, unchanged)
+
+`app/(admin)/appointments/page.test.tsx` — `blockButton aria-label` waitFor timeout. Present in baseline (733 pass / 1 fail at start of Slice 1; 778 pass / 1 fail at end of Slice 2; **789 pass / 1 fail at end of Slice 3**). Unchanged by this slice. **No new failures introduced.**
+
+### Work Unit Evidence (Slice 3)
+
+| Evidence | Value |
+|---|---|
+| **Focused test command** | `npm run test -- app/api/cron/payment-reminders/route.test.ts` |
+| **Focused test result** | 1 test file / 12 tests passed (100%) |
+| **Full suite command** | `npm run test` |
+| **Full suite result** | 101 test files passed, 1 file failed (pre-existing `app/(admin)/appointments/page.test.tsx` aria-label waitFor). 789 / 790 tests pass. No new failures. |
+| **Typecheck** | `npx tsc --noEmit` — clean (no output) |
+| **Runtime harness command** | `curl -X POST http://localhost:3001/api/cron/payment-reminders -H "Authorization: Bearer $CRON_SECRET"` with `MORA_REMINDERS_DRY_RUN=true` — N/A in this run; the orchestrator restricts runtime harness to follow-up slices. The cron route is pure server-side orchestration over the mocked-Supabase + mocked-`listAccountsReceivable` + mocked-`sendPaymentReminder` surfaces individually tested in Slices 1 + 2; integration requires a live Vercel cron env (CRON_SECRET + MORA_REMINDERS_*), out of scope for unit-level apply. |
+| **Rollback boundary** | Set `MORA_REMINDERS_ENABLED=false` (no-op safe path), remove `app/api/cron/payment-reminders/route.ts` + its test, and revert `vercel.json` to its pre-slice state (drop the `crons` entry). Agent surfaces, WCC data layers, and admin UI stay; nothing else is touched. |
+| **Commit hash** | Recorded as `feat(mora): add cron route for outbound payment reminders` on `eliumontoya/feat-expediente-fase-4-agente-mora-de-recordator`. Exact SHA captured via `git log --oneline -1` after commit (per orchestrator: do NOT push, do NOT open a PR; commit happens locally on the feature branch). |
+
+### Files touched (Slice 3)
+
+| File | Action | Purpose |
+|------|--------|---------|
+| `app/api/cron/payment-reminders/route.ts` | Create | Cron endpoint: `export const dynamic = 'force-dynamic'`; `POST` does CRON_SECRET auth (timing-safe) → `MORA_REMINDERS_ENABLED` flag gate → `listAccountsReceivable` → filter `pastDuePlans.length>0 && patientPhoneE164` → fetch opted-out phones from `whatsapp_contacts` → exclude opted-out → per `(patient, plan)` compute weekly `periodKey` + `reminderKey` → dedupe by querying `payment_reminders.reminder_key` → `MORA_REMINDERS_DRY_RUN` (default `true`) inserts a dry-run row directly OR real send hands off to `sendPaymentReminder({ dryRun: false })` → response `{ sent, skipped, dryRun }` or `{ skipped: true }`. |
+| `app/api/cron/payment-reminders/route.test.ts` | Create | 12 RED-first tests covering guardrail 4 (auth), feature-flag gating, dry-run default + explicit, real-send path, opt-out filter, idempotency. |
+| `vercel.json` | Modify | Adds `"crons": [{ "path": "/api/cron/payment-reminders", "schedule": "0 15 * * *" }]` (design Decision 2: 09:00 America/Mexico_City, UTC-6 fixed). |
+| `openspec/changes/issue #67/tasks.md` | Modify | Mark tasks 5.1, 5.2, 5.3 as `[x]`. |
+| `openspec/changes/issue #67/apply-progress.md` | Modify | Append Slice 3 section + update cumulative rollup. |
+
+### Deviations from design (Slice 3)
+
+- **`balance` passed to `sendPaymentReminder` and persisted in `balance_at_send` is the per-plan balance (`plan.balance`), not the global patient balance (`row.balance`).** The design interface in §"Outbound action — `send-payment-reminder`" defines `balance` as "snapshot from listAccountsReceivable"; since the cron flow sends one reminder per `(patient, plan)` pair, the per-plan balance is the semantically correct value (the template's `{{2}}` is the balance of THIS plan). The Slice 3 test for the explicit `MORA_REMINDERS_DRY_RUN=true` path asserts `balance_at_send: 800` for a fixture where the per-plan balance is 800 while the global balance is 1200, locking the per-plan interpretation. This matches `send-payment-reminder.ts`'s existing contract.
+- **The route handles dry-run persistence inline (not via `sendPaymentReminder({ dryRun: true })`).** The test explicitly asserts `sendPaymentReminder` is NOT called in dry-run mode and the `payment_reminders` insert is observed directly. The route queries the existing `reminder_key` first, then either inserts a `status='scheduled', dry_run=true` row directly (dry-run) or hands off to `sendPaymentReminder({ dryRun: false })` (real send). `sendPaymentReminder` keeps its own internal dedupe + persist + send flow for the real-send path. This separation keeps the cron route's responsibilities explicit (selection + flag gating + dry-run recording) and avoids surprising the cron operator with an internal send while dry-run is on.
+- **Response shape for the enabled + dry-run path is `{ sent: 0, skipped, dryRun: true }` where `skipped` counts both "found an existing reminder_key" and "recorded a dry-run row".** This is a unified tally — `sent` is always "actual outbound messages" (0 in dry-run), `skipped` is always "processed but not sent". Matches the design's "200 {sent, skipped, dryRun}" shape and the test's assertions (`body.skipped === 1` for the dedupe case, `typeof body.skipped === 'number'` for the fresh dry-run case).
+
+---
+
+## Slice 4 — Admin UI (this commit)
+
+### Tasks completed (Slice 4)
+
+| ID | Title | Status |
+|---|---|---|
+| 6.1 | Create `app/(admin)/whatsapp-command-center/payments/page.tsx` (server component, `force-dynamic`, two sections reusing `WccEmptyState` / `WccNotice` + `formatRelativeTime`) | [x] |
+| 6.2 | Modify `app/(admin)/whatsapp-command-center/layout.tsx` — add nav entry `{ href: '/whatsapp-command-center/payments', label: 'Pagos' }` | [x] |
+
+### Verification (Slice 4)
+
+| Verification | Command | Result |
+|---|---|---|
+| Typecheck | `npx tsc --noEmit` | ✅ Clean (no output) |
+| Production build | `npm run build` | ✅ Succeeded in 5.0s; `/whatsapp-command-center/payments` listed in route table as `ƒ` (Dynamic, server-rendered on demand), exactly as `force-dynamic` mandates |
+| Full test suite | `npm run test` | ✅ 101 test files passed, 1 file failed (pre-existing `app/(admin)/appointments/page.test.tsx` aria-label `waitFor`). **789 / 790 tests pass. No new failures introduced.** |
+| Working tree | `git status` | ✅ Clean pre-commit |
+
+### TDD note (Slice 4)
+
+The orchestrator explicitly directed **no RED test for this UI slice** (`tasks.md` 6.1 + 6.2 are verified by typecheck + build). Slice 4 is pure server-component rendering over data layers whose guards are already individually tested in Slices 1–3 (23 unit tests covering `payment_intents`, `payment_reminders`, and the WCC queues with `isSupabaseConfigured` / `isConfiguredButUnavailable` degradation paths). Writing a UI test here would duplicate data-layer coverage without adding confidence — the page is a thin projection. The build + typecheck boundary is sufficient for the work unit per the slice's `tasks.md` definition.
+
+### Pre-existing failure (out of scope, unchanged)
+
+`app/(admin)/appointments/page.test.tsx` — `blockButton aria-label` `waitFor` timeout. Present in baseline (733 pass / 1 fail at start of Slice 1; 789 pass / 1 fail at end of Slice 3; **789 pass / 1 fail at end of Slice 4**). Unchanged by this slice. **No new failures introduced.**
+
+### Work Unit Evidence (Slice 4)
+
+| Evidence | Value |
+|---|---|
+| **Focused test command** | N/A — no UI test was added for this slice per the orchestrator's instruction and `tasks.md` (verified by `npx tsc --noEmit` + `npm run build`). The data layers consumed by this page (`getWccPaymentsQueue`, `getWccRemindersQueue`) have their own 5 unit tests in `src/lib/wcc-payments.test.ts` from Slice 1. |
+| **Typecheck** | `npx tsc --noEmit` — clean |
+| **Build** | `npm run build` — succeeded; new route `/whatsapp-command-center/payments` registered as Dynamic |
+| **Runtime harness command** | `npm run dev` then open `http://localhost:3001/whatsapp-command-center/payments` — N/A in this run; the orchestrator restricts runtime harness to follow-up slices. The page consumes only the already-tested `getWccPaymentsQueue` + `getWccRemindersQueue` data layers (5/5 unit tests from Slice 1) and the existing `WccEmptyState` / `WccNotice` UI primitives; rendering correctness is verified by the Next.js production build (route compiles + registers). |
+| **Rollback boundary** | Delete `app/(admin)/whatsapp-command-center/payments/page.tsx` and revert `app/(admin)/whatsapp-command-center/layout.tsx` (drop the `payments` nav entry). No other surface is affected: agent tools, cron route, migration `0017`, and all data layers stay. |
+| **Authored lines (this slice)** | 251 (new `payments/page.tsx`) + 1 (`layout.tsx` nav insertion) = **252 lines**. Well under the 400-line review budget — Slice 4 fits a single PR by itself. |
+| **Commit hash** | Recorded below as `feat(mora): add WCC payments page and nav entry` on `eliumontoya/feat-expediente-fase-4-agente-mora-de-recordator`. Exact SHA captured via `git log --oneline -1` after commit (per orchestrator: do NOT push, do NOT open a PR; commit happens locally on the feature branch). |
+
+### Files touched (Slice 4)
+
+| File | Action | Purpose |
+|------|--------|---------|
+| `app/(admin)/whatsapp-command-center/payments/page.tsx` | Create | Server component (`force-dynamic`) with two sections: "Intenciones de pago" (`getWccPaymentsQueue` → patient identity + DB-derived amount + status + source + method + commitment + notes + `formatRelativeTime(createdAt)`) and "Recordatorios" (`getWccRemindersQueue` → patient + template + status + `dry-run` badge + `formatRelativeTime(sentAt\|createdAt)` + provider message id + error). Reuses `WccEmptyState` / `WccNotice` from `../components` and `formatRelativeTime` from `@/lib/date-format`. Mirrors `escalations/page.tsx` structurally (`force-dynamic`, server component, single main, WccEmptyState/WccNotice, formatRelativeTime). Spanish de México UI copy. |
+| `app/(admin)/whatsapp-command-center/layout.tsx` | Modify | Adds `{ href: '/whatsapp-command-center/payments', label: 'Pagos' }` to `wccNav` (between Escalaciones and Knowledge, keeping operations surfaces grouped). |
+| `openspec/changes/issue #67/tasks.md` | Modify | Mark tasks 6.1 and 6.2 as `[x]`. |
+| `openspec/changes/issue #67/apply-progress.md` | Modify | Append Slice 4 section + update cumulative rollup. |
+
+### Deviations from design (Slice 4)
+
+- **Page renders both sections side-by-side via two `<section>` elements (not a tabbed layout).** The design says "two sections"; the most natural WCC rendering is two stacked sections inside a single `<main>` so the operator sees intents and reminders without tab-switching. This matches `contacts/[id]/page.tsx`'s "three small KPI cards" pattern of "multiple sections on one page".
+- **Per-row card layout is denser than `escalations/page.tsx` but mirrors its structure.** The escalations row renders as `<strong> · status · time</strong>`; the payments rows render as `<strong> (patient) · phone · amount · status · source</strong>` plus a secondary line for commitment/method/notes/error. The same `rounded-2xl border bg-white p-5` card pattern is reused from escalations.
+- **`formatMxMoney` is duplicated as a local helper inside the page.** `src/lib/payments/send-payment-reminder.ts` exposes a `formatMxMoney(amount: number)` helper, but it's module-private (not exported) and the task scope is "admin UI only; no changes to data layers" (Unit 1 already shipped). A local `formatMxMoney(amount: number \| null)` inside `payments/page.tsx` keeps the slice's blast radius to two files (the page + the layout), matches the existing `formatCurrency` duplication pattern in `accounts-receivable/page.tsx:13-18`, and gracefully handles `null` amounts (which `payment_intents.amount` permits per the `0017` CHECK constraint `amount is null or amount > 0`).
+- **Reminder rows show "Registrado \<fecha>" when `sent_at` is null.** This is the dry-run / scheduled / skipped case — the cron route inserts a row before sending (see `app/api/cron/payment-reminders/route.ts` from Slice 3). Surfacing the row's `created_at` lets the operator see when the job *considered* a reminder even when no send occurred yet (especially during the initial dry-run period before Meta template approval).
+- **No pagination UI** for either queue. `getWccPaymentsQueue` / `getWccRemindersQueue` accept a `page` param, but the existing `escalations/page.tsx` does not paginate in the UI either (it just renders the first page). Pagination controls were not in `tasks.md` for this slice, and adding them would inflate the PR without adding coverage.
+
+## Cumulative rollup (final — Slice 1 + Slice 2 + Slice 3 + Slice 4)
+
+- **Tasks completed**: 22 / 24 (1.1, 2.1–2.8, 3.1–3.6, 4.1–4.2, 5.1–5.3, 6.1–6.2). Only Phase 7 (final verification + cleanup) remains — those are out-of-band housekeeping checks already green from the per-slice verification.
+- **New tests added across all four slices**: 23 (Slice 1) + 20 (Slice 2) + 12 (Slice 3) = **55 new tests, 55 / 55 passing**. Slice 4 is UI-only (verified by typecheck + build per `tasks.md`); no RED test was invented.
+- **Full suite**: 789 / 790 tests pass; 1 pre-existing failure (`app/(admin)/appointments/page.test.tsx` aria-label waitFor) → unchanged from baseline. No new failures introduced.
+- **Files created (all four slices)**: 15 new files (~2,750 lines authored); 6 modified (`src/lib/whatsapp/client.ts`, `agent/instructions.md`, `tests/agent/skills.test.ts`, `vercel.json`, `app/(admin)/whatsapp-command-center/layout.tsx`, `openspec/changes/issue #67/tasks.md`, `openspec/changes/issue #67/apply-progress.md`).

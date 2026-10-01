@@ -6,6 +6,7 @@ const wccNav = [
   { href: '/whatsapp-command-center/contacts', label: 'Contactos' },
   { href: '/whatsapp-command-center/conversations', label: 'Conversaciones' },
   { href: '/whatsapp-command-center/escalations', label: 'Escalaciones' },
+  { href: '/whatsapp-command-center/payments', label: 'Pagos' },
   { href: '/whatsapp-command-center/knowledge', label: 'Knowledge' },
 ];
 
