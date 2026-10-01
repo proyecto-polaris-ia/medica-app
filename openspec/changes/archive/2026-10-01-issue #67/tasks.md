@@ -54,8 +54,8 @@ No changes to `agent/agent.ts` (tools are auto-discovered), `agent/channels/what
 
 ## Phase 6: Admin UI (WhatsApp Command Center)
 
-- [ ] 6.1 Create `app/(admin)/whatsapp-command-center/payments/page.tsx` — server component, `export const dynamic = 'force-dynamic'`; two sections via `getWccPaymentsQueue()` + `getWccRemindersQueue()` from `src/lib/wcc-payments.ts`: "Intenciones de pago" (patient identity, DB-derived amount, status, created time) and "Recordatorios" (patient, template, status, `dry_run` badge, `sent_at`); reuse `WccEmptyState` / `WccNotice` from `app/(admin)/whatsapp-command-center/components.tsx` (read-only) and `formatRelativeTime` from `src/lib/date-format.ts` (read-only); mirror `app/(admin)/whatsapp-command-center/escalations/page.tsx` (read-only pattern). Spanish de México UI copy. Verify: `npx tsc --noEmit` + `npm run build`. Depends: 2.8.
-- [ ] 6.2 Modify `app/(admin)/whatsapp-command-center/layout.tsx` — add nav entry `{ href: '/whatsapp-command-center/payments', label: 'Pagos' }` to the `wccNav` array. Verify: `npm run build` + `npx tsc --noEmit`. Depends: 6.1.
+- [x] 6.1 Create `app/(admin)/whatsapp-command-center/payments/page.tsx` — server component, `export const dynamic = 'force-dynamic'`; two sections via `getWccPaymentsQueue()` + `getWccRemindersQueue()` from `src/lib/wcc-payments.ts`: "Intenciones de pago" (patient identity, DB-derived amount, status, created time) and "Recordatorios" (patient, template, status, `dry_run` badge, `sent_at`); reuse `WccEmptyState` / `WccNotice` from `app/(admin)/whatsapp-command-center/components.tsx` (read-only) and `formatRelativeTime` from `src/lib/date-format.ts` (read-only); mirror `app/(admin)/whatsapp-command-center/escalations/page.tsx` (read-only pattern). Spanish de México UI copy. Verify: `npx tsc --noEmit` + `npm run build`. Depends: 2.8.
+- [x] 6.2 Modify `app/(admin)/whatsapp-command-center/layout.tsx` — add nav entry `{ href: '/whatsapp-command-center/payments', label: 'Pagos' }` to the `wccNav` array. Verify: `npm run build` + `npx tsc --noEmit`. Depends: 6.1.
 
 ## Phase 7: Full verification + cleanup
 
