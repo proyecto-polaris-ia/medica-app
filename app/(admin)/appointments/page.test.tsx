@@ -12,13 +12,29 @@ const SERVICE_ID = '550e8400-e29b-41d4-a716-446655440002';
 const PATIENT_ID = '550e8400-e29b-41d4-a716-446655440003';
 const APPOINTMENT_ID = '550e8400-e29b-41d4-a716-446655440004';
 
+// La clínica opera en America/Mexico_City (UTC-6, sin DST). Fijamos la cita en el
+// día 10 del mes actual para que el bloque siempre caiga dentro de la grilla visible
+// del calendario, sin depender de una fecha hardcodeada que envejece (time-bomb).
+function currentMonthDate(day: number): { startAt: string; endAt: string } {
+  const now = new Date();
+  // 14:00 UTC == 08:00 hora clínica (UTC-6).
+  const startUtc = Date.UTC(now.getFullYear(), now.getMonth(), day, 14, 0, 0);
+  const endUtc = Date.UTC(now.getFullYear(), now.getMonth(), day, 14, 30, 0);
+  return {
+    startAt: new Date(startUtc).toISOString(),
+    endAt: new Date(endUtc).toISOString(),
+  };
+}
+
+const { startAt, endAt } = currentMonthDate(10);
+
 const BASE_APPOINTMENT = {
   id: APPOINTMENT_ID,
   patientId: PATIENT_ID,
   serviceId: SERVICE_ID,
   providerId: PROVIDER_ID,
-  startAt: '2026-09-10T14:00:00.000Z',
-  endAt: '2026-09-10T14:30:00.000Z',
+  startAt,
+  endAt,
   status: 'confirmed',
   notes: null,
 };
