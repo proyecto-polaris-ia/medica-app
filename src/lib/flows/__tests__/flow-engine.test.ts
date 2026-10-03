@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { FlowEngine } from '../flow-engine';
 import { bookAppointmentFlow } from '../definitions/book-appointment.flow';
+import { onboardingFlow } from '../definitions/onboarding.flow';
 
 describe('FlowEngine', () => {
   const engine = new FlowEngine();
@@ -115,6 +116,86 @@ describe('FlowEngine', () => {
       const result = engine.execute(bookAppointmentFlow, state, {});
       
       expect(result.action).toBe('complete');
+    });
+  });
+
+  describe('advance respects required (symmetry with execute)', () => {
+    it('asks for the missing entity when the target state requires it', () => {
+      const state = {
+        name: 'ask_conditions_detail',
+        entities: {},
+      };
+
+      const result = engine.advance(onboardingFlow, state, 'next_pregnancy');
+
+      expect(result.nextState.name).toBe('ask_pregnancy');
+      expect(result.action).toBe('ask');
+      expect(result.missingEntity).toBe('onboardingAnswer');
+      expect(result.prompt).toContain('embarazada');
+    });
+
+    it('executes the target action when the answer is provided while advancing', () => {
+      const state = {
+        name: 'ask_conditions_detail',
+        entities: { onboardingAnswer: 'Hipertensión' },
+      };
+
+      const result = engine.advance(
+        onboardingFlow,
+        state,
+        'next_pregnancy',
+        { onboardingAnswer: 'sí' }
+      );
+
+      expect(result.nextState.name).toBe('ask_pregnancy');
+      expect(result.action).toBe('evaluateOnboardingAnswer');
+      expect(result.missingEntity).toBeUndefined();
+    });
+
+    it('keeps booking states with required but no action asking for the entity', () => {
+      const state = {
+        name: 'collect_provider',
+        entities: { localDate: '2026-09-15', serviceId: 'service-123' },
+      };
+
+      const result = engine.advance(bookAppointmentFlow, state, 'has_provider');
+
+      expect(result.nextState.name).toBe('check_availability');
+      expect(result.action).toBe('getFreeSlots');
+    });
+
+    it('keeps booking terminal transition unchanged', () => {
+      const state = {
+        name: 'confirm_booking',
+        entities: { startAt: '2026-09-15T10:00:00', endAt: '2026-09-15T10:30:00' },
+      };
+
+      const result = engine.advance(bookAppointmentFlow, state, 'skip_notes');
+
+      expect(result.nextState.name).toBe('complete');
+      expect(result.prompt).toContain('Tu cita está confirmada');
+    });
+
+    it('preserves metadata when asking for the missing entity', () => {
+      const state = {
+        name: 'ask_conditions_detail',
+        entities: {},
+        metadata: { onboarding: { context: { patientId: 'p1' } } },
+      };
+
+      const result = engine.advance(
+        onboardingFlow,
+        state,
+        'next_pregnancy',
+        undefined,
+        { extra: true }
+      );
+
+      expect(result.action).toBe('ask');
+      expect(result.nextState.metadata).toMatchObject({
+        onboarding: { context: { patientId: 'p1' } },
+        extra: true,
+      });
     });
   });
 });

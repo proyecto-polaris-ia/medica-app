@@ -37,6 +37,14 @@ const CONFIRM_NO_PATTERNS = [
   /^(mejor no|paso|skip)$/i,
 ];
 
+// Intents que NO cuentan como cambio de tema según el flujo activo.
+// Sensible al flujo: para reserva `inquiry` sí es cambio de tema; para
+// onboarding `inquiry`/`support` son respuestas esperadas (design.md D6).
+const FLOW_TOPIC_CHANGE_INTENTS: Record<string, string[]> = {
+  book_appointment: ['book_appointment', 'check_availability', 'unknown'],
+  onboarding: ['inquiry', 'support', 'unknown'],
+};
+
 /**
  * Detecta si el mensaje es una cancelación explícita del flujo
  */
@@ -76,12 +84,15 @@ export function detectConfirmation(message: string): 'yes' | 'no' | null {
 export function detectTopicChange(
   message: string,
   currentFlowState: string,
-  classifiedIntent: string
+  classifiedIntent: string,
+  flowName: string = 'book_appointment'
 ): boolean {
-  // Si el intent clasificado es diferente al flujo activo, es cambio de tema
-  const isTopicChange = classifiedIntent !== 'book_appointment' && 
-                        classifiedIntent !== 'check_availability' &&
-                        classifiedIntent !== 'unknown';
+  const allowedIntents =
+    FLOW_TOPIC_CHANGE_INTENTS[flowName] ??
+    FLOW_TOPIC_CHANGE_INTENTS.book_appointment;
+
+  // Si el intent clasificado no pertenece al flujo activo, es cambio de tema
+  const isTopicChange = !allowedIntents.includes(classifiedIntent);
   
   if (isTopicChange) {
     debugLogger.orchestrator.topicChange(currentFlowState, classifiedIntent);
@@ -97,7 +108,8 @@ export function analyzeFlowControl(
   message: string,
   currentFlowState: string | null,
   pendingAction: string | undefined,
-  classifiedIntent: string
+  classifiedIntent: string,
+  flowName: string = 'book_appointment'
 ): FlowControlResult {
   // Si no hay flujo activo, continuar normalmente
   if (!currentFlowState) {
@@ -128,7 +140,7 @@ export function analyzeFlowControl(
   }
 
   // Detectar cambio de tema
-  if (detectTopicChange(message, currentFlowState, classifiedIntent)) {
+  if (detectTopicChange(message, currentFlowState, classifiedIntent, flowName)) {
     return { 
       type: 'topic_change', 
       confidence: 0.8,
@@ -148,6 +160,7 @@ export function generateTopicChangeConfirmation(currentFlowName: string): string
     'book_appointment': 'la creación de cita',
     'reschedule_appointment': 'la reprogramación de cita',
     'cancel_appointment': 'la cancelación de cita',
+    'onboarding': 'tu registro de datos médicos',
   };
 
   const flowDescription = flowNames[currentFlowName] || 'el proceso actual';

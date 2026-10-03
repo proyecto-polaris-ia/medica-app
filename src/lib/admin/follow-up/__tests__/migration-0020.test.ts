@@ -13,11 +13,11 @@ import { describe, expect, it } from 'vitest';
 const REPO_ROOT = process.cwd();
 const MIGRATION = path.join(
   REPO_ROOT,
-  'supabase/migrations/0020_follow_up_message_drafts.sql'
+  'supabase/migrations/0021_follow_up_message_drafts.sql'
 );
 const DOWN_MIGRATION = path.join(
   REPO_ROOT,
-  'supabase/migrations/down/0020_follow_up_message_drafts.down.sql'
+  'supabase/migrations/down/0021_follow_up_message_drafts.down.sql'
 );
 
 function listFiles(dir: string): string[] {
