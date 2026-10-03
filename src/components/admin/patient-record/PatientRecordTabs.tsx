@@ -5,6 +5,7 @@ import type {
   ClinicalVisit,
   MedicalHistory,
   Patient,
+  PatientFile,
   PatientReceivableSummary,
   PatientRecord,
   Payment,
@@ -17,8 +18,16 @@ import { PatientAppointmentsTab } from './PatientAppointmentsTab';
 import { MedicalHistoryBadge } from './MedicalHistoryBadge';
 import { TreatmentPlansTab } from './TreatmentPlansTab';
 import { PatientPaymentsTab } from './PatientPaymentsTab';
+import { PatientFilesTab } from './PatientFilesTab';
 
-type TabId = 'data' | 'history' | 'visits' | 'appointments' | 'plans' | 'payments';
+type TabId =
+  | 'data'
+  | 'history'
+  | 'visits'
+  | 'appointments'
+  | 'plans'
+  | 'payments'
+  | 'files';
 
 type PatientRecordTabsProps = {
   patient: Patient;
@@ -34,11 +43,15 @@ type PatientRecordTabsProps = {
   paymentsSummary: PatientReceivableSummary;
   paymentsLoading: boolean;
   paymentsError: string | null;
+  files: PatientFile[];
+  filesLoading: boolean;
+  filesError: string | null;
   onPatientUpdated: (patient: Patient) => void;
   onHistoryUpdated: (history: MedicalHistory) => void;
   onVisitsChanged: () => void;
   onPlansChanged: () => void;
   onPaymentsChanged: () => void;
+  onFilesChanged: () => void;
 };
 
 const TABS: { id: TabId; label: string }[] = [
@@ -48,6 +61,7 @@ const TABS: { id: TabId; label: string }[] = [
   { id: 'appointments', label: 'Citas' },
   { id: 'plans', label: 'Plan de tratamiento' },
   { id: 'payments', label: 'Pagos' },
+  { id: 'files', label: 'Archivos' },
 ];
 
 export function PatientRecordTabs({
@@ -64,11 +78,15 @@ export function PatientRecordTabs({
   paymentsSummary,
   paymentsLoading,
   paymentsError,
+  files,
+  filesLoading,
+  filesError,
   onPatientUpdated,
   onHistoryUpdated,
   onVisitsChanged,
   onPlansChanged,
   onPaymentsChanged,
+  onFilesChanged,
 }: PatientRecordTabsProps) {
   const [activeTab, setActiveTab] = useState<TabId>('data');
 
@@ -138,6 +156,16 @@ export function PatientRecordTabs({
             loading={paymentsLoading}
             error={paymentsError}
             onPaymentsChanged={onPaymentsChanged}
+          />
+        )}
+        {activeTab === 'files' && (
+          <PatientFilesTab
+            patientId={patient.id}
+            clinicalVisits={clinicalVisits}
+            files={files}
+            loading={filesLoading}
+            error={filesError}
+            onFilesChanged={onFilesChanged}
           />
         )}
       </div>
