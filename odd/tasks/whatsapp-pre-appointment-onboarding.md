@@ -56,6 +56,10 @@ Persistence mode: openspec (config.yaml, artifact_store hybrid)
 - bad47c8 docs(openspec): design D1–D12 (design)
 - 97f1d54 docs(openspec): tasks, 68 tareas (tasks)
 - 5531485 feat(clinical): provenance column source (Apply Fase 1, work unit A/D1) — migración 20261003155627 + down, types, medical-history, tests 10/10, tsc limpio
+- 709471e feat(flows): flujo onboarding + registry + advance symmetry (work unit B/D2 D3 D6) — 80 tests flows
+- c188f13 docs(odd): evidencia de commits
+- 7780ad3 feat(whatsapp): disparador, handlers, urgencia+escalación (work unit C/D4 D5 D7) — 170 tests flows+whatsapp, tsc limpio
+- 0c2e7ff test(follow-up): fix preexistente ruta migración 0020→0021 (desbloquea V.1); suite completa 1388 verde
 
 ## Notas de contexto (memoria)
 - Subagentes sdd-{phase} no existen; usar gentle-ai-explore/worker/verify.
