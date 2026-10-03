@@ -97,6 +97,21 @@ reprogramada / no_asistió / atendida`.
 `whatsapp_messages`, `whatsapp_intents`, `whatsapp_escalations`,
 `whatsapp_knowledge_entries`, `crm_sync_events`.
 
+### Migraciones
+
+Supabase acepta tanto nomenclatura secuencial como timestamp (y aplica los
+archivos en orden lexicográfico), pero la **convención vigente en este repo es
+secuencial**: `supabase/migrations/NNNN_descripcion_snake_case.sql`
+(p. ej. `0017_payment_intents_reminders.sql`), con 4 dígitos y ceros a la
+izquierda. Las migraciones nuevas siguen ese formato. Si dos ramas crean la
+misma secuencia, se renumera localmente antes de hacer merge.
+
+Reglas de contenido: instantes de fecha/hora siempre `timestamptz`
+(presentación en `America/Mexico_City`, ver `src/lib/admin/clinic-time.ts`);
+cambios de estado de cita escriben su columna de transición
+(`confirmed_at`, `cancelled_at`, `no_show_at`) además del `status`
+(ver decisiones en issues #86–#89).
+
 ## 5. Flujo del agente dual
 
 ```
