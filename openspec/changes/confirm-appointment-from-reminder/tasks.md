@@ -342,18 +342,25 @@ explícita del issue #87.
 
 ## Fase 5 — Documentación y ejemplo de entorno
 
-- [ ] 5.1 Agregar `WHATSAPP_REMINDER_REPLY_ENABLED=false` a `.env.local.example`
+- [-] 5.1 Agregar `WHATSAPP_REMINDER_REPLY_ENABLED=false` a `.env.local.example`
   junto a `WHATSAPP_FLOW_ENGINE_ENABLED`, con comentario breve: default **off**;
   encender solo tras verificar (rollback = apagarlo, sin deploy ni migración).
   - Verificación: `grep -n "WHATSAPP_REMINDER_REPLY_ENABLED=false" .env.local.example`
     → una coincidencia; confirmar que está junto a `WHATSAPP_FLOW_ENGINE_ENABLED` y
     que su default documentado es `false`.
-- [ ] 5.2 Verificar que el nombre exacto `WHATSAPP_REMINDER_REPLY_ENABLED`
+  - **Diferida (parte D):** bloqueado por política de seguridad del harness; la
+    línea `WHATSAPP_REMINDER_REPLY_ENABLED=false` está documentada en `design.md`
+    §8 y se agregará a `.env.local.example` manualmente por el humano.
+- [-] 5.2 Verificar que el nombre exacto `WHATSAPP_REMINDER_REPLY_ENABLED`
   coincide en `.env.local.example`, `src/lib/citas/reminder-reply-flag.ts` y las
   tareas/design (sin variantes).
   - Verificación:
     `grep -rn "WHATSAPP_REMINDER_REPLY_ENABLED" .env.local.example src/lib/citas/reminder-reply-flag.ts`
     → mismo identificador en ambos, sin sinónimos.
+  - **Diferida (parte D):** el cotejo estricto contra `.env.local.example` depende
+    de 5.1 (ruta bloqueada). Mitad `src/` verificada: identificador único
+    `WHATSAPP_REMINDER_REPLY_ENABLED`, sin variantes, con única lectura de
+    `process.env` en `src/lib/citas/reminder-reply-flag.ts:20`.
 
 > **Pendiente (parte C):** 5.1 queda diferido al padre (`.env.local.example` está
 > bloqueado por la política de seguridad del harness: no se leen rutas `.env*`).
@@ -361,6 +368,11 @@ explícita del issue #87.
 > verificada (identificador único `WHATSAPP_REMINDER_REPLY_ENABLED`, sin variantes,
 > única lectura en `src/lib/citas/reminder-reply-flag.ts`), pero la comparación
 > contra `.env.local.example` requiere esa ruta.
+>
+> **Confirmación (parte D):** 5.1 y 5.2 quedan marcadas `[-]` (diferidas) por el
+> bloqueo de `.env.local.example`; no hay tarea de documentación de usuario
+> adicional en la Fase 5/6 (la única exigencia documental del cambio es la línea
+> de entorno, diferida al humano).
 
 **Cobertura de spec:** R11 (Control por feature flag, documentación del default
 apagado).
@@ -369,19 +381,26 @@ apagado).
 
 ## Fase 6 — Verificación global
 
-- [ ] 6.1 Ejecutar la suite completa: `npm run test` → **pasa**.
-- [ ] 6.2 Ejecutar el typecheck: `npx tsc --noEmit` → sin errores.
-- [ ] 6.3 Ejecutar el build: `npm run build` → **éxito**.
-- [ ] 6.4 Registrar la limitación de lint: `npm run lint` no existe en
+- [x] 6.1 Ejecutar la suite completa: `npm run test` → **pasa**. Observado
+  (parte D): **954/954 (114 archivos)**.
+- [x] 6.2 Ejecutar el typecheck: `npx tsc --noEmit` → sin errores. Observado
+  (parte D): exit 0, sin salida.
+- [x] 6.3 Ejecutar el build: `npm run build` → **éxito**. Observado (parte D):
+  exit 0, compilación de rutas completada.
+- [-] 6.4 Registrar la limitación de lint: `npm run lint` no existe en
   `package.json` (no hay `eslint`); **no** inventar runner, documentar el hueco.
   - Verificación: `node -e "console.log(require('./package.json').scripts.lint)"`
-    → `undefined`.
-- [ ] 6.5 Verificación de apagado seguro: confirmar que el commit llega con el
+    → `undefined` (observado en la parte D).
+  - **Diferida (parte D):** script inexistente en `package.json` (gap preexistente).
+- [x] 6.5 Verificación de apagado seguro: confirmar que el commit llega con el
   flag apagado por default (ni `true` harcodeado ni `process.env` leído fuera de
   `reminder-reply-flag.ts`).
   - Verificación:
     `grep -rn "WHATSAPP_REMINDER_REPLY_ENABLED" src/ | grep -v "eve-flag"` →
     única lectura en `src/lib/citas/reminder-reply-flag.ts`.
+  - Observado (parte D): única lectura de `process.env` en
+    `src/lib/citas/reminder-reply-flag.ts:20`; el resto de coincidencias en `src/`
+    son el comentario del módulo y el nombre en su prueba. Flag default **off**.
 
 ---
 
