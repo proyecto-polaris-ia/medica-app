@@ -44,9 +44,10 @@ Persistence mode: openspec (config.yaml, artifact_store hybrid)
 - [ ] Fase 3: nudge en recordatorio de cita + badge onboarding pendiente/completo en panel (extender MedicalHistoryBadge.tsx).
 
 ### Verify / Archive / Entrega
-- [ ] Verify: suite, tsc, build — PASS o PASS WITH WARNINGS.
-- [ ] Archive: materializar spec en openspec/specs/, mover change a archive/.
-- [ ] Revisión RDD por fase + PRs apilados.
+- [x] Verify: PASS WITH WARNINGS — 154 archivos/1447 tests, tsc 0, build OK; warnings: sin script lint (ambiental), migraciones revisadas estructuralmente (sin stack local), HSM onboarding_pendiente pendiente en Meta.
+- [x] Archive: specs materializadas (whatsapp-onboarding 8 req/18 esc; patient-onboarding-status 4 req/11 esc) + merge de MODIFIED en flow-engine, whatsapp-inbound-automation, clinical-record (escenarios de booking restaurados); change en archive/2026-10-03-whatsapp-pre-appointment-onboarding/.
+- [x] Revisión RDD por fase: 3 lineages approved con autoridad quemada (review-4c62be58c351c2de, review-f102564e27a9dbcb, review-c949f9c249ac566c).
+- [ ] PRs apilados (P1→main, P2→P1, P3→P2 con Closes #90).
 
 ## Guardrails del issue (innegociables)
 - No diagnóstico; registrar literal, sin interpretar ni clasificar.
