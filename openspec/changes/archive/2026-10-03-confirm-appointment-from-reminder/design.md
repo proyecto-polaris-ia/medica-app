@@ -176,6 +176,15 @@ Notas de exactitud:
   trigger `set_whatsapp_contact_linked_patient` con la misma normalización).
 - La query acota por ventana y estado de cita en PostgREST; el filtro de teléfono
   y la elegibilidad final se aplican con `pickEligibleReminderReplyCandidate`.
+- **Enmienda R10 (idempotencia de cancelaciones repetidas):** para intenciones de
+  **cancelación** la query añade `cancelled` a los estados de cita
+  (`requested, pending, confirmed, cancelled`). Una cita ya cancelada **no** es
+  elegible (`CANCEL_ALLOWED_FROM` la excluye a propósito), pero necesitamos verla
+  para reconocer la respuesta repetida y responder un no-op manejado sin
+  transición ni escalación nueva (spec “Cancelación repetida sobre una cita ya
+  cancelada”). Las intenciones de **confirmación** conservan la query original
+  (`requested, pending, confirmed`): su repetición ya se reconoce con el estado
+  `confirmed`, que sí está en el filtro.
 - **RLS/service-role:** `appointment_reminders`, `appointments` y `patients`
   tienen RLS forzado con policies sólo para `authenticated`; el pipeline usa
   `getSupabaseAdmin()` (service role, `BYPASSRLS`, ver `0003_agenda_rls.sql`), por
@@ -324,9 +333,14 @@ de reserva existente; esto se declara explícitamente como no-goal de automatiza
     pipeline no cumpliría el `MUST`. Solo la intención `'none'` deja el pipeline
     100% intacto.
 - **Cita ya confirmada / ya cancelada (repetida, en ventana):** no-op sin
-  transición; se responde un acuse corto ya confirmado (permitido por el spec:
-  prohíbe revertir y duplicar escalación, no acusar) y **no** se duplica
-  escalación.
+  transición; se responde un acuse corto ya confirmado/cancelado (permitido por
+  el spec: prohíbe revertir y duplicar escalación, no acusar) y **no** se duplica
+  escalación. La detección de la cita ya cancelada reutiliza la query ampliada de
+  §3 (`cancelled`) y comprueba ventana + teléfono sin exigir estado elegible
+  (helper local `isWithinReminderWindowAndPhone`, porque
+  `isEligibleReminderReplyCandidate` excluye a propósito los estados terminales).
+  Sin candidato alguno en la ventana no hay forma de saber el estado previo, así
+  que se mantiene la escalación `out_of_window` (R8).
 
 ### 8. Feature flag
 

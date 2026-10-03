@@ -18,6 +18,7 @@ import {
   classifyReminderReply,
   isEligibleReminderReplyCandidate,
   pickEligibleReminderReplyCandidate,
+  normalizePhoneValue,
   reminderReplyWindowStart,
 } from './reminder-reply';
 import {
@@ -101,18 +102,28 @@ function mapReminderRow(row: ReminderRow): ReminderReplyCandidate | null {
 
 /**
  * Candidatas de recordatorio vigente: `status='sent'`, `dry_run=false`,
- * `sent_at >= now - 36h` y cita en estado `requested|pending|confirmed`.
+ * `sent_at >= now - 36h` y cita en estado `requested|pending|confirmed`. Para
+ * cancelaciones se incluye además `cancelled` (ver `handleReminderReply`): una
+ * cita ya cancelada por el recordatorio no vuelve a ser elegible, pero
+ * necesitamos verla para detectar la cancelación repetida (spec R10) y
+ * responder sin transición ni escalación nueva.
  * `order sent_at desc` + `limit 10`; el emparejamiento de teléfono y la
  * elegibilidad final se resuelven en JS.
  */
-async function findRecentReminderCandidates(now: Date): Promise<ReminderReplyCandidate[]> {
+async function findRecentReminderCandidates(
+  now: Date,
+  options: { includeCancelled?: boolean } = {}
+): Promise<ReminderReplyCandidate[]> {
+  const appointmentStatuses = options.includeCancelled
+    ? ['requested', 'pending', 'confirmed', 'cancelled']
+    : ['requested', 'pending', 'confirmed'];
   const { data, error } = await getSupabaseAdmin()
     .from('appointment_reminders')
     .select(REMINDER_REPLY_SELECT)
     .eq('status', 'sent')
     .eq('dry_run', false)
     .gte('sent_at', reminderReplyWindowStart(now).toISOString())
-    .in('appointments.status', ['requested', 'pending', 'confirmed'])
+    .in('appointments.status', appointmentStatuses)
     .order('sent_at', { ascending: false })
     .limit(REMINDER_REPLY_LIMIT);
   if (error) throw new Error(error.message);
@@ -123,6 +134,26 @@ async function findRecentReminderCandidates(now: Date): Promise<ReminderReplyCan
     if (candidate) candidates.push(candidate);
   }
   return candidates;
+}
+
+/**
+ * Teléfono coincidente y `sentAt` dentro de `[now - 36h, now]`, sin exigir un
+ * estado elegible. Se usa para reconocer una respuesta repetida sobre una cita
+ * ya terminal (p. ej. `cancelled`), donde `isEligibleReminderReplyCandidate`
+ * devolvería `false` por diseño. No se puede reutilizar la función pura porque
+ * su set permitido excluye los estados terminales.
+ */
+function isWithinReminderWindowAndPhone(
+  candidate: ReminderReplyCandidate,
+  input: { phone: string; now: Date }
+): boolean {
+  if (normalizePhoneValue(candidate.patientPhoneE164) !== normalizePhoneValue(input.phone)) {
+    return false;
+  }
+  const sentAt = Date.parse(candidate.sentAt);
+  if (Number.isNaN(sentAt)) return false;
+  const now = input.now.getTime();
+  return sentAt >= reminderReplyWindowStart(input.now).getTime() && sentAt <= now;
 }
 
 async function escalate(input: {
@@ -155,6 +186,8 @@ async function escalate(input: {
  *   escala además ofreciendo reagendar.
  * - Confirmación sobre cita ya `confirmed` → acuse corto, sin transición ni
  *   escalación.
+ * - Cancelación sobre cita ya `cancelled` (respuesta repetida) → acuse corto,
+ *   **sin** transición ni escalación nueva (spec R10).
  * - Sin candidato elegible (fuera de ventana / sin recordatorio) → escalación
  *   suave `${providerMessageId}:out_of_window`, sin transición.
  */
@@ -187,7 +220,9 @@ export async function handleReminderReply(
   }
 
   const to = intent === 'confirmation' ? 'confirmed' : 'cancelled';
-  const candidates = await findRecentReminderCandidates(now);
+  const candidates = await findRecentReminderCandidates(now, {
+    includeCancelled: to === 'cancelled',
+  });
   const picked = pickEligibleReminderReplyCandidate(candidates, {
     phone: input.phone,
     now,
@@ -234,6 +269,25 @@ export async function handleReminderReply(
         };
       }
     }
+
+    // Cancelación repetida sobre una cita ya cancelada: no-op manejado, sin
+    // transición y SIN duplicar la escalación (spec R10).
+    if (to === 'cancelled') {
+      const already = candidates.find(
+        (candidate) =>
+          candidate.appointmentStatus === 'cancelled' &&
+          isWithinReminderWindowAndPhone(candidate, { phone: input.phone, now })
+      );
+      if (already) {
+        return {
+          handled: true,
+          outcome: 'already',
+          responseText: buildReminderCancellationAck({ startAt: already.startAt }),
+          needsHuman: false,
+        };
+      }
+    }
+
     return outOfWindow();
   }
 

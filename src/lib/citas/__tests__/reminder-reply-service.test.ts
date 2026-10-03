@@ -174,6 +174,21 @@ describe('handleReminderReply — confirmación', () => {
 describe('handleReminderReply — cancelación', () => {
   beforeEach(() => vi.resetAllMocks());
 
+  it('incluye las citas ya canceladas en la query para detectar repetidos', async () => {
+    const query = buildQuery();
+    mockReminders(query);
+    query._result = { data: [], error: null };
+
+    await handleReminderReply(baseInput({ message: 'no puedo' }));
+
+    expect(query.in).toHaveBeenCalledWith('appointments.status', [
+      'requested',
+      'pending',
+      'confirmed',
+      'cancelled',
+    ]);
+  });
+
   it('transiciona, anexa motivo y escala una sola vez ofreciendo reagendar', async () => {
     const query = buildQuery();
     mockReminders(query);
@@ -273,10 +288,33 @@ describe('handleReminderReply — fuera de ventana', () => {
 describe('handleReminderReply — idempotencia', () => {
   beforeEach(() => vi.resetAllMocks());
 
-  it('mantiene la misma llave de escalación en una cancelación repetida', async () => {
+  // Spec R10, escenario "Cancelación repetida sobre una cita ya cancelada":
+  // no cambia el estado y NO duplica la escalación.
+  it('cancelación repetida sobre una cita ya cancelada no transiciona ni escala', async () => {
     const query = buildQuery();
     mockReminders(query);
-    // Cita ya cancelada: no aparece en la query de elegibles.
+    query._result = {
+      data: [
+        reminderRow({ appointments: { ...reminderRow().appointments, status: 'cancelled' } }),
+      ],
+      error: null,
+    };
+
+    const first = await handleReminderReply(baseInput({ message: 'no puedo' }));
+    const second = await handleReminderReply(baseInput({ message: 'no puedo' }));
+
+    expect(transitionAppointmentFromReminder).not.toHaveBeenCalled();
+    expect(createEveWhatsAppEscalation).not.toHaveBeenCalled();
+    for (const result of [first, second]) {
+      expect(result).toMatchObject({ handled: true, outcome: 'already', needsHuman: false });
+      expect(result.responseText).toContain(formatClinicDateLabel(START_AT));
+    }
+  });
+
+  it('mantiene la misma llave de escalación cuando no hay ningún candidato', async () => {
+    const query = buildQuery();
+    mockReminders(query);
+    // Sin recordatorio vigente no hay forma de saber si ya estaba cancelada.
     query._result = { data: [], error: null };
 
     await handleReminderReply(baseInput({ message: 'no puedo' }));
@@ -290,6 +328,49 @@ describe('handleReminderReply — idempotencia', () => {
       `${PROVIDER_MESSAGE_ID}:out_of_window`,
       `${PROVIDER_MESSAGE_ID}:out_of_window`,
     ]);
+  });
+
+  it('una cita cancelada de otro teléfono no se toma como repetida', async () => {
+    const query = buildQuery();
+    mockReminders(query);
+    query._result = {
+      data: [
+        reminderRow({
+          appointments: {
+            ...reminderRow().appointments,
+            status: 'cancelled',
+            patients: { full_name: 'Otra', phone_e164: '+5215599999999' },
+          },
+        }),
+      ],
+      error: null,
+    };
+
+    const result = await handleReminderReply(baseInput({ message: 'no puedo' }));
+
+    expect(transitionAppointmentFromReminder).not.toHaveBeenCalled();
+    expect(result.outcome).toBe('out_of_window');
+    expect(createEveWhatsAppEscalation).toHaveBeenCalledTimes(1);
+  });
+
+  it('una cita cancelada fuera de la ventana de 36 h no se toma como repetida', async () => {
+    const query = buildQuery();
+    mockReminders(query);
+    query._result = {
+      data: [
+        reminderRow({
+          sent_at: '2026-10-03T20:00:00.000Z',
+          appointments: { ...reminderRow().appointments, status: 'cancelled' },
+        }),
+      ],
+      error: null,
+    };
+
+    const result = await handleReminderReply(baseInput({ message: 'no puedo' }));
+
+    expect(transitionAppointmentFromReminder).not.toHaveBeenCalled();
+    expect(result.outcome).toBe('out_of_window');
+    expect(createEveWhatsAppEscalation).toHaveBeenCalledTimes(1);
   });
 });
 
