@@ -34,11 +34,22 @@ function query(rows: Row[], error: { message?: string } | null = null): MockQuer
   }) as unknown as MockQuery;
 }
 
-function makeDb(tables: Record<string, Row[]>, errors: Record<string, { message?: string }> = {}) {
+/**
+ * `tables` acepta filas fijas o una función por número de lectura de esa tabla
+ * (0 = primera lectura), para distinguir la lectura del rango actual de la del
+ * periodo anterior.
+ */
+function makeDb(
+  tables: Record<string, Row[] | ((call: number) => Row[])>,
+  errors: Record<string, { message?: string }> = {}
+) {
   const created: Record<string, MockQuery[]> = {};
   const from = vi.fn((table: string) => {
-    const q = query(tables[table] ?? [], errors[table] ?? null);
-    (created[table] ??= []).push(q);
+    const entry = tables[table] ?? [];
+    const tableReads = (created[table] ??= []);
+    const tableRows = typeof entry === 'function' ? entry(tableReads.length) : entry;
+    const q = query(tableRows, errors[table] ?? null);
+    tableReads.push(q);
     return q;
   });
   (getSupabaseAdmin as ReturnType<typeof vi.fn>).mockReturnValue({ from });
@@ -55,12 +66,24 @@ function callsFor(table: MockQuery[] | undefined, method: MockMethod) {
 const NOW = new Date('2026-10-15T18:00:00.000Z');
 const OCT_START = '2026-10-01T06:00:00.000Z';
 const OCT_END = '2026-11-01T06:00:00.000Z';
+const SEP_START = '2026-09-01T06:00:00.000Z';
+const SEP_END = '2026-10-01T06:00:00.000Z';
+const APPOINTMENT_COLUMNS = 'id, provider_id, start_at, end_at, status';
 
 const APPOINTMENT_ROW = {
   id: 'appt-1',
   provider_id: 'provider-1',
   start_at: '2026-10-05T16:00:00.000Z',
   end_at: '2026-10-05T17:00:00.000Z',
+  status: 'confirmed',
+};
+
+// Cita del periodo anterior (septiembre) que no solapa octubre.
+const PREVIOUS_APPOINTMENT_ROW = {
+  id: 'appt-0',
+  provider_id: 'provider-2',
+  start_at: '2026-09-07T16:00:00.000Z',
+  end_at: '2026-09-07T17:00:00.000Z',
   status: 'confirmed',
 };
 
@@ -78,7 +101,7 @@ describe('getDashboardMetrics', () => {
     vi.mocked(isSupabaseConfigured).mockReturnValue(true);
   });
 
-  it('lee citas del rango con el predicado de solape semiabierto y columnas mínimas', async () => {
+  it('lee citas del rango actual y del periodo anterior con el predicado de solape semiabierto', async () => {
     const { created } = makeDb({
       appointments: [APPOINTMENT_ROW],
       business_hours: [BUSINESS_HOUR_ROW],
@@ -87,12 +110,39 @@ describe('getDashboardMetrics', () => {
 
     await getDashboardMetrics({ preset: 'month' }, NOW);
 
+    expect(created.appointments).toHaveLength(2);
     expect(callsFor(created.appointments, 'select')).toEqual([
-      ['id, provider_id, start_at, end_at, status'],
+      [APPOINTMENT_COLUMNS],
+      [APPOINTMENT_COLUMNS],
     ]);
-    expect(callsFor(created.appointments, 'lt')).toEqual([['start_at', OCT_END]]);
-    expect(callsFor(created.appointments, 'gt')).toEqual([['end_at', OCT_START]]);
-    expect(created.appointments).toHaveLength(1);
+    expect(callsFor(created.appointments, 'lt')).toEqual([
+      ['start_at', OCT_END],
+      ['start_at', SEP_END],
+    ]);
+    expect(callsFor(created.appointments, 'gt')).toEqual([
+      ['end_at', OCT_START],
+      ['end_at', SEP_START],
+    ]);
+  });
+
+  it('preset week lee la semana anterior completa (desplazada 7 días)', async () => {
+    const { created } = makeDb({
+      appointments: [],
+      business_hours: [BUSINESS_HOUR_ROW],
+      providers: [{ id: 'provider-1', name: 'Dra. Ana' }],
+    });
+
+    await getDashboardMetrics({ preset: 'week' }, NOW);
+
+    // NOW = jueves 15 de octubre → semana del lunes 12 al lunes 19.
+    expect(callsFor(created.appointments, 'lt')).toEqual([
+      ['start_at', '2026-10-19T06:00:00.000Z'],
+      ['start_at', '2026-10-12T06:00:00.000Z'],
+    ]);
+    expect(callsFor(created.appointments, 'gt')).toEqual([
+      ['end_at', '2026-10-12T06:00:00.000Z'],
+      ['end_at', '2026-10-05T06:00:00.000Z'],
+    ]);
   });
 
   it('lee business_hours una sola vez con sus columnas mínimas', async () => {
@@ -110,7 +160,7 @@ describe('getDashboardMetrics', () => {
     expect(created.business_hours).toHaveLength(1);
   });
 
-  it('hace un join por lote a providers con la unión de ids de citas y business_hours (sin N+1)', async () => {
+  it('mantiene 2 lecturas de citas + 1 de business_hours + 1 de providers (sin N+1)', async () => {
     const { from, created } = makeDb({
       appointments: [APPOINTMENT_ROW],
       business_hours: [
@@ -125,13 +175,33 @@ describe('getDashboardMetrics', () => {
 
     await getDashboardMetrics({ preset: 'month' }, NOW);
 
-    // Una sola lectura por tabla, sin importar cuántos proveedores haya.
-    expect(from.mock.calls.filter(([t]) => t === 'appointments')).toHaveLength(1);
+    expect(from.mock.calls.filter(([t]) => t === 'appointments')).toHaveLength(2);
     expect(from.mock.calls.filter(([t]) => t === 'business_hours')).toHaveLength(1);
     expect(from.mock.calls.filter(([t]) => t === 'providers')).toHaveLength(1);
     expect(callsFor(created.providers, 'select')).toEqual([['id, name']]);
     expect(callsFor(created.providers, 'in')).toEqual([
       ['id', ['provider-1', 'provider-2']],
+    ]);
+  });
+
+  it('el join a providers cubre la unión de citas actuales, previas y business_hours', async () => {
+    const { created } = makeDb({
+      appointments: (call) =>
+        call === 0 ? [APPOINTMENT_ROW] : [PREVIOUS_APPOINTMENT_ROW],
+      business_hours: [
+        { id: 'bh-3', provider_id: 'provider-3', day_of_week: 1, start_time: '09:00:00', end_time: '18:00:00' },
+      ],
+      providers: [
+        { id: 'provider-1', name: 'Dra. Ana' },
+        { id: 'provider-2', name: 'Dr. Beto' },
+        { id: 'provider-3', name: 'Dra. Caro' },
+      ],
+    });
+
+    await getDashboardMetrics({ preset: 'month' }, NOW);
+
+    expect(callsFor(created.providers, 'in')).toEqual([
+      ['id', ['provider-1', 'provider-2', 'provider-3']],
     ]);
   });
 
@@ -161,12 +231,49 @@ describe('getDashboardMetrics', () => {
     expect(view.generatedAt).toBe(NOW.toISOString());
   });
 
-  it('rango sin citas ni business_hours → metrics null (estado vacío)', async () => {
+  it('expone la tendencia con el periodo anterior y la serie en el view model', async () => {
+    makeDb({
+      appointments: [APPOINTMENT_ROW],
+      business_hours: [BUSINESS_HOUR_ROW],
+      providers: [{ id: 'provider-1', name: 'Dra. Ana' }],
+    });
+
+    const view = await getDashboardMetrics({ preset: 'month' }, NOW);
+
+    expect(view.trend).not.toBeNull();
+    expect(view.trend?.previousRange).toEqual({
+      start: new Date(SEP_START),
+      end: new Date(SEP_END),
+    });
+    // Con capacidad (plantilla semanal) el periodo anterior sí es comparable.
+    expect(view.trend?.previous).not.toBeNull();
+    expect(view.trend?.current.totalAppointments).toBe(1);
+    // Octubre tiene 31 días → 31 buckets diarios, sin consultas adicionales.
+    expect(view.trend?.series).toHaveLength(31);
+  });
+
+  it('periodo anterior sin citas ni capacidad → trend.previous null (sin error ni caída)', async () => {
+    makeDb({
+      appointments: [APPOINTMENT_ROW],
+      business_hours: [],
+      providers: [{ id: 'provider-1', name: 'Dra. Ana' }],
+    });
+
+    const view = await getDashboardMetrics({ preset: 'month' }, NOW);
+
+    expect(view.isConfiguredButUnavailable).toBe(false);
+    expect(view.metrics).not.toBeNull();
+    expect(view.trend).not.toBeNull();
+    expect(view.trend?.previous).toBeNull();
+  });
+
+  it('rango sin citas ni business_hours → metrics y trend null (estado vacío)', async () => {
     const { from } = makeDb({ appointments: [], business_hours: [], providers: [] });
 
     const view = await getDashboardMetrics({ preset: 'month' }, NOW);
 
     expect(view.metrics).toBeNull();
+    expect(view.trend).toBeNull();
     expect(from.mock.calls.filter(([t]) => t === 'providers')).toHaveLength(0);
   });
 
@@ -196,6 +303,7 @@ describe('getDashboardMetrics', () => {
     expect(view.isSupabaseConfigured).toBe(false);
     expect(view.isConfiguredButUnavailable).toBe(false);
     expect(view.metrics).toBeNull();
+    expect(view.trend).toBeNull();
     expect(from).not.toHaveBeenCalled();
   });
 
@@ -209,6 +317,7 @@ describe('getDashboardMetrics', () => {
     expect(view.isSupabaseConfigured).toBe(true);
     expect(view.isConfiguredButUnavailable).toBe(true);
     expect(view.metrics).toBeNull();
+    expect(view.trend).toBeNull();
   });
 
   it('cuando una consulta devuelve error degrada sin lanzar', async () => {
@@ -221,6 +330,7 @@ describe('getDashboardMetrics', () => {
 
     expect(view.isConfiguredButUnavailable).toBe(true);
     expect(view.metrics).toBeNull();
+    expect(view.trend).toBeNull();
   });
 
   it('etiqueta el rango en es-MX con la zona clínica (último día inclusivo)', async () => {
@@ -235,24 +345,7 @@ describe('getDashboardMetrics', () => {
     expect(view.rangeLabel).toBe('1 – 31 de octubre, 2026');
   });
 
-  it('preset week usa la semana clínica (lunes a lunes)', async () => {
-    const { created } = makeDb({
-      appointments: [],
-      business_hours: [BUSINESS_HOUR_ROW],
-      providers: [{ id: 'provider-1', name: 'Dra. Ana' }],
-    });
-
-    const view = await getDashboardMetrics({ preset: 'week' }, NOW);
-
-    expect(callsFor(created.appointments, 'lt')).toEqual([['start_at', '2026-10-19T06:00:00.000Z']]);
-    expect(callsFor(created.appointments, 'gt')).toEqual([['end_at', '2026-10-12T06:00:00.000Z']]);
-    expect(view.range).toEqual({
-      startAt: '2026-10-12T06:00:00.000Z',
-      endAt: '2026-10-19T06:00:00.000Z',
-    });
-  });
-
-  it('preset custom usa from/to y cae a month cuando es inválido', async () => {
+  it('preset custom lee el periodo anterior de igual duración', async () => {
     const { created } = makeDb({
       appointments: [],
       business_hours: [BUSINESS_HOUR_ROW],
@@ -265,8 +358,14 @@ describe('getDashboardMetrics', () => {
     );
 
     expect(view.preset).toBe('custom');
-    expect(callsFor(created.appointments, 'gt')).toEqual([['end_at', '2026-10-05T06:00:00.000Z']]);
-    expect(callsFor(created.appointments, 'lt')).toEqual([['start_at', '2026-10-08T06:00:00.000Z']]);
+    expect(callsFor(created.appointments, 'gt')).toEqual([
+      ['end_at', '2026-10-05T06:00:00.000Z'],
+      ['end_at', '2026-10-02T06:00:00.000Z'],
+    ]);
+    expect(callsFor(created.appointments, 'lt')).toEqual([
+      ['start_at', '2026-10-08T06:00:00.000Z'],
+      ['start_at', '2026-10-05T06:00:00.000Z'],
+    ]);
 
     const fallback = await getDashboardMetrics(
       { preset: 'custom', from: '2026-10-10', to: '2026-10-05' },
