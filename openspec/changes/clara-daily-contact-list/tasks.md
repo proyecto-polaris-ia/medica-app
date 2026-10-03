@@ -293,7 +293,7 @@ migración `0019` + down, `app/api/admin/follow-up/…`, `validate.ts`
 `app/(admin)/appointments/new/page.tsx`, `BookingWizard.tsx`, `ConfirmStep.tsx` y
 `app/(admin)/layout.tsx`.
 
-- [ ] 2.1 **Migración `0019` + down** — Crear
+- [x] 2.1 **Migración `0019` + down** — Crear
   `supabase/migrations/0019_follow_up_contacts.sql` (`design.md` §2.1): enum
   idempotente `follow_up_contact_status ('contacted','dismissed')` en bloque
   `DO $$`; tabla `follow_up_contacts` con `patient_id uuid NOT NULL REFERENCES
@@ -313,7 +313,7 @@ migración `0019` + down, `app/api/admin/follow-up/…`, `validate.ts`
     enum con guarda `pg_type`) y confirmar que el down invierte el orden
     (índices → tabla → tipo) con `IF EXISTS`.
   - **Traza:** R12.
-- [ ] 2.2 **RED** — Escribir `app/api/admin/follow-up/route.test.ts` con auth y
+- [x] 2.2 **RED** — Escribir `app/api/admin/follow-up/route.test.ts` con auth y
   `@/lib/admin/follow-up/follow-up` mockeados (patrón
   `app/api/admin/appointments/route.test.ts`): sin sesión → `401`; con sesión →
   `200 { cases, roundDate }`; el handler calcula `now` en el servidor y no recibe
@@ -321,14 +321,14 @@ migración `0019` + down, `app/api/admin/follow-up/…`, `validate.ts`
   - Verificación: `npm run test -- app/api/admin/follow-up/route.test.ts`
     → **falla** (ruta inexistente; casos RED).
   - **Traza:** R8.
-- [ ] 2.3 **GREEN** — Implementar `app/api/admin/follow-up/route.ts` con
+- [x] 2.3 **GREEN** — Implementar `app/api/admin/follow-up/route.ts` con
   `export const dynamic = 'force-dynamic'`, `GET` envuelto en
   `handleAdminRequest` + `requireUser()` y `listDailyFollowUpCases()` +
   `currentRoundDate()`.
   - Verificación: `npm run test -- app/api/admin/follow-up/route.test.ts`
     → **pasa**.
   - **Traza:** R8.
-- [ ] 2.4 **RED** — Escribir
+- [x] 2.4 **RED** — Escribir
   `app/api/admin/follow-up/contacts/route.test.ts`: sin sesión → `401`; `POST {
   patientId, status: 'contacted' }` válido → `201 { contact }` con
   `contacted_at` persistido y `created_by = user.id`; `status: 'dismissed'` →
@@ -337,7 +337,7 @@ migración `0019` + down, `app/api/admin/follow-up/…`, `validate.ts`
   - Verificación: `npm run test -- app/api/admin/follow-up/contacts/route.test.ts`
     → **falla** (ruta válida no existe / `parseFollowUpContactStatus` inexistente).
   - **Traza:** R9, R10.
-- [ ] 2.5 **GREEN** — Añadir `parseFollowUpContactStatus(value)` (enum cerrado
+- [x] 2.5 **GREEN** — Añadir `parseFollowUpContactStatus(value)` (enum cerrado
   `contacted | dismissed`, `ValidationError` si no coincide) a
   `src/lib/admin/validate.ts` e implementar
   `app/api/admin/follow-up/contacts/route.ts` (`handleAdminRequest` +
@@ -346,7 +346,7 @@ migración `0019` + down, `app/api/admin/follow-up/…`, `validate.ts`
   - Verificación: `npm run test -- app/api/admin/follow-up/contacts/route.test.ts`
     → **pasa**.
   - **Traza:** R9, R10.
-- [ ] 2.6 **RED** — Escribir
+- [x] 2.6 **RED** — Escribir
   `src/components/admin/follow-up/__tests__/FollowUpList.test.tsx`: la lista
   agrupa casos por motivo; cada caso muestra nombre, teléfono y `reasonLabel` +
   `reasonDate` formateada en `America/Mexico_City`; "Marcar contactado" y
@@ -357,14 +357,14 @@ migración `0019` + down, `app/api/admin/follow-up/…`, `validate.ts`
   - Verificación: `npm run test -- src/components/admin/follow-up/__tests__/FollowUpList.test.tsx`
     → **falla** (componente inexistente; casos RED).
   - **Traza:** R8, R9, R10, R11.
-- [ ] 2.7 **GREEN** — Implementar
+- [x] 2.7 **GREEN** — Implementar
   `src/components/admin/follow-up/FollowUpList.tsx` y `FollowUpCaseCard.tsx`
   (client) con la agrupación por motivo, los datos mínimos del paciente y las
   cuatro acciones; "Agendar cita" como `<Link>` puro.
   - Verificación: `npm run test -- src/components/admin/follow-up/__tests__/FollowUpList.test.tsx`
     → **pasa**.
   - **Traza:** R8, R9, R10, R11.
-- [ ] 2.8 **GREEN** — Implementar `app/(admin)/follow-up/page.tsx` como server
+- [x] 2.8 **GREEN** — Implementar `app/(admin)/follow-up/page.tsx` como server
   component delgado (patrón `appointments/new/page.tsx`) que renderiza
   `FollowUpList` (client-fetch de `/api/admin/follow-up`) y agregar
   `{ href: '/follow-up', label: 'Seguimiento' }` a `navItems` en
@@ -372,7 +372,7 @@ migración `0019` + down, `app/api/admin/follow-up/…`, `validate.ts`
   - Verificación: `npm run test -- app/api/admin/follow-up/route.test.ts src/components/admin/follow-up/__tests__/FollowUpList.test.tsx`
     → **pasa**; `npx tsc --noEmit` sin errores de tipos en la ruta nueva.
   - **Traza:** R8.
-- [ ] 2.9 **RED** — Escribir/extender
+- [x] 2.9 **RED** — Escribir/extender
   `src/lib/admin/__tests__/patients.test.ts` para `getPatient(id)`
   (`.maybeSingle()`, reutiliza `SELECT_COLUMNS`/`mapRow`; `id` inválido lanza
   `ValidationError`; inexistente → `null`) y un caso de componente que verifica
@@ -381,7 +381,7 @@ migración `0019` + down, `app/api/admin/follow-up/…`, `validate.ts`
   - Verificación: `npm run test -- src/lib/admin/__tests__/patients.test.ts`
     → **falla** (`getPatient` no exportado; caso RED de preselección).
   - **Traza:** R11.
-- [ ] 2.10 **GREEN** — Implementar `getPatient` en `src/lib/admin/patients.ts`;
+- [x] 2.10 **GREEN** — Implementar `getPatient` en `src/lib/admin/patients.ts`;
   `app/(admin)/appointments/new/page.tsx` recibe
   `searchParams: Promise<{ patientId?: string }>`, valida con `parseUuid` y
   obtiene el paciente server-side; `BookingWizard` acepta `initialPatient?`
@@ -391,7 +391,7 @@ migración `0019` + down, `app/api/admin/follow-up/…`, `validate.ts`
   - Verificación: `npm run test -- src/lib/admin/__tests__/patients.test.ts`
     → **pasa**; `npx tsc --noEmit` sin errores.
   - **Traza:** R11.
-- [ ] 2.11 **TRIANGULATE/REFACTOR** — Cubrir negativos que protegen el contrato:
+- [x] 2.11 **TRIANGULATE/REFACTOR** — Cubrir negativos que protegen el contrato:
   `anon` no accede a `follow_up_contacts` (revisión de RLS de 2.1); un paciente
   contactado/descartado en la ronda no reaparece tras recargar; un estado de la
   ronda de ayer no excluye hoy; el `POST` de contacto con `note` larga no rompe;
