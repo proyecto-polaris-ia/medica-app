@@ -23,8 +23,8 @@ Base branch: main (b717371)
 - [x] Apply Fase 1: reglas de segmentación (TDD) — 15 tareas implementadas, 1.13/1.14 SUPERADAS (clinicDayKey ya existe en timezone.ts, decisión C); 41 tests de follow-up verdes, 232 de admin, tsc limpio. Commit: ver evidencia abajo.
 - [x] Apply Fase 2: página del panel con acciones (TDD) — commit 856af04: 20 archivos, +1007 líneas; 127 tests verdes, tsc limpio. Desviaciones documentadas: orden 2.9/2.10 antes de 2.4/2.5 (404 depende de getPatient) y test de preselección en ConfirmStep.test.tsx (jsdom).
 - [x] Apply Fase 3: borradores de mensaje con aprobación humana (TDD) — commit d2bea90 (24 archivos, +2811 líneas) + corrección 007d806 (60 líneas, claim atómico approved→sending contra R3-race-double-send CRITICAL). 3 desviaciones documentadas (insertFollowUpOutboundMessage fuera de store.ts, guardrails Unicode, createWccClient).
-- [ ] Verify: verificación técnica
-- [ ] Archive: sincronizar specs y archivar change
+- [x] Verify: verificación técnica — PASS WITH WARNINGS: 1101 tests / 127 archivos, `npx tsc --noEmit` exit 0, `npm run build` exit 0 (rutas `/follow-up` y `/whatsapp-command-center/follow-up-drafts`), migraciones `0019`/`0020` con patrón `0018`, guardrails sin cron/`vercel.json` limpio; warnings no bloqueantes en `verify-report.md` (commit 5cb1d20).
+- [x] Archive: sincronizar specs y archivar change — spec materializada en `openspec/specs/follow-up/spec.md` (16 requirements / 48 escenarios, solo se quitó el envoltorio `## ADDED Requirements`); change movido a `openspec/changes/archive/2026-10-03-clara-daily-contact-list/` con `verify-report.md` y `archive-report.md`. **Commit pendiente** (archivo sin commitear por instrucción de no hacer commit).
 - [ ] PRs apilados: push + crear 3 PRs (el último con `Closes #89`)
 
 ## Evidencia
