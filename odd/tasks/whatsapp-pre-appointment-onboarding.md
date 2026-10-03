@@ -33,6 +33,11 @@ Persistence mode: openspec (config.yaml, artifact_store hybrid)
 - [ ] design.md (rutas concretas, decisiones)
 - [ ] tasks.md (forecast, verificación de decisión antes de apply)
 
+### Revisión RDD por fase
+- [x] Fase 1: lineage review-4c62be58c351c2de — medium, lente review-reliability, 31 archivos/2869 líneas — **approved**, autoridad quemada (revisión del snapshot code-only del squash 010f84d). 5 hallazgos informativos (R3-clearanswer-contract, R3-escalation-port-unhandled, R3-missing-draft-error-loop, R3-source-unvalidated-cast, R3-summary-restart-data-loss) → registrar como follow-ups.
+- [ ] Fase 2: revisión del delta antes de PR 2.
+- [ ] Fase 3: revisión del delta antes de PR 3.
+
 ### Apply
 - [ ] Fase 1: flow onboarding historia clínica básica (paciente nuevo sin medical_history + cita futura) — alergias, medicamentos, condiciones, embarazo, hábitos; resumen + confirmación; escritura atómica; escalación a humano ante urgencia.
 - [ ] Fase 2: completado de datos generales (email, contacto faltante) en el mismo flow.
