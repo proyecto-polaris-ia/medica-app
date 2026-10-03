@@ -16,6 +16,7 @@ import { PatientHistoryTab } from './PatientHistoryTab';
 import { PatientVisitsTab } from './PatientVisitsTab';
 import { PatientAppointmentsTab } from './PatientAppointmentsTab';
 import { MedicalHistoryBadge } from './MedicalHistoryBadge';
+import { OnboardingStatusBadge } from './OnboardingStatusBadge';
 import { TreatmentPlansTab } from './TreatmentPlansTab';
 import { PatientPaymentsTab } from './PatientPaymentsTab';
 import { PatientFilesTab } from './PatientFilesTab';
@@ -95,6 +96,10 @@ export function PatientRecordTabs({
       <div className="flex items-center gap-3">
         <h2 className="text-xl font-semibold text-gray-900">{patient.fullName}</h2>
         <MedicalHistoryBadge history={medicalHistory} />
+        <OnboardingStatusBadge
+          hasMedicalHistory={medicalHistory.source !== null}
+          source={medicalHistory.source}
+        />
       </div>
 
       <div className="border-b border-gray-200">
