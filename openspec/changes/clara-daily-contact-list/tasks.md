@@ -129,7 +129,7 @@ implementación: `src/lib/admin/follow-up/config.ts`, `rules.ts`, `types.ts`,
 `src/lib/admin/follow-up/__tests__/follow-up.test.ts`, más la extensión de
 `src/lib/admin/__tests__/clinic-time.test.ts`.
 
-- [ ] 1.1 **RED** — Escribir en
+- [x] 1.1 **RED** — Escribir en
   `src/lib/admin/follow-up/__tests__/rules.test.ts` los casos del segmento de
   no-shows recuperables (`design.md` §1.2): no-show con `start_at` hace 30 días
   sin cita posterior → incluido; **límite exacto de 90 días** → incluido
@@ -141,7 +141,7 @@ implementación: `src/lib/admin/follow-up/config.ts`, `rules.ts`, `types.ts`,
   - Verificación: `npm run test -- src/lib/admin/follow-up/__tests__/rules.test.ts`
     → **falla** (módulo `@/lib/admin/follow-up/rules` inexistente; casos RED).
   - **Traza:** R1.
-- [ ] 1.2 **GREEN** — Implementar `src/lib/admin/follow-up/config.ts`
+- [x] 1.2 **GREEN** — Implementar `src/lib/admin/follow-up/config.ts`
   (`NO_SHOW_WINDOW_DAYS = 90`, `STALLED_TREATMENT_DAYS = 45`,
   `INACTIVE_PATIENT_MONTHS = 6`, `INACTIVE_PATIENT_DAYS = INACTIVE_PATIENT_MONTHS
   * 30`, `UNANSWERED_QUOTE_DAYS = 21`, `FOLLOW_UP_REASON_PRIORITY`, `MS_PER_DAY`)
@@ -151,7 +151,7 @@ implementación: `src/lib/admin/follow-up/config.ts`, `rules.ts`, `types.ts`,
   - Verificación: `npm run test -- src/lib/admin/follow-up/__tests__/rules.test.ts`
     → **pasa** los casos de 1.1.
   - **Traza:** R1, R6.
-- [ ] 1.3 **RED** — Extender `rules.test.ts` con el segmento de tratamientos
+- [x] 1.3 **RED** — Extender `rules.test.ts` con el segmento de tratamientos
   inconclusos (`design.md` §1.2): plan `in_progress` con última visita
   (`clinical_visits.created_at` máxima) hace 60 días → incluido; última visita
   hace 30 días → excluido; plan `in_progress` sin visitas creado hace 60 días →
@@ -160,13 +160,13 @@ implementación: `src/lib/admin/follow-up/config.ts`, `rules.ts`, `types.ts`,
   - Verificación: `npm run test -- src/lib/admin/follow-up/__tests__/rules.test.ts`
     → **falla** (casos RED de `isStalledTreatmentPlan`).
   - **Traza:** R2.
-- [ ] 1.4 **GREEN** — Implementar `isStalledTreatmentPlan(plan,
+- [x] 1.4 **GREEN** — Implementar `isStalledTreatmentPlan(plan,
   lastVisitCreatedAt, now)` con fallback a `plan.createdAt` cuando no hay visita
   y umbral `> STALLED_TREATMENT_DAYS`.
   - Verificación: `npm run test -- src/lib/admin/follow-up/__tests__/rules.test.ts`
     → **pasa** los casos de 1.3.
   - **Traza:** R2.
-- [ ] 1.5 **RED** — Extender `rules.test.ts` con el segmento de pacientes
+- [x] 1.5 **RED** — Extender `rules.test.ts` con el segmento de pacientes
   inactivos (`design.md` §1.2): paciente con cita atendida hace 8 meses sin cita
   posterior → incluido; cita atendida hace 2 meses → excluido; paciente con cita
   futura programada cuya última cita pasada fue hace 8 meses → excluido
@@ -175,26 +175,26 @@ implementación: `src/lib/admin/follow-up/config.ts`, `rules.ts`, `types.ts`,
   - Verificación: `npm run test -- src/lib/admin/follow-up/__tests__/rules.test.ts`
     → **falla** (casos RED de `isInactivePatient`).
   - **Traza:** R3.
-- [ ] 1.6 **GREEN** — Implementar `isInactivePatient(patientId,
+- [x] 1.6 **GREEN** — Implementar `isInactivePatient(patientId,
   patientAppointments, now)` usando la cita no cancelada más reciente y umbral
   `daysBetween > INACTIVE_PATIENT_DAYS`.
   - Verificación: `npm run test -- src/lib/admin/follow-up/__tests__/rules.test.ts`
     → **pasa** los casos de 1.5.
   - **Traza:** R3.
-- [ ] 1.7 **RED** — Extender `rules.test.ts` con el segmento de presupuestos sin
+- [x] 1.7 **RED** — Extender `rules.test.ts` con el segmento de presupuestos sin
   respuesta (`design.md` §1.2): plan `presented` con `updated_at` hace 30 días →
   incluido; `presented` hace 10 días → excluido; plan `accepted`/`cancelled` con
   `updated_at` hace 30 días → excluido. Importar `isUnansweredQuote`.
   - Verificación: `npm run test -- src/lib/admin/follow-up/__tests__/rules.test.ts`
     → **falla** (casos RED de `isUnansweredQuote`).
   - **Traza:** R4.
-- [ ] 1.8 **GREEN** — Implementar `isUnansweredQuote(plan, now)` con
+- [x] 1.8 **GREEN** — Implementar `isUnansweredQuote(plan, now)` con
   `updated_at` y umbral `> UNANSWERED_QUOTE_DAYS`, dejando el comentario de
   limitación documentada (último cambio del plan, nunca fecha de presentación).
   - Verificación: `npm run test -- src/lib/admin/follow-up/__tests__/rules.test.ts`
     → **pasa** los casos de 1.7.
   - **Traza:** R4.
-- [ ] 1.9 **RED** — Extender `rules.test.ts` con deduplicación y prioridad
+- [x] 1.9 **RED** — Extender `rules.test.ts` con deduplicación y prioridad
   (`design.md` §1.2): paciente que califica a la vez para no-show y presupuesto →
   aparece **una vez** con motivo `no_show`; paciente que califica para
   tratamiento inconcluso + presupuesto + inactivo → una vez con motivo
@@ -204,14 +204,14 @@ implementación: `src/lib/admin/follow-up/config.ts`, `rules.ts`, `types.ts`,
   - Verificación: `npm run test -- src/lib/admin/follow-up/__tests__/rules.test.ts`
     → **falla** (casos RED de deduplicación).
   - **Traza:** R5.
-- [ ] 1.10 **GREEN** — Implementar `pickReasonForPatient` y `buildFollowUpList`
+- [x] 1.10 **GREEN** — Implementar `pickReasonForPatient` y `buildFollowUpList`
   recorriendo `FOLLOW_UP_REASON_PRIORITY` de mayor a menor y emitiendo una sola
   entrada `FollowUpCandidate` por paciente, con `sourceAppointmentId` /
   `sourcePlanId` según el motivo.
   - Verificación: `npm run test -- src/lib/admin/follow-up/__tests__/rules.test.ts`
     → **pasa** los casos de 1.9.
   - **Traza:** R5.
-- [ ] 1.11 **RED** — Extender `rules.test.ts` con determinismo y umbrales
+- [x] 1.11 **RED** — Extender `rules.test.ts` con determinismo y umbrales
   (`design.md` §1.2): la misma `now` y los mismos datos producen listas
   idénticas en contenido **y orden**; el orden es estable por (índice de
   prioridad, `reasonDate` asc, `patientId` asc); un caso en el límite exacto de
@@ -220,28 +220,23 @@ implementación: `src/lib/admin/follow-up/config.ts`, `rules.ts`, `types.ts`,
   - Verificación: `npm run test -- src/lib/admin/follow-up/__tests__/rules.test.ts`
     → **falla** (casos RED de orden/determinismo).
   - **Traza:** R6.
-- [ ] 1.12 **GREEN** — Añadir a `buildFollowUpList` el orden estable por
+- [x] 1.12 **GREEN** — Añadir a `buildFollowUpList` el orden estable por
   (índice de prioridad, `reasonDate` asc, `patientId` asc) y asegurar que todas
   las comparaciones usan las constantes de `config.ts`. Ningún
   `Date.now()`/`new Date()` implícito dentro de `config.ts`/`rules.ts`.
   - Verificación: `npm run test -- src/lib/admin/follow-up/__tests__/rules.test.ts`
     → **pasa** los casos de 1.11.
   - **Traza:** R6.
-- [ ] 1.13 **RED** — Extender `src/lib/admin/__tests__/clinic-time.test.ts` con
-  `clinicDayKey(now)` en `America/Mexico_City` (formato `YYYY-MM-DD`),
-  incluyendo el cruce de medianoche UTC: un instante `2026-10-03T05:30:00Z`
-  (23:30 del 2 de octubre en Ciudad de México) → `2026-10-02`.
-  - Verificación: `npm run test -- src/lib/admin/__tests__/clinic-time.test.ts`
-    → **falla** (`clinicDayKey` no exportado).
+- [x] 1.13 **SUPERADA** — El helper ya existe como `clinicDayKey(iso)` en
+  `src/lib/admin/timezone.ts` (fuente canónica en uso por `wcc-appointments.ts`,
+  calendario, etc.), con su comportamiento equivalente verificado. No se duplica
+  en `clinic-time.ts` (decisión: opción C del worker; actualiza D9).
   - **Traza:** R7.
-- [ ] 1.14 **GREEN** — Añadir `export function clinicDayKey(now: Date): string`
-  a `src/lib/admin/clinic-time.ts` con
-  `Intl.DateTimeFormat('en-CA', { timeZone: 'America/Mexico_City' })`. Es la
-  única extensión al archivo existente.
-  - Verificación: `npm run test -- src/lib/admin/__tests__/clinic-time.test.ts`
-    → **pasa** los casos de 1.13.
+- [x] 1.14 **SUPERADA** — `currentRoundDate(now)` en
+  `src/lib/admin/follow-up/follow-up.ts` delega en `timezone.ts#clinicDayKey`;
+  suite de Fase 1 en verde (41 tests) y `npx tsc --noEmit` limpio.
   - **Traza:** R7.
-- [ ] 1.15 **RED** — Escribir
+- [x] 1.15 **RED** — Escribir
   `src/lib/admin/follow-up/__tests__/follow-up.test.ts` con Supabase mockeado
   (patrón `src/lib/citas/__tests__/send-appointment-reminder.test.ts`):
   `listDailyFollowUpCases` ejecuta un número **constante** de queries (lectura
@@ -257,17 +252,22 @@ implementación: `src/lib/admin/follow-up/config.ts`, `rules.ts`, `types.ts`,
   - Verificación: `npm run test -- src/lib/admin/follow-up/__tests__/follow-up.test.ts`
     → **falla** (módulo `@/lib/admin/follow-up/follow-up` inexistente; casos RED).
   - **Traza:** R7, R9, R10, R12.
-- [ ] 1.16 **GREEN** — Implementar `src/lib/admin/follow-up/types.ts`
+- [x] 1.16 **GREEN** — Implementar `src/lib/admin/follow-up/types.ts`
   (`FollowUpCase`, `FollowUpContact`, `FollowUpContactStatus`, `FollowUpDraft`,
   `FollowUpDraftStatus`; errores y validación **reutilizados** de `../errors` y
   `../validate`, sin jerarquía paralela) y `follow-up.ts` con
   `SELECT_COLUMNS` explícitos, `mapRow` snake→camel, `getSupabaseAdmin()`,
   `listDailyFollowUpCases({ now? })`, `loadFollowUpContactsForRound`,
   `markFollowUpContact({ ... now? })` y `currentRoundDate(now)`.
+  **Desviación registrada:** `currentRoundDate(now)` delega en el
+  `clinicDayKey(iso)` ya existente de `src/lib/admin/timezone.ts` (fuente canónica
+  en uso por `wcc-appointments.ts`), porque 1.13/1.14 (helper en
+  `clinic-time.ts`) quedan fuera de las superficies de edición autorizadas.
+  Decisión humana pendiente en el reporte.
   - Verificación: `npm run test -- src/lib/admin/follow-up/__tests__/follow-up.test.ts`
     → **pasa** los casos de 1.15.
   - **Traza:** R7, R9, R10, R12.
-- [ ] 1.17 **TRIANGULATE/REFACTOR** — Cubrir negativos que protegen el contrato:
+- [x] 1.17 **TRIANGULATE/REFACTOR** — Cubrir negativos que protegen el contrato:
   arrays vacíos (sin citas/planes/visitas) no lanzan; un plan `completed` no
   entra; un no-show fuera de la ventana (>90 días) no entra; `rescheduled`
   cuenta como cita posterior; una cita cancelada pasada no cuenta como "cita

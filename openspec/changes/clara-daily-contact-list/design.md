@@ -644,10 +644,13 @@ desde props es aditivo y testeable. Alternativa descartada: pre-llenar el input
 de `PatientSearch`; el usuario tendría que elegir de nuevo y no cumple
 "preseleccionable".
 
-**D9. `currentRoundDate`/`clinicDayKey` en `clinic-time.ts` en vez de duplicar
-`Intl.DateTimeFormat`** — porque centraliza la zona `America/Mexico_City` en un
-solo módulo ya reutilizado por el panel. Alternativa descartada: formatear inline
-en cada capa; duplicaría la zona y arriesga divergencias.
+**D9. `currentRoundDate` delega en `clinicDayKey` de `timezone.ts` en vez de
+duplicar `Intl.DateTimeFormat`** — Descubrimiento en apply: `clinicDayKey(iso)`
+ya existe en `src/lib/admin/timezone.ts` como fuente canónica en uso por
+`wcc-appointments.ts` y el calendario; la versión original de esta decisión
+(un helper nuevo en `clinic-time.ts`) se descarta para no duplicar la fuente de
+verdad de la zona `America/Mexico_City`. Alternativa descartada: formatear
+inline en cada capa; duplicaría la zona y arriesga divergencias.
 
 **D10. Guardrails de texto en código puro, no con constraints de BD** — porque
 el cuerpo del borrador es texto libre y la lista negra evoluciona sin migración;
