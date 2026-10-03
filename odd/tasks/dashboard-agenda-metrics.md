@@ -20,7 +20,7 @@
 3. [x] Design — design.md con rutas y decisiones (692 líneas, sin open questions)
 4. [x] Tasks — tasks.md con forecast (68 tareas; Fase 1: 33, Fase 2: 18, Fase 3: 17; Decision needed: No)
 5. [x] Apply Fase 1 — migración 0019 (con down) + estampado atómico + lib `src/lib/admin/metrics/` + 99 tests (RED→GREEN). Commits 69e01a4, 1c56a82
-6. [ ] Apply Fase 2 — panel de métricas en dashboard (selector de rango, cards, desglose por proveedor)
+6. [x] Apply Fase 2 — panel en dashboard (loader sin N+1, selector, cards, desglose, loading/empty) + 23 tests. Commit 8aa71e5
 7. [ ] Apply Fase 3 — tendencia vs periodo anterior
 8. [ ] Verify — tsc + vitest + build
 9. [ ] Archive — materializar specs

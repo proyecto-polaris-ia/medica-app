@@ -10,3 +10,4 @@ export * from './no-show';
 export * from './aggregate';
 export * from './range';
 export * from './transitions';
+export * from './trend';

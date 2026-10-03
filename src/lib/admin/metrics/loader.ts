@@ -14,6 +14,7 @@ import type { AppointmentStatus } from '../types';
 import { CLINIC_TZ } from '../timezone';
 import { computeMetrics } from './aggregate';
 import { resolveRange } from './range';
+import { computeTrend, previousRangeOf, type MetricsTrend } from './trend';
 import type {
   ClinicRange,
   MetricAppointment,
@@ -36,6 +37,8 @@ export type DashboardMetricsView = {
   rangeLabel: string;
   range: { startAt: string; endAt: string };
   metrics: MetricsResult | null; // null = rango sin datos (estado vacío)
+  /** Tendencia contra el periodo anterior y serie; null sin datos del rango. */
+  trend: MetricsTrend | null;
 };
 
 type Row = Record<string, unknown>;
@@ -134,6 +137,7 @@ export async function getDashboardMetrics(
   now: Date = new Date()
 ): Promise<DashboardMetricsView> {
   const resolved = resolveRange(params ?? {}, now);
+  const previousRange = previousRangeOf(resolved.preset, resolved.range);
   const base = {
     generatedAt: now.toISOString(),
     preset: resolved.preset,
@@ -150,26 +154,40 @@ export async function getDashboardMetrics(
       isSupabaseConfigured: false,
       isConfiguredButUnavailable: false,
       metrics: null,
+      trend: null,
     };
   }
 
   try {
     const d = getSupabaseAdmin() as unknown as Db;
-    const [appointmentRows, businessHourRows] = await Promise.all([
-      rows(
-        d
-          .from('appointments')
-          .select(APPOINTMENT_COLUMNS)
-          .lt('start_at', base.range.endAt)
-          .gt('end_at', base.range.startAt)
-      ),
-      rows(d.from('business_hours').select(BUSINESS_HOUR_COLUMNS)),
-    ]);
+    // Conteo constante de consultas: 2 lecturas de citas (rango actual y
+    // periodo anterior) + 1 de business_hours + 1 de providers, sin importar
+    // el número de buckets de la serie.
+    const [appointmentRows, previousAppointmentRows, businessHourRows] =
+      await Promise.all([
+        rows(
+          d
+            .from('appointments')
+            .select(APPOINTMENT_COLUMNS)
+            .lt('start_at', base.range.endAt)
+            .gt('end_at', base.range.startAt)
+        ),
+        rows(
+          d
+            .from('appointments')
+            .select(APPOINTMENT_COLUMNS)
+            .lt('start_at', previousRange.end.toISOString())
+            .gt('end_at', previousRange.start.toISOString())
+        ),
+        rows(d.from('business_hours').select(BUSINESS_HOUR_COLUMNS)),
+      ]);
 
     const appointments = appointmentRows.map(mapAppointment);
+    const previousAppointments = previousAppointmentRows.map(mapAppointment);
     const businessHours = businessHourRows.map(mapBusinessHour);
     const providers = await providersFor(d, [
       ...appointments.map((appointment) => appointment.providerId),
+      ...previousAppointments.map((appointment) => appointment.providerId),
       ...businessHours.map((hour) => hour.providerId),
     ]);
 
@@ -183,11 +201,25 @@ export async function getDashboardMetrics(
             range: resolved.range,
           });
 
+    const trend =
+      metrics === null
+        ? null
+        : computeTrend({
+            preset: resolved.preset,
+            range: resolved.range,
+            previousRange,
+            appointments,
+            previousAppointments,
+            businessHours,
+            providers,
+          });
+
     return {
       ...base,
       isSupabaseConfigured: true,
       isConfiguredButUnavailable: false,
       metrics,
+      trend,
     };
   } catch {
     return {
@@ -195,6 +227,7 @@ export async function getDashboardMetrics(
       isSupabaseConfigured: true,
       isConfiguredButUnavailable: true,
       metrics: null,
+      trend: null,
     };
   }
 }
