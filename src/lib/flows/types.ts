@@ -50,7 +50,8 @@ export type FlowStateDefinition = {
     | 'resolveService'
     | 'resolveProvider'
     | 'evaluateOnboardingAnswer'
-    | 'saveOnboardingHistory';
+    | 'saveOnboardingHistory'
+    | 'saveOnboardingContact';
   // Prompt para pedir información al usuario
   prompt: string;
   // Transiciones posibles basadas en resultado
@@ -81,6 +82,7 @@ export type FlowResult = {
     | 'resolveProvider'
     | 'evaluateOnboardingAnswer'
     | 'saveOnboardingHistory'
+    | 'saveOnboardingContact'
     | 'complete';
   prompt: string;
   missingEntity?: keyof ExtractedEntities;

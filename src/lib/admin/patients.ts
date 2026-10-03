@@ -7,9 +7,10 @@ import {
   parsePhoneE164,
   parseSex,
   parseUuid,
+  ValidationError,
 } from './validate';
 import { ConflictError } from './errors';
-import { normalizePatientContact } from '@/lib/booking/patient-contact';
+import { normalizePatientContact, parseOptionalEmail } from '@/lib/booking/patient-contact';
 
 const SELECT_COLUMNS = 'id, full_name, phone_e164, email, notes, birth_date, sex, address, occupation, referral_source, secondary_phone, emergency_contact_name, emergency_contact_phone, emergency_contact_relationship, created_at, updated_at';
 function mapRow(row: Record<string, unknown>): Patient {
@@ -69,4 +70,25 @@ export async function getPatient(id: string): Promise<Patient | null> { const pa
 export async function searchPatients(q: string): Promise<Patient[]> { const trimmed=q.trim(); if(!trimmed)return []; const {data,error}=await getSupabaseAdmin().from('patients').select(SELECT_COLUMNS).or(`full_name.ilike.%${trimmed}%,phone_e164.ilike.%${trimmed}%,email.ilike.%${trimmed}%`).order('created_at',{ascending:false}); if(error)throw new Error(error.message); return (data??[]).map(mapRow); }
 export async function createPatient(input: PatientInput): Promise<Patient> { const {data,error}=await getSupabaseAdmin().from('patients').insert(validatePatientInput(input)).select(SELECT_COLUMNS).single(); if(error||!data) throwPatientError(error,'Failed to create patient'); return mapRow(data); }
 export async function updatePatient(id:string,input:PatientInput):Promise<Patient>{const payload=validatePatientInput(input);const parsedId=parseUuid(id,'id');const {data,error}=await getSupabaseAdmin().from('patients').update(payload).eq('id',parsedId).select(SELECT_COLUMNS).single();if(error||!data)throwPatientError(error,'Patient not found');return mapRow(data)}
+/**
+ * Actualiza **solo** el email del paciente (design.md D8).
+ *
+ * Escritura targeted para el onboarding: nunca reconstruye el resto de campos
+ * (a diferencia de `updatePatient`, que es full-replace) y jamás toca la
+ * historia clínica. Un correo ya registrado por otro paciente (`23505`) es un
+ * conflicto de identidad. `undefined`/vacío es un dato faltante, no una limpieza.
+ */
+export async function updatePatientEmail(patientId: string, email: string): Promise<Patient> {
+  const parsedId = parseUuid(patientId, 'id');
+  const parsedEmail = parseOptionalEmail(email);
+  if (!parsedEmail) throw new ValidationError('email', 'Invalid email');
+  const { data, error } = await getSupabaseAdmin()
+    .from('patients')
+    .update({ email: parsedEmail })
+    .eq('id', parsedId)
+    .select(SELECT_COLUMNS)
+    .single();
+  if (error || !data) throwPatientError(error, 'Patient not found');
+  return mapRow(data);
+}
 export async function deletePatient(id:string):Promise<void>{const {error}=await getSupabaseAdmin().from('patients').delete().eq('id',parseUuid(id,'id'));if(error)throw new Error(error.message)}

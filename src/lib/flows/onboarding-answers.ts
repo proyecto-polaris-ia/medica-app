@@ -15,6 +15,7 @@ import type {
   SmokingStatus,
   AlcoholStatus,
 } from '@/lib/admin/types';
+import { parseOptionalEmail } from '@/lib/booking/patient-contact';
 
 export type OnboardingDraftContext = {
   patientId: string;
@@ -212,6 +213,27 @@ export function evaluateOnboardingStep(input: {
     case 'show_summary': {
       if (parseYesNo(raw) === 'yes') return forward('confirm', draft);
       return { transition: 'restart', draft: resetAnswers(draft), clearAnswer: true };
+    }
+
+    case 'ask_email': {
+      let email: string | undefined;
+      try {
+        email = parseOptionalEmail(raw);
+      } catch {
+        return retry(draft);
+      }
+      if (!email) return retry(draft);
+      return forward('next', { ...draft, email });
+    }
+
+    case 'show_contact_summary': {
+      if (parseYesNo(raw) === 'yes') return forward('confirm', draft);
+      // Corrección o rechazo: se descarta el email y se vuelve a preguntar.
+      return {
+        transition: 'restart',
+        draft: { ...draft, email: null },
+        clearAnswer: true,
+      };
     }
 
     default:
