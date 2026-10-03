@@ -273,4 +273,105 @@ describe('/appointments integration', () => {
 
     expect(savedBody).toMatchObject({ notes: '' });
   });
+
+  function buildAppointmentsFetch(appointments: unknown[]) {
+    const fetchMock = buildFetchMock();
+    fetchMock.mockImplementation((url: string) => {
+      if (
+        url === '/api/admin/appointments' ||
+        url.startsWith('/api/admin/appointments?')
+      ) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ appointments }),
+        });
+      }
+      return buildFetchMock()(url);
+    });
+    return fetchMock;
+  }
+
+  it('renders the H-24 reminder badge with its send date', async () => {
+    global.fetch = buildAppointmentsFetch([
+      {
+        ...BASE_APPOINTMENT,
+        reminders: [
+          {
+            cadence: 'h24',
+            status: 'sent',
+            sentAt: '2026-10-03T15:15:00.000Z',
+            dryRun: false,
+            createdAt: '2026-10-03T15:15:00.000Z',
+          },
+        ],
+      },
+    ]);
+
+    render(<AppointmentsPage />);
+
+    expect(
+      await screen.findByText('Recordatorio H-24 enviado el 3 oct 2026, 09:15')
+    ).toBeInTheDocument();
+  });
+
+  it('renders the same-day reminder badge with its send date', async () => {
+    global.fetch = buildAppointmentsFetch([
+      {
+        ...BASE_APPOINTMENT,
+        reminders: [
+          {
+            cadence: 'same_day',
+            status: 'sent',
+            sentAt: '2026-10-03T15:15:00.000Z',
+            dryRun: false,
+            createdAt: '2026-10-03T15:15:00.000Z',
+          },
+        ],
+      },
+    ]);
+
+    render(<AppointmentsPage />);
+
+    expect(
+      await screen.findByText('Recordatorio día mismo enviado el 3 oct 2026, 09:15')
+    ).toBeInTheDocument();
+  });
+
+  it('renders a dry-run badge for scheduled dry-run reminders', async () => {
+    global.fetch = buildAppointmentsFetch([
+      {
+        ...BASE_APPOINTMENT,
+        status: 'requested',
+        reminders: [
+          {
+            cadence: 'h24',
+            status: 'scheduled',
+            sentAt: null,
+            dryRun: true,
+            createdAt: '2026-10-03T15:15:00.000Z',
+          },
+        ],
+      },
+    ]);
+
+    render(<AppointmentsPage />);
+
+    expect(await screen.findByText('Simulado (dry-run)')).toBeInTheDocument();
+  });
+
+  it('renders a neutral reminder state when an appointment has no reminders', async () => {
+    global.fetch = buildAppointmentsFetch([{ ...BASE_APPOINTMENT, reminders: [] }]);
+
+    render(<AppointmentsPage />);
+
+    expect(await screen.findByText('Sin recordatorio')).toBeInTheDocument();
+  });
+
+  it('shows a readable confirmation status label', async () => {
+    global.fetch = buildAppointmentsFetch([{ ...BASE_APPOINTMENT, status: 'confirmed' }]);
+
+    render(<AppointmentsPage />);
+
+    expect(await screen.findByText('Confirmada')).toBeInTheDocument();
+  });
 });

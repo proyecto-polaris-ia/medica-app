@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS appointment_reminders (
   cadence text NOT NULL CHECK (cadence IN ('h24', 'same_day')),
   status appointment_reminder_status NOT NULL DEFAULT 'scheduled',
   template_name text NOT NULL DEFAULT 'recordatorio_cita',
-  dry_run boolean NOT NULL DEFAULT false,
+  dry_run boolean NOT NULL DEFAULT true,
   provider_message_id text,
   sent_at timestamptz,
   error text,

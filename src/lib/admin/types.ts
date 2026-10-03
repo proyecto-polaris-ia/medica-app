@@ -87,6 +87,14 @@ export type AppointmentStatus =
   | 'no_show'
   | 'attended';
 
+export type AppointmentReminderSummary = {
+  cadence: 'h24' | 'same_day';
+  status: 'scheduled' | 'sent' | 'failed';
+  sentAt: string | null;
+  dryRun: boolean;
+  createdAt: string;
+};
+
 export type Appointment = {
   id: string;
   patientId: string | null;
@@ -98,6 +106,7 @@ export type Appointment = {
   notes: string | null;
   createdAt: string;
   updatedAt: string;
+  reminders: AppointmentReminderSummary[];
 };
 
 export type AppointmentInput = {
@@ -176,7 +185,7 @@ export type ClinicalVisitInput = {
   notes?: string | null;
 };
 
-export type PatientRecordAppointment = Appointment & {
+export type PatientRecordAppointment = Omit<Appointment, 'reminders'> & {
   serviceName: string;
   providerName: string;
 };

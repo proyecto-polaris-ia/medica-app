@@ -12,7 +12,7 @@ import { MonthCalendar } from '@/components/admin/calendar/MonthCalendar';
 import { CalendarNav } from '@/components/admin/calendar/CalendarNav';
 import { ProviderLegend } from '@/components/admin/calendar/ProviderLegend';
 import { PatientRecordModal } from '@/components/admin/PatientRecordModal';
-import type { Appointment, Provider } from '@/lib/admin/types';
+import type { Appointment, AppointmentReminderSummary, Provider } from '@/lib/admin/types';
 import {
   clinicMonthRangeUtc,
   FALLBACK_COLOR,
@@ -57,6 +57,64 @@ function toLocalInput(iso: string): string {
 
 function fromLocalInput(value: string): string {
   return new Date(value).toISOString();
+}
+
+// Fecha/hora del envío del recordatorio SIEMPRE en la zona clínica
+// (America/Mexico_City), nunca en la zona del navegador. Produce
+// "3 oct 2026, 09:15".
+const REMINDER_DATE_FORMATTER = new Intl.DateTimeFormat('es-MX', {
+  timeZone: 'America/Mexico_City',
+  day: 'numeric',
+  month: 'short',
+  year: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit',
+  hour12: false,
+});
+
+function formatReminderSentAt(iso: string): string {
+  return REMINDER_DATE_FORMATTER.format(new Date(iso));
+}
+
+function statusLabel(status: Appointment['status']): string {
+  switch (status) {
+    case 'confirmed':
+      return 'Confirmada';
+    case 'requested':
+    case 'pending':
+      return 'Sin confirmar';
+    case 'cancelled':
+      return 'Cancelada';
+    case 'rescheduled':
+      return 'Reagendada';
+    case 'no_show':
+      return 'No asistió';
+    case 'attended':
+      return 'Atendida';
+    default:
+      return status;
+  }
+}
+
+// Nunca muestra una fecha de recordatorio inexistente: cuando no hay `sentAt`
+// cae en el estado correspondiente (programado/falló/simulado).
+function reminderLabel(reminder: AppointmentReminderSummary): string {
+  if (reminder.dryRun && reminder.status === 'scheduled') {
+    return 'Simulado (dry-run)';
+  }
+  if (reminder.status === 'sent' && reminder.sentAt) {
+    return reminder.cadence === 'h24'
+      ? `Recordatorio H-24 enviado el ${formatReminderSentAt(reminder.sentAt)}`
+      : `Recordatorio día mismo enviado el ${formatReminderSentAt(reminder.sentAt)}`;
+  }
+  if (reminder.status === 'failed') {
+    return reminder.cadence === 'h24'
+      ? 'Recordatorio H-24 falló'
+      : 'Recordatorio día mismo falló';
+  }
+  return reminder.cadence === 'h24'
+    ? 'Recordatorio H-24 programado'
+    : 'Recordatorio día mismo programado';
 }
 
 export default function AppointmentsPage() {
@@ -570,7 +628,25 @@ export default function AppointmentsPage() {
                   )}
                 </button>
               ),
-              cell: (a) => a.status
+              cell: (a) => statusLabel(a.status)
+            },
+            {
+              header: 'Recordatorio',
+              cell: (a) =>
+                a.reminders && a.reminders.length > 0 ? (
+                  <div className="flex flex-col gap-1">
+                    {a.reminders.map((reminder, index) => (
+                      <span
+                        key={`${reminder.cadence}-${reminder.createdAt}-${index}`}
+                        className="inline-flex w-fit rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-900"
+                      >
+                        {reminderLabel(reminder)}
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <span className="text-gray-500">Sin recordatorio</span>
+                ),
             },
             {
               header: 'Notas',

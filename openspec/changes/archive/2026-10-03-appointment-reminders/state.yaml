@@ -1,0 +1,12 @@
+schema: spec-driven
+change: appointment-reminders
+status: archived
+artifact_store: openspec
+created: 2026-10-02
+phases:
+  proposal: complete
+  spec: complete
+  design: complete
+  tasks: complete
+  apply: complete
+  verify: complete
