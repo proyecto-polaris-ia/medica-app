@@ -289,16 +289,34 @@ Archivos: `src/components/admin/patient-record/ClinicalVisitForm.tsx` y
 
 ## Verify — cierre del cambio
 
-- [ ] V.1 Ejecutar el typecheck: `npm run typecheck` → sin errores.
-- [ ] V.2 Ejecutar el lint: `npm run lint` → sin errores. **Nota:** si el script
+- [x] V.1 Ejecutar el typecheck: `npm run typecheck` → sin errores.
+  - Resultado: **PASS** — `tsc --noEmit` terminó sin errores.
+- [x] V.2 Ejecutar el lint: `npm run lint` → sin errores. **Nota:** si el script
   `lint` no existe en `package.json` (esta rama no lo define), registrar la
   brecha ambiental en el reporte de verificación y no inventar un runner.
-- [ ] V.3 Ejecutar la suite completa: `npm run test` → todo en verde (o registrar
+  - Resultado: **BRECHA AMBIENTAL (no bloqueante)** — `package.json` no define el
+    script `lint`; no se inventó runner. Registrado en `verify-report.md` como
+    advertencia 1. El lint queda como hueco preexistente ajeno al cambio.
+- [x] V.3 Ejecutar la suite completa: `npm run test` → todo en verde (o registrar
   cualquier fallo preexistente ajeno al cambio).
-- [ ] V.4 Ejecutar el build: `npm run build` → compila sin errores.
-- [ ] V.5 Verificación estructural final de la migración `0020`, el bucket
+  - Resultado: **PASS** — `vitest run` con **128 archivos de prueba / 1137 tests**
+    en verde; sin fallos preexistentes ni ajenos al cambio.
+- [x] V.4 Ejecutar el build: `npm run build` → compila sin errores.
+  - Resultado: **PASS** — `next build` compiló sin errores.
+- [x] V.5 Verificación estructural final de la migración `0020`, el bucket
   privado y las policies sin `anon`, y revisión de que ningún texto de error
   dirigido al usuario quedó en inglés.
+  - Resultado: **PASS** — `0020_patient_files.sql` crea la tabla `patient_files`,
+    ambos índices, RLS con `ENABLE` + `FORCE ROW LEVEL SECURITY`, `REVOKE ... FROM
+    anon`, y el bucket `patient-files` con `public = false`; no existe ninguna
+    policy `TO anon`. Los mensajes de validación de la lib y de la API están en
+    español de México. El `down/0020_patient_files.down.sql` revierte policies,
+    tabla y bucket.
+
+**Veredicto de verificación: PASS WITH WARNINGS.** Las advertencias son: el
+script `lint` ausente en `package.json` (brecha ambiental) y las dos tareas de
+verificación manual con base viva (8.3 y 10.2), que permanecen abiertas a
+propósito. Detalle completo en `verify-report.md`.
 
 ---
 
