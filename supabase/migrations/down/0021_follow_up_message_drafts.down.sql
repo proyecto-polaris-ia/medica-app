@@ -1,5 +1,5 @@
 -- Down migration para los borradores de seguimiento (0020).
--- Revierte exactamente lo creado en 0020_follow_up_message_drafts.sql:
+-- Revierte exactamente lo creado en 0021_follow_up_message_drafts.sql:
 -- índices, tabla y enum (en orden inverso).
 
 DROP INDEX IF EXISTS idx_follow_up_drafts_status;

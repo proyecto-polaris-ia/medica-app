@@ -1,5 +1,5 @@
--- Down migration para archivos clínicos del paciente (0020).
--- Revierte exactamente lo creado en 0020_patient_files.sql: policies de
+-- Down migration para archivos clínicos del paciente (0022).
+-- Revierte exactamente lo creado en 0022_patient_files.sql: policies de
 -- storage.objects, policy y tabla de metadatos y bucket privado.
 -- Advertencia: NO borra los objetos ya almacenados en el bucket; respaldar el
 -- bucket antes de aplicar este down si se decide eliminar la capacidad.
