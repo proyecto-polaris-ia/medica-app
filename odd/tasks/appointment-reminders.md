@@ -19,8 +19,8 @@ Recordatorios automáticos de citas por WhatsApp (H-24 y día mismo) + visibilid
 - [x] Tasks: tasks.md — 30 tareas, forecast alto; decisiones del usuario: 3 PRs encadenados, lint omitido (follow-up)
 - [x] Apply slice 3/3: data layer + panel + tab Citas — 846 tests suite completa, tsc limpio — commit 3bbccdd
 - [x] Apply: fases 1-3 completadas (3 commits)
-- [~] Verify: test + typecheck + build (lint omitido por decisión)
-- [ ] Archive: mover cambio a archive, commit, push, PR (Closes #86)
+- [x] Verify: PASS WITH WARNINGS — 846/846 tests, tsc y build limpios; lint omitido; fix dry_run DEFAULT true aplicado
+- [x] Archive + PR: archivado en openspec/changes/archive/2026-10-03-appointment-reminders; PRs encadenados #92 → #93 → #94 (Closes #86)
 
 ## Evidencia de commits
 
