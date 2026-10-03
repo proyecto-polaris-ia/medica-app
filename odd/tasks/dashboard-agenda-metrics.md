@@ -19,11 +19,11 @@
 2. [x] Spec — deltas RFC 2119 por capability (6 requisitos / 29 escenarios en specs/dashboard-metrics/spec.md)
 3. [x] Design — design.md con rutas y decisiones (692 líneas, sin open questions)
 4. [x] Tasks — tasks.md con forecast (68 tareas; Fase 1: 33, Fase 2: 18, Fase 3: 17; Decision needed: No)
-5. [ ] Apply Fase 1 — migración de transiciones + lib `src/lib/admin/metrics/` + tests (RED→GREEN)
-6. [ ] Apply Fase 2 — panel de métricas en dashboard (selector de rango, cards, desglose por proveedor)
-7. [ ] Apply Fase 3 — tendencia vs periodo anterior
-8. [ ] Verify — tsc + vitest + build
-9. [ ] Archive — materializar specs
+5. [x] Apply Fase 1 — migración 0019 (con down) + estampado atómico + lib `src/lib/admin/metrics/` + 99 tests (RED→GREEN). Commits 69e01a4, 1c56a82
+6. [x] Apply Fase 2 — panel en dashboard (loader sin N+1, selector, cards, desglose, loading/empty) + 23 tests. Commit 8aa71e5
+7. [x] Apply Fase 3 — trend.ts (previousRangeOf/bucketRange/computeTrend) + loader ext + serie accesible + 117 tests. Commit a0eb6ad
+8. [x] Verify — PASS WITH WARNINGS: 1076 tests, build OK, tsc OK, migración/N+1/TZ/clamp correctos. Pendiente: openspec validate (CLI no instalada) y verificación manual con BD (16.3/21.4)
+9. [x] Archive — openspec/changes/archive/2026-10-03-dashboard-agenda-metrics/ + spec materializada en openspec/specs/dashboard-metrics/spec.md
 10. [ ] PRs apilados por fase (Fase 1 base main → Fase 2 → Fase 3, Closes #88)
 
 ## Evidence
