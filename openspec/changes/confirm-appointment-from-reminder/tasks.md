@@ -216,7 +216,7 @@ Archivos de prueba: `src/lib/citas/__tests__/reminder-reply-flag.test.ts`,
   el `isFlowEngineEnabled` privado de `inbound-service.ts`.
   - Verificación:
     `npm run test -- src/lib/citas/__tests__/reminder-reply-flag.test.ts` → **pasa**.
-- [ ] 3.3 **RED** — Escribir
+- [x] 3.3 **RED** — Escribir
   `src/lib/whatsapp/__tests__/orchestrator-flow-session.test.ts` para las
   exportaciones de `src/lib/whatsapp/orchestrator.ts`: `isFlowSessionActive`
   devuelve `true` con sesión no `complete` y no expirada; `false` con
@@ -226,7 +226,7 @@ Archivos de prueba: `src/lib/citas/__tests__/reminder-reply-flag.test.ts`,
   - Verificación:
     `npm run test -- src/lib/whatsapp/__tests__/orchestrator-flow-session.test.ts`
     → **falla** (`isFlowSessionActive` no exportado / inexistente).
-- [ ] 3.4 **GREEN** — Exportar desde `src/lib/whatsapp/orchestrator.ts`
+- [x] 3.4 **GREEN** — Exportar desde `src/lib/whatsapp/orchestrator.ts`
   `isFlowSessionActive(flowState, now)`, `isFlowExpired` y
   `FLOW_TIMEOUT_MINUTES` con la semántica exacta del bloque privado actual
   (`flowState != null && flowState.name !== 'complete' && !isFlowExpired(...)`),
