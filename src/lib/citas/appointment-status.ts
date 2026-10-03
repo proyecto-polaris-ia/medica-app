@@ -8,6 +8,7 @@
  */
 
 import { getSupabaseAdmin } from '@/lib/supabase/server';
+import { buildTransitionStamp } from '@/lib/admin/metrics/transitions';
 import {
   CANCEL_ALLOWED_FROM,
   CONFIRM_ALLOWED_FROM,
@@ -61,7 +62,12 @@ export async function transitionAppointmentFromReminder(input: {
 
   const { data: updated, error: updateError } = await getSupabaseAdmin()
     .from('appointments')
-    .update({ status: input.to, notes })
+    .update({
+      status: input.to,
+      notes,
+      // Estampado de transición en la misma sentencia que el cambio de estado.
+      ...buildTransitionStamp(input.to, input.occurredAt),
+    })
     .eq('id', input.appointmentId)
     .in('status', allowed as unknown as string[])
     .select('id');

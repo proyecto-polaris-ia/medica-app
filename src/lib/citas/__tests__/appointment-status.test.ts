@@ -125,6 +125,7 @@ describe('transitionAppointmentFromReminder', () => {
     expect(query._updates[0]).toEqual({
       status: 'confirmed',
       notes: '[2026-09-05 12:30 America/Mexico_City] Confirmada desde recordatorio (quién: sistema/recordatorio)',
+      confirmed_at: OCCURRED_AT.toISOString(),
     });
     expect(query.eq).toHaveBeenCalledWith('id', APPOINTMENT_ID);
     expect(query.in).toHaveBeenCalledWith('status', ['requested', 'pending']);
@@ -143,6 +144,7 @@ describe('transitionAppointmentFromReminder', () => {
     });
 
     expect(result).toEqual({ ok: true, status: 'confirmed' });
+    expect(query._updates[0].confirmed_at).toBe(OCCURRED_AT.toISOString());
   });
 
   it('confirmed → cancelled anexa el motivo y usa el set de cancelación', async () => {
@@ -163,6 +165,7 @@ describe('transitionAppointmentFromReminder', () => {
       status: 'cancelled',
       notes:
         'nota previa | [2026-09-05 12:30 America/Mexico_City] Cancelada desde recordatorio (quién: sistema/recordatorio). Motivo: no alcanzo, trabajo',
+      cancelled_at: OCCURRED_AT.toISOString(),
     });
     expect(query.in).toHaveBeenCalledWith('status', ['requested', 'pending', 'confirmed']);
   });
@@ -180,6 +183,7 @@ describe('transitionAppointmentFromReminder', () => {
     });
 
     expect(result).toEqual({ ok: true, status: 'cancelled' });
+    expect(query._updates[0].cancelled_at).toBe(OCCURRED_AT.toISOString());
   });
 
   it('0 filas afectadas (carrera) → relee y devuelve ineligible_status', async () => {
