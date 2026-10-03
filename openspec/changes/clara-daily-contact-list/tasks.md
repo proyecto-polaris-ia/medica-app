@@ -651,5 +651,5 @@ GREEN, más las verificaciones transversales de la Fase 4.
 | Fase 4 — Verificación global | — | 6 (4.1–4.6) |
 | **Total** | 3 PRs apilados | **49** |
 
-Ninguna tarea está marcada como completada: todas permanecen en `- [ ]` hasta su
-ejecución y verificación observada.
+Al cierre del ciclo: las 49 tareas están completadas y verificadas (Apply en TDD por
+fase + verificación 4.1–4.6 con PASS WITH WARNINGS).
