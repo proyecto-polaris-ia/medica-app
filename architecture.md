@@ -100,11 +100,24 @@ reprogramada / no_asistió / atendida`.
 ### Migraciones
 
 Supabase acepta tanto nomenclatura secuencial como timestamp (y aplica los
-archivos en orden lexicográfico), pero la **convención vigente en este repo es
-secuencial**: `supabase/migrations/NNNN_descripcion_snake_case.sql`
-(p. ej. `0017_payment_intents_reminders.sql`), con 4 dígitos y ceros a la
-izquierda. Las migraciones nuevas siguen ese formato. Si dos ramas crean la
-misma secuencia, se renumera localmente antes de hacer merge.
+archivos en orden lexicográfico). La **convención vigente en este repo es
+timestamp**: `supabase/migrations/YYYYMMDDHHMMSS_descripcion_snake_case.sql`
+(p. ej. `20250115103000_payment_intents_reminders.sql`), con la fecha/hora en
+UTC. La numeración secuencial `NNNN_descripcion.sql`
+(p. ej. `0017_payment_intents_reminders.sql`) está **deprecada**: los archivos
+existentes no se renombran, pero no debe extenderse con migraciones nuevas.
+
+Reglas:
+
+- Toda migración nueva usa timestamp `YYYYMMDDHHMMSS_descripcion.sql`.
+- El timestamp se toma al momento de crear el archivo (UTC), no se reutiliza ni
+  se inventa.
+- Los archivos secuenciales existentes (`0001`–`00NN`) se conservan tal cual;
+  no se renumeran ni se convierten a timestamp.
+- Supabase aplica el orden lexicográfico, así que los archivos timestamp se
+  ejecutan después de los secuenciales; si eso importa para una migración
+  nueva, verificar dependencias contra el estado real del esquema, no contra el
+  número secuencial.
 
 Reglas de contenido: instantes de fecha/hora siempre `timestamptz`
 (presentación en `America/Mexico_City`, ver `src/lib/admin/clinic-time.ts`);
