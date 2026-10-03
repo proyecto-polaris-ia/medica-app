@@ -47,3 +47,6 @@ opencode.json
 .engram/
 .eve/
 .output/
+
+# Archify: diagramas generados (regenerar con bin/archify.mjs finalize)
+.archify/
