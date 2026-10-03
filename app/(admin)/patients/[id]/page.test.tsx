@@ -61,11 +61,13 @@ function buildFetchMock(overrides: {
   treatmentPlans?: Record<string, unknown>[];
   paymentsResponse?: Record<string, unknown>;
   paymentsOk?: boolean;
+  files?: Record<string, unknown>[];
 } = {}) {
   const record = overrides.record ?? BASE_RECORD;
   const history = overrides.history ?? EMPTY_HISTORY;
   const visits = overrides.visits ?? [];
   const treatmentPlans = overrides.treatmentPlans ?? [];
+  const files = overrides.files ?? [];
   const paymentsResponse = overrides.paymentsResponse ?? {
     payments: [],
     summary: {
@@ -105,6 +107,10 @@ function buildFetchMock(overrides: {
         ok: paymentsOk,
         json: () => Promise.resolve(paymentsResponse),
       });
+    }
+
+    if (urlString === `/api/admin/patients/${PATIENT_ID}/files` && !init?.method) {
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ files }) });
     }
 
     if (urlString === `/api/admin/patients/${PATIENT_ID}/clinical-visits` && init?.method === 'POST') {
@@ -148,7 +154,7 @@ describe('/patients/[id] clinical record UI', () => {
     window.confirm = vi.fn(() => true);
   });
 
-  it('renders tabs Datos, Historia, Consultas, Citas, Plan de tratamiento and Pagos', async () => {
+  it('renders tabs Datos, Historia, Consultas, Citas, Plan de tratamiento, Pagos and Archivos', async () => {
     global.fetch = buildFetchMock();
     render(<PatientRecordPage />);
 
@@ -161,6 +167,42 @@ describe('/patients/[id] clinical record UI', () => {
     expect(screen.getByRole('tab', { name: 'Citas' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'Plan de tratamiento' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'Pagos' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Archivos' })).toBeInTheDocument();
+  });
+
+  it('loads the patient files in the Archivos tab', async () => {
+    const user = userEvent.setup();
+    const fetchMock = buildFetchMock({
+      files: [
+        {
+          id: '990e8400-e29b-41d4-a716-446655440000',
+          patientId: PATIENT_ID,
+          clinicalVisitId: null,
+          category: 'document',
+          storagePath: `${PATIENT_ID}/estudio.pdf`,
+          fileName: 'estudio.pdf',
+          mimeType: 'application/pdf',
+          sizeBytes: 1024,
+          uploadedBy: 'user-1',
+          createdAt: '2026-09-12T10:00:00Z',
+          signedUrl: 'https://storage.example.com/signed-pdf',
+        },
+      ],
+    });
+    global.fetch = fetchMock;
+    render(<PatientRecordPage />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: 'Archivos' })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('tab', { name: 'Archivos' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('estudio.pdf')).toBeInTheDocument();
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(`/api/admin/patients/${PATIENT_ID}/files`);
   });
 
   it('shows a recoverable payments error without hiding the other patient record tabs', async () => {

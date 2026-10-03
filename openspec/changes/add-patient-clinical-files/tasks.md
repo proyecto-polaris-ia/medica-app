@@ -181,7 +181,7 @@ Archivos de prueba co-locados: `.../files/route.test.ts` y
 Archivos: `src/components/admin/patient-record/PatientFilesTab.tsx` (nuevo) y
 `src/components/admin/patient-record/PatientFilesTab.test.tsx` (nuevo).
 
-- [ ] 6.1 **RED** — Escribir `PatientFilesTab.test.tsx` (patrón
+- [x] 6.1 **RED** — Escribir `PatientFilesTab.test.tsx` (patrón
   `PatientPaymentsTab.test.tsx`): estado vacío con `EmptyState`; lista con
   miniatura de imagen y botón de descarga para PDF; subida que llama a la API con
   `FormData` y dispara `onFilesChanged`; error de validación que muestra el
@@ -189,7 +189,7 @@ Archivos: `src/components/admin/patient-record/PatientFilesTab.tsx` (nuevo) y
   - Verificación:
     `npx vitest run src/components/admin/patient-record/PatientFilesTab.test.tsx`
     → falla.
-- [ ] 6.2 **GREEN** — Implementar `PatientFilesTab` (`'use client'`): props
+- [x] 6.2 **GREEN** — Implementar `PatientFilesTab` (`'use client'`): props
   `patientId`, `clinicalVisits`, `files`, `loading`, `error`, `onFilesChanged`;
   carga por arrastrar y soltar + `<input type="file" multiple accept=...>`;
   selectores de categoría y de consulta opcional (`clinicalVisitId`, con "Sin
@@ -199,7 +199,7 @@ Archivos: `src/components/admin/patient-record/PatientFilesTab.tsx` (nuevo) y
   - Verificación:
     `npx vitest run src/components/admin/patient-record/PatientFilesTab.test.tsx`
     → pasa.
-- [ ] 6.3 **TRIANGULATE/REFACTOR** — Cubrir archivo rechazado (muestra el
+- [x] 6.3 **TRIANGULATE/REFACTOR** — Cubrir archivo rechazado (muestra el
   mensaje en español y no actualiza la lista) y lista vacía tras eliminar el
   último archivo; limpiar sin cambiar el contrato.
   - Verificación:
@@ -211,34 +211,34 @@ Archivos: `src/components/admin/patient-record/PatientFilesTab.tsx` (nuevo) y
 Archivos: `src/components/admin/patient-record/PatientRecordTabs.tsx` y
 `app/(admin)/patients/[id]/page.tsx` (modificar).
 
-- [ ] 7.1 Extender `PatientRecordTabs.tsx`: agregar `'files'` a
+- [x] 7.1 Extender `PatientRecordTabs.tsx`: agregar `'files'` a
   `type TabId`, `{ id: 'files', label: 'Archivos' }` a `TABS`, las props
   `files` / `filesLoading` / `filesError` / `onFilesChanged`, y renderizar
   `PatientFilesTab` en el `tabpanel` pasando `clinicalVisits`.
   - Verificación: `npm run typecheck` → sin errores; lectura de que la pestaña
     existente no cambia de contrato.
-- [ ] 7.2 Extender `app/(admin)/patients/[id]/page.tsx`: estado `files` /
+- [x] 7.2 Extender `app/(admin)/patients/[id]/page.tsx`: estado `files` /
   `filesLoading` / `filesError`, `loadFiles()` contra
   `GET /api/admin/patients/${patientId}/files` (error no bloquea el expediente,
   patrón `loadMedicalHistory`), llamada en el `useEffect` y paso de props a
   `PatientRecordTabs` con `onFilesChanged={loadFiles}`.
   - Verificación: `npm run typecheck` → sin errores.
-- [ ] 7.3 **RED/GREEN** — Extender `app/(admin)/patients/[id]/page.test.tsx`:
+- [x] 7.3 **RED/GREEN** — Extender `app/(admin)/patients/[id]/page.test.tsx`:
   la pestaña "Archivos" aparece y carga los archivos del paciente.
   - Verificación: `npx vitest run "app/(admin)/patients/[id]/page.test.tsx"` →
     pasa.
 
 ### 8. Verificación de Fase 2
 
-- [ ] 8.1 Ejecutar las pruebas focales:
+- [x] 8.1 Ejecutar las pruebas focales:
   `npx vitest run src/components/admin/patient-record/PatientFilesTab.test.tsx "app/(admin)/patients/[id]/page.test.tsx"`
   → todo en verde.
-- [ ] 8.2 Ejecutar el typecheck: `npm run typecheck` → sin errores.
+- [x] 8.2 Ejecutar el typecheck: `npm run typecheck` → sin errores.
 - [ ] 8.3 Verificación manual (no hay DB en CI): con datos reales, subir una
   imagen y un PDF desde la pestaña "Archivos", ver la miniatura, descargar el PDF
   y eliminar un archivo; registrar la evidencia en el PR.
-  - **Abierta a propósito**: pendiente de verificación manual con la base viva,
-    no verificable en CI.
+  - **Abierta a propósito (sin marcar)**: pendiente de verificación manual con la
+    base viva; no es verificable en CI. Se deja intencionalmente abierta.
 
 ---
 

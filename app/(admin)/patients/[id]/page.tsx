@@ -10,6 +10,7 @@ import type {
   ClinicalVisit,
   MedicalHistory,
   Patient,
+  PatientFile,
   PatientReceivableSummary,
   PatientRecord,
   Payment,
@@ -61,6 +62,9 @@ export default function PatientRecordPage() {
   const [paymentsSummary, setPaymentsSummary] = useState<PatientReceivableSummary>(EMPTY_PAYMENT_SUMMARY);
   const [paymentsLoading, setPaymentsLoading] = useState(false);
   const [paymentsError, setPaymentsError] = useState<string | null>(null);
+  const [files, setFiles] = useState<PatientFile[]>([]);
+  const [filesLoading, setFilesLoading] = useState(false);
+  const [filesError, setFilesError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -144,12 +148,30 @@ export default function PatientRecordPage() {
     }
   }
 
+  async function loadFiles() {
+    if (!patientId) return;
+    setFilesLoading(true);
+    setFilesError(null);
+    try {
+      const res = await fetch(`/api/admin/patients/${patientId}/files`);
+      if (!res.ok) throw new Error('Error al cargar los archivos');
+      const data = await res.json();
+      setFiles(data.files ?? []);
+    } catch (err) {
+      setFilesError(err instanceof Error ? err.message : 'Error desconocido');
+      setFiles([]);
+    } finally {
+      setFilesLoading(false);
+    }
+  }
+
   useEffect(() => {
     loadRecord();
     loadMedicalHistory();
     loadClinicalVisits();
     loadTreatmentPlans();
     loadPayments();
+    loadFiles();
   }, [patientId]);
 
   function handlePatientUpdated(patient: Patient) {
@@ -189,11 +211,15 @@ export default function PatientRecordPage() {
           paymentsSummary={paymentsSummary}
           paymentsLoading={paymentsLoading}
           paymentsError={paymentsError}
+          files={files}
+          filesLoading={filesLoading}
+          filesError={filesError}
           onPatientUpdated={handlePatientUpdated}
           onHistoryUpdated={handleHistoryUpdated}
           onVisitsChanged={loadClinicalVisits}
           onPlansChanged={loadTreatmentPlans}
           onPaymentsChanged={loadPayments}
+          onFilesChanged={loadFiles}
         />
       )}
     </div>
