@@ -46,14 +46,14 @@ function setupFetch() {
       void init;
       return Response.json({ contact: {} }, { status: 201 });
     }
+    if (path === '/api/admin/follow-up/drafts') {
+      void init;
+      return Response.json({ draft: {} }, { status: 201 });
+    }
     return new Response('Not found', { status: 404 });
   });
   global.fetch = fetchMock as unknown as typeof fetch;
   return fetchMock;
-}
-
-function cardFor(name: string): HTMLElement {
-  return screen.getByText(name).closest('article') as HTMLElement;
 }
 
 function postCalls(fetchMock: ReturnType<typeof setupFetch>) {
@@ -61,6 +61,17 @@ function postCalls(fetchMock: ReturnType<typeof setupFetch>) {
     ([, init]) =>
       (init as RequestInit | undefined)?.method === 'POST'
   );
+}
+
+function postCallsTo(fetchMock: ReturnType<typeof setupFetch>, path: string) {
+  return fetchMock.mock.calls.filter(
+    ([url, init]) =>
+      String(url) === path && (init as RequestInit | undefined)?.method === 'POST'
+  );
+}
+
+function cardFor(name: string): HTMLElement {
+  return screen.getByText(name).closest('article') as HTMLElement;
 }
 
 describe('FollowUpList', () => {
@@ -160,14 +171,51 @@ describe('FollowUpList', () => {
     expect(postCalls(fetchMock)).toHaveLength(0);
   });
 
-  it('shows the Phase 3 draft action', async () => {
+  it('generates a draft via POST and links to the WCC approval page', async () => {
+    const fetchMock = setupFetch();
     render(<FollowUpList />);
 
     await screen.findByText('María García');
     const maria = cardFor('María García');
-    expect(
+    await userEvent.click(
       within(maria).getByRole('button', { name: 'Generar borrador' })
-    ).toBeInTheDocument();
+    );
+
+    await waitFor(() => {
+      const posts = postCallsTo(fetchMock, '/api/admin/follow-up/drafts');
+      expect(posts).toHaveLength(1);
+      expect(JSON.parse((posts[0][1] as RequestInit).body as string)).toEqual({
+        patientId: MARIA_ID,
+      });
+    });
+
+    const link = await within(cardFor('María García')).findByRole('link', {
+      name: /Aprobar/i,
+    });
+    expect(link).toHaveAttribute(
+      'href',
+      '/whatsapp-command-center/follow-up-drafts'
+    );
+  });
+
+  it('does not reload the follow-up list when generating a draft', async () => {
+    const fetchMock = setupFetch();
+    render(<FollowUpList />);
+
+    await screen.findByText('María García');
+    await userEvent.click(
+      within(cardFor('María García')).getByRole('button', {
+        name: 'Generar borrador',
+      })
+    );
+
+    await waitFor(() =>
+      expect(postCallsTo(fetchMock, '/api/admin/follow-up/drafts')).toHaveLength(1)
+    );
+    const gets = fetchMock.mock.calls.filter(
+      ([url]) => String(url) === '/api/admin/follow-up'
+    );
+    expect(gets).toHaveLength(1);
   });
 
   it('removes a contacted patient once the list reloads', async () => {
