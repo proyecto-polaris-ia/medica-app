@@ -1,8 +1,9 @@
 'use client';
 
-import { useState } from 'react';
-import type { ClinicalVisit, ClinicalVisitInput } from '@/lib/admin/types';
+import { useCallback, useEffect, useState } from 'react';
+import type { ClinicalVisit, ClinicalVisitInput, PatientFile } from '@/lib/admin/types';
 import { FormModal } from '@/components/admin/FormModal';
+import { PatientFilesTab } from './PatientFilesTab';
 
 type ClinicalVisitFormProps = {
   patientId: string;
@@ -45,6 +46,49 @@ export function ClinicalVisitForm({
   const [formData, setFormData] = useState(visitToInput(visit));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [savedVisit, setSavedVisit] = useState<ClinicalVisit | null>(null);
+  const [visitFiles, setVisitFiles] = useState<PatientFile[]>([]);
+  const [visitFilesLoading, setVisitFilesLoading] = useState(false);
+  const [visitFilesError, setVisitFilesError] = useState<string | null>(null);
+
+  // Al abrir una consulta nueva/edición se limpia el panel de archivos previo.
+  useEffect(() => {
+    if (isOpen) setSavedVisit(null);
+  }, [isOpen]);
+
+  const loadVisitFiles = useCallback(async () => {
+    if (!savedVisit) return;
+    setVisitFilesLoading(true);
+    setVisitFilesError(null);
+    try {
+      const res = await fetch(
+        `/api/admin/patients/${patientId}/files?clinicalVisitId=${savedVisit.id}`
+      );
+      if (!res.ok) {
+        throw new Error('No se pudieron cargar los archivos de la consulta.');
+      }
+      const data = await res.json();
+      setVisitFiles(data.files ?? []);
+    } catch (err) {
+      setVisitFilesError(
+        err instanceof Error
+          ? err.message
+          : 'No se pudieron cargar los archivos de la consulta.'
+      );
+    } finally {
+      setVisitFilesLoading(false);
+    }
+  }, [patientId, savedVisit]);
+
+  useEffect(() => {
+    void loadVisitFiles();
+  }, [loadVisitFiles]);
+
+  function handleFinishAttachments() {
+    setSavedVisit(null);
+    setVisitFiles([]);
+    setVisitFilesError(null);
+  }
 
   function handleChange(field: keyof typeof formData, value: string) {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -81,6 +125,9 @@ export function ClinicalVisitForm({
       }
 
       const data = await res.json();
+      // La consulta se guarda como JSON; los archivos se suben DESPUÉS,
+      // en multipart/form-data, con el clinical_visit_id recién obtenido.
+      setSavedVisit(data.clinicalVisit);
       onSaved(data.clinicalVisit);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error desconocido');
@@ -89,7 +136,7 @@ export function ClinicalVisitForm({
     }
   }
 
-  if (!isOpen) return null;
+  if (!isOpen && !savedVisit) return null;
 
   const inputClass =
     'mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500';
@@ -97,101 +144,141 @@ export function ClinicalVisitForm({
   const textareaClass = `${inputClass} resize-y`;
 
   return (
-    <FormModal
-      title={visit ? 'Editar consulta' : 'Nueva consulta'}
-      onClose={onClose}
-      onSubmit={handleSubmit}
-      submitLabel={visit ? 'Guardar cambios' : 'Guardar consulta'}
-      isSubmitting={saving}
-    >
-      {error && (
-        <div className="rounded-md bg-red-50 p-3 text-sm text-red-700">{error}</div>
+    <>
+      {isOpen && (
+        <FormModal
+          title={visit ? 'Editar consulta' : 'Nueva consulta'}
+          onClose={onClose}
+          onSubmit={handleSubmit}
+          submitLabel={visit ? 'Guardar cambios' : 'Guardar consulta'}
+          isSubmitting={saving}
+        >
+          {error && (
+            <div className="rounded-md bg-red-50 p-3 text-sm text-red-700">{error}</div>
+          )}
+
+          <div>
+            <label htmlFor="subjective" className={labelClass}>
+              Subjetivo
+            </label>
+            <textarea
+              id="subjective"
+              rows={3}
+              value={formData.subjective}
+              onChange={(e) => handleChange('subjective', e.target.value)}
+              placeholder="Motivo de la consulta"
+              className={textareaClass}
+              required
+            />
+          </div>
+
+          <div>
+            <label htmlFor="objective" className={labelClass}>
+              Objetivo
+            </label>
+            <textarea
+              id="objective"
+              rows={3}
+              value={formData.objective ?? ''}
+              onChange={(e) => handleChange('objective', e.target.value)}
+              placeholder="Hallazgos clínicos"
+              className={textareaClass}
+            />
+          </div>
+
+          <div>
+            <label htmlFor="assessment" className={labelClass}>
+              Valoración
+            </label>
+            <textarea
+              id="assessment"
+              rows={3}
+              value={formData.assessment ?? ''}
+              onChange={(e) => handleChange('assessment', e.target.value)}
+              placeholder="Valoración clínica (texto libre del dentista)"
+              className={textareaClass}
+            />
+          </div>
+
+          <div>
+            <label htmlFor="plan" className={labelClass}>
+              Plan
+            </label>
+            <textarea
+              id="plan"
+              rows={3}
+              value={formData.plan ?? ''}
+              onChange={(e) => handleChange('plan', e.target.value)}
+              placeholder="Plan de tratamiento"
+              className={textareaClass}
+            />
+          </div>
+
+          <div>
+            <label htmlFor="treatment" className={labelClass}>
+              Tratamiento realizado
+            </label>
+            <input
+              id="treatment"
+              type="text"
+              value={formData.treatment ?? ''}
+              onChange={(e) => handleChange('treatment', e.target.value)}
+              placeholder="Tratamiento realizado"
+              className={inputClass}
+            />
+          </div>
+
+          <div>
+            <label htmlFor="notes" className={labelClass}>
+              Notas
+            </label>
+            <textarea
+              id="notes"
+              rows={3}
+              value={formData.notes ?? ''}
+              onChange={(e) => handleChange('notes', e.target.value)}
+              placeholder="Notas adicionales"
+              className={textareaClass}
+            />
+          </div>
+        </FormModal>
       )}
 
-      <div>
-        <label htmlFor="subjective" className={labelClass}>
-          Subjetivo
-        </label>
-        <textarea
-          id="subjective"
-          rows={3}
-          value={formData.subjective}
-          onChange={(e) => handleChange('subjective', e.target.value)}
-          placeholder="Motivo de la consulta"
-          className={textareaClass}
-          required
-        />
-      </div>
+      {savedVisit && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4">
+          <div className="my-8 w-full max-w-2xl rounded-lg bg-white p-6 shadow-lg">
+            <h2 className="text-lg font-semibold text-gray-900">
+              Adjuntar archivos a esta consulta
+            </h2>
+            <p className="mt-1 text-sm text-gray-500">
+              La consulta se guardó. Sube radiografías, fotos o documentos
+              asociados a ella.
+            </p>
 
-      <div>
-        <label htmlFor="objective" className={labelClass}>
-          Objetivo
-        </label>
-        <textarea
-          id="objective"
-          rows={3}
-          value={formData.objective ?? ''}
-          onChange={(e) => handleChange('objective', e.target.value)}
-          placeholder="Hallazgos clínicos"
-          className={textareaClass}
-        />
-      </div>
+            <div className="mt-4">
+              <PatientFilesTab
+                patientId={patientId}
+                clinicalVisits={[]}
+                files={visitFiles}
+                loading={visitFilesLoading}
+                error={visitFilesError}
+                onFilesChanged={loadVisitFiles}
+                clinicalVisitId={savedVisit.id}
+              />
+            </div>
 
-      <div>
-        <label htmlFor="assessment" className={labelClass}>
-          Valoración
-        </label>
-        <textarea
-          id="assessment"
-          rows={3}
-          value={formData.assessment ?? ''}
-          onChange={(e) => handleChange('assessment', e.target.value)}
-          placeholder="Valoración clínica (texto libre del dentista)"
-          className={textareaClass}
-        />
-      </div>
-
-      <div>
-        <label htmlFor="plan" className={labelClass}>
-          Plan
-        </label>
-        <textarea
-          id="plan"
-          rows={3}
-          value={formData.plan ?? ''}
-          onChange={(e) => handleChange('plan', e.target.value)}
-          placeholder="Plan de tratamiento"
-          className={textareaClass}
-        />
-      </div>
-
-      <div>
-        <label htmlFor="treatment" className={labelClass}>
-          Tratamiento realizado
-        </label>
-        <input
-          id="treatment"
-          type="text"
-          value={formData.treatment ?? ''}
-          onChange={(e) => handleChange('treatment', e.target.value)}
-          placeholder="Tratamiento realizado"
-          className={inputClass}
-        />
-      </div>
-
-      <div>
-        <label htmlFor="notes" className={labelClass}>
-          Notas
-        </label>
-        <textarea
-          id="notes"
-          rows={3}
-          value={formData.notes ?? ''}
-          onChange={(e) => handleChange('notes', e.target.value)}
-          placeholder="Notas adicionales"
-          className={textareaClass}
-        />
-      </div>
-    </FormModal>
+            <div className="mt-6 flex justify-end">
+              <button
+                type="button"
+                onClick={handleFinishAttachments}
+                className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+              >
+                Listo
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }

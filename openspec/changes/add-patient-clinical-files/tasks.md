@@ -249,25 +249,25 @@ Archivos: `src/components/admin/patient-record/PatientRecordTabs.tsx` y
 Archivos: `src/components/admin/patient-record/ClinicalVisitForm.tsx` y
 `src/components/admin/patient-record/PatientFilesTab.tsx` (modificar).
 
-- [ ] 9.1 **RED** — Extender `PatientFilesTab.test.tsx` (o su test de
+- [x] 9.1 **RED** — Extender `PatientFilesTab.test.tsx` (o su test de
   integración) para el modo consulta: con `clinicalVisitId` fijo no muestra el
   selector de consulta y envía ese id en el `FormData`.
   - Verificación:
     `npx vitest run src/components/admin/patient-record/PatientFilesTab.test.tsx`
     → falla.
-- [ ] 9.2 **GREEN** — Extender `PatientFilesTab` para aceptar un
+- [x] 9.2 **GREEN** — Extender `PatientFilesTab` para aceptar un
   `clinicalVisitId` fijo opcional (modo consulta) y usarlo al subir.
   - Verificación:
     `npx vitest run src/components/admin/patient-record/PatientFilesTab.test.tsx`
     → pasa.
-- [ ] 9.3 **GREEN** — En `ClinicalVisitForm.tsx`, tras
+- [x] 9.3 **GREEN** — En `ClinicalVisitForm.tsx`, tras
   `onSaved(data.clinicalVisit)` (visita creada/actualizada), ofrecer la carga de
   archivos con el `clinical_visit_id` recién obtenido. **La subida NO viaja
   dentro del JSON de la consulta**: el formulario sigue enviando su JSON actual y
   la carga ocurre después, en `multipart/form-data`.
   - Verificación: `npm run typecheck` → sin errores; lectura de que el cuerpo
     JSON de la consulta no incluye binarios.
-- [ ] 9.4 **TRIANGULATE/REFACTOR** — Verificar que cancelar la consulta no sube
+- [x] 9.4 **TRIANGULATE/REFACTOR** — Verificar que cancelar la consulta no sube
   archivos, que editar una consulta reusa su id y que un archivo asociado a una
   visita de otro paciente se rechaza; limpiar sin cambiar el contrato.
   - Verificación:
@@ -276,7 +276,7 @@ Archivos: `src/components/admin/patient-record/ClinicalVisitForm.tsx` y
 
 ### 10. Verificación de Fase 3
 
-- [ ] 10.1 Ejecutar las pruebas focales de la fase:
+- [x] 10.1 Ejecutar las pruebas focales de la fase:
   `npx vitest run src/lib/admin/__tests__/patient-files.test.ts "app/api/admin/patients/[id]/files/route.test.ts" "app/api/admin/patients/[id]/files/[fileId]/route.test.ts" src/components/admin/patient-record/PatientFilesTab.test.tsx "app/(admin)/patients/[id]/page.test.tsx"`
   → todo en verde.
 - [ ] 10.2 Verificación manual con datos reales: crear una consulta con archivos

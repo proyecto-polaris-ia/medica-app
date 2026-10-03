@@ -340,8 +340,9 @@ describe('patient-files service', () => {
         data: null,
         error: null,
       });
+      const fileQuery = buildQuery();
       const storage = buildStorage();
-      const client = buildClient(visitQuery, buildQuery(), storage);
+      const client = buildClient(visitQuery, fileQuery, storage);
       (getSupabaseAdmin as ReturnType<typeof vi.fn>).mockReturnValue(client);
 
       await expect(
@@ -350,7 +351,14 @@ describe('patient-files service', () => {
           clinicalVisitId: VISIT_ID,
         })
       ).rejects.toBeInstanceOf(NotFoundError);
+      // La consulta debe pertenecer al paciente: no se sube el objeto ni se
+      // insertan metadatos apuntando a una visita ajena.
       expect(storage.upload).not.toHaveBeenCalled();
+      expect(fileQuery._mocks.mockInsert).not.toHaveBeenCalled();
+      expect(visitQuery._mocks.mockEq).toHaveBeenCalledWith(
+        'patient_id',
+        PATIENT_ID
+      );
     });
 
     it('removes the uploaded object when the metadata insert fails', async () => {

@@ -17,6 +17,11 @@ type PatientFilesTabProps = {
   loading: boolean;
   error: string | null;
   onFilesChanged: () => void;
+  /**
+   * Modo consulta: cuando viene un id fijo, la subida se asocia a esa consulta
+   * y se oculta el selector de consulta.
+   */
+  clinicalVisitId?: string | null;
 };
 
 const CATEGORY_LABELS: Record<PatientFileCategory, string> = {
@@ -61,14 +66,18 @@ export function PatientFilesTab({
   loading,
   error,
   onFilesChanged,
+  clinicalVisitId = null,
 }: PatientFilesTabProps) {
   const [category, setCategory] = useState<PatientFileCategory>('document');
-  const [clinicalVisitId, setClinicalVisitId] = useState('');
+  const [selectedVisitId, setSelectedVisitId] = useState('');
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+
+  const isVisitMode = clinicalVisitId !== null;
+  const effectiveVisitId = isVisitMode ? clinicalVisitId : selectedVisitId;
 
   const visitLabelById = useMemo(() => {
     const map = new Map<string, string>();
@@ -89,7 +98,8 @@ export function PatientFilesTab({
         const formData = new FormData();
         formData.append('file', file);
         formData.append('category', category);
-        if (clinicalVisitId) formData.append('clinicalVisitId', clinicalVisitId);
+        if (effectiveVisitId)
+          formData.append('clinicalVisitId', effectiveVisitId);
 
         const res = await fetch(`/api/admin/patients/${patientId}/files`, {
           method: 'POST',
@@ -185,7 +195,11 @@ export function PatientFilesTab({
           WEBP o PDF, hasta 10 MB).
         </p>
 
-        <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div
+          className={`mt-4 grid grid-cols-1 gap-4 ${
+            isVisitMode ? '' : 'sm:grid-cols-2'
+          }`}
+        >
           <label className="block text-sm font-medium text-gray-700">
             Categoría
             <select
@@ -203,22 +217,24 @@ export function PatientFilesTab({
               ))}
             </select>
           </label>
-          <label className="block text-sm font-medium text-gray-700">
-            Consulta
-            <select
-              value={clinicalVisitId}
-              onChange={(event) => setClinicalVisitId(event.target.value)}
-              disabled={uploading}
-              className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-            >
-              <option value="">Sin consulta</option>
-              {clinicalVisits.map((visit) => (
-                <option key={visit.id} value={visit.id}>
-                  {visitLabelById.get(visit.id) ?? visit.id}
-                </option>
-              ))}
-            </select>
-          </label>
+          {!isVisitMode && (
+            <label className="block text-sm font-medium text-gray-700">
+              Consulta
+              <select
+                value={selectedVisitId}
+                onChange={(event) => setSelectedVisitId(event.target.value)}
+                disabled={uploading}
+                className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              >
+                <option value="">Sin consulta</option>
+                {clinicalVisits.map((visit) => (
+                  <option key={visit.id} value={visit.id}>
+                    {visitLabelById.get(visit.id) ?? visit.id}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
         </div>
 
         <div

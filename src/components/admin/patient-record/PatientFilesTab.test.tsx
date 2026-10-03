@@ -157,6 +157,40 @@ describe('PatientFilesTab', () => {
     expect(onFilesChanged).toHaveBeenCalledTimes(1);
   });
 
+  it('hides the visit selector and sends the fixed clinicalVisitId in visit mode', async () => {
+    const user = userEvent.setup();
+    const { onFilesChanged } = renderTab({
+      files: [],
+      clinicalVisitId: VISIT_ID,
+    });
+
+    expect(screen.queryByLabelText('Consulta')).not.toBeInTheDocument();
+
+    const file = new File(['contenido'], 'radiografia.jpg', {
+      type: 'image/jpeg',
+    });
+    await user.upload(screen.getByLabelText('Seleccionar archivos'), file);
+
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalledWith(
+        `/api/admin/patients/${PATIENT_ID}/files`,
+        expect.objectContaining({ method: 'POST' })
+      );
+    });
+
+    const [, init] = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0];
+    const body = init.body as FormData;
+    expect(body).toBeInstanceOf(FormData);
+    expect(body.get('clinicalVisitId')).toBe(VISIT_ID);
+    expect(onFilesChanged).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the visit selector in the default (expediente) mode', () => {
+    renderTab({ files: [] });
+
+    expect(screen.getByLabelText('Consulta')).toBeInTheDocument();
+  });
+
   it('shows the Spanish API validation message when an upload is rejected', async () => {
     const user = userEvent.setup();
     global.fetch = vi.fn(async () => ({
