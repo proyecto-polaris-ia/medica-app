@@ -34,6 +34,12 @@ describe('appointments service', () => {
   const mockLimit = vi.fn();
   const mockSingle = vi.fn();
 
+  // Cadena separada para `appointment_reminders`: evita compartir el terminal
+  // `order` con la consulta de citas (mismo runner, distinta resolución).
+  const reminderSelect = vi.fn();
+  const reminderIn = vi.fn();
+  const reminderOrder = vi.fn();
+
   function buildQuery() {
     return {
       select: mockSelect.mockReturnThis(),
@@ -50,10 +56,25 @@ describe('appointments service', () => {
     };
   }
 
+  function buildReminderQuery() {
+    return {
+      select: reminderSelect.mockReturnThis(),
+      in: reminderIn.mockReturnThis(),
+      order: reminderOrder,
+    };
+  }
+
   beforeEach(() => {
     vi.resetAllMocks();
+    reminderOrder.mockResolvedValue({ data: [], error: null });
+    // Se construyen una sola vez para no reconfigurar los mocks compartidos
+    // (`mockOrder`, etc.) después de que cada test fije su valor resuelto.
+    const appointmentsQuery = buildQuery();
+    const remindersQuery = buildReminderQuery();
     (getSupabaseAdmin as ReturnType<typeof vi.fn>).mockReturnValue({
-      from: vi.fn().mockReturnValue(buildQuery()),
+      from: vi.fn((table: string) =>
+        table === 'appointment_reminders' ? remindersQuery : appointmentsQuery
+      ),
     });
   });
 
@@ -88,7 +109,175 @@ describe('appointments service', () => {
       notes: 'Paciente nerviosa',
       createdAt: '2026-09-01T10:00:00Z',
       updatedAt: '2026-09-01T10:00:00Z',
+      reminders: [],
     }]);
+  });
+
+  it('groups appointment reminders by appointment_id, newest first', async () => {
+    const SECOND_APPOINTMENT_ID = '550e8400-e29b-41d4-a716-446655440009';
+    mockOrder.mockResolvedValue({
+      data: [
+        {
+          id: APPOINTMENT_ID,
+          patient_id: PATIENT_ID,
+          service_id: SERVICE_ID,
+          provider_id: PROVIDER_ID,
+          start_at: '2026-09-10T14:00:00.000Z',
+          end_at: '2026-09-10T14:30:00.000Z',
+          status: 'confirmed',
+          notes: null,
+          created_at: '2026-09-01T10:00:00Z',
+          updated_at: '2026-09-01T10:00:00Z',
+        },
+        {
+          id: SECOND_APPOINTMENT_ID,
+          patient_id: PATIENT_ID,
+          service_id: SERVICE_ID,
+          provider_id: PROVIDER_ID,
+          start_at: '2026-09-11T14:00:00.000Z',
+          end_at: '2026-09-11T14:30:00.000Z',
+          status: 'requested',
+          notes: null,
+          created_at: '2026-09-01T10:00:00Z',
+          updated_at: '2026-09-01T10:00:00Z',
+        },
+      ],
+      error: null,
+    });
+    reminderOrder.mockResolvedValue({
+      data: [
+        {
+          appointment_id: APPOINTMENT_ID,
+          cadence: 'same_day',
+          status: 'scheduled',
+          dry_run: true,
+          sent_at: null,
+          created_at: '2026-09-02T10:00:00Z',
+        },
+        {
+          appointment_id: APPOINTMENT_ID,
+          cadence: 'h24',
+          status: 'sent',
+          dry_run: false,
+          sent_at: '2026-09-01T15:15:00Z',
+          created_at: '2026-09-01T15:15:00Z',
+        },
+        {
+          appointment_id: SECOND_APPOINTMENT_ID,
+          cadence: 'h24',
+          status: 'failed',
+          dry_run: false,
+          sent_at: null,
+          created_at: '2026-09-01T16:00:00Z',
+        },
+      ],
+      error: null,
+    });
+
+    const appointments = await listAppointments();
+
+    expect(reminderIn).toHaveBeenCalledWith('appointment_id', [
+      APPOINTMENT_ID,
+      SECOND_APPOINTMENT_ID,
+    ]);
+    expect(reminderOrder).toHaveBeenCalledWith('created_at', { ascending: false });
+    expect(appointments[0].reminders).toEqual([
+      {
+        cadence: 'same_day',
+        status: 'scheduled',
+        sentAt: null,
+        dryRun: true,
+        createdAt: '2026-09-02T10:00:00Z',
+      },
+      {
+        cadence: 'h24',
+        status: 'sent',
+        sentAt: '2026-09-01T15:15:00Z',
+        dryRun: false,
+        createdAt: '2026-09-01T15:15:00Z',
+      },
+    ]);
+    expect(appointments[1].reminders).toEqual([
+      {
+        cadence: 'h24',
+        status: 'failed',
+        sentAt: null,
+        dryRun: false,
+        createdAt: '2026-09-01T16:00:00Z',
+      },
+    ]);
+  });
+
+  it('leaves reminders empty when an appointment has none', async () => {
+    mockOrder.mockResolvedValue({
+      data: [
+        {
+          id: APPOINTMENT_ID,
+          patient_id: PATIENT_ID,
+          service_id: SERVICE_ID,
+          provider_id: PROVIDER_ID,
+          start_at: '2026-09-10T14:00:00.000Z',
+          end_at: '2026-09-10T14:30:00.000Z',
+          status: 'confirmed',
+          notes: null,
+          created_at: '2026-09-01T10:00:00Z',
+          updated_at: '2026-09-01T10:00:00Z',
+        },
+      ],
+      error: null,
+    });
+
+    const appointments = await listAppointments();
+
+    expect(appointments[0].reminders).toEqual([]);
+  });
+
+  it('attaches reminders to ranged appointments too', async () => {
+    mockOrder.mockResolvedValue({
+      data: [
+        {
+          id: APPOINTMENT_ID,
+          patient_id: PATIENT_ID,
+          service_id: SERVICE_ID,
+          provider_id: PROVIDER_ID,
+          start_at: '2026-06-10T14:00:00.000Z',
+          end_at: '2026-06-10T14:30:00.000Z',
+          status: 'pending',
+          notes: null,
+          created_at: '2026-06-01T10:00:00Z',
+          updated_at: '2026-06-01T10:00:00Z',
+        },
+      ],
+      error: null,
+    });
+    reminderOrder.mockResolvedValue({
+      data: [
+        {
+          appointment_id: APPOINTMENT_ID,
+          cadence: 'same_day',
+          status: 'sent',
+          dry_run: false,
+          sent_at: '2026-06-10T14:00:00Z',
+          created_at: '2026-06-10T14:00:00Z',
+        },
+      ],
+      error: null,
+    });
+
+    const appointments = await listAppointmentsRange(
+      '2026-06-01T06:00:00.000Z',
+      '2026-07-01T06:00:00.000Z'
+    );
+
+    expect(appointments[0].reminders).toEqual([
+      {
+        cadence: 'same_day',
+        status: 'sent',
+        sentAt: '2026-06-10T14:00:00Z',
+        dryRun: false,
+        createdAt: '2026-06-10T14:00:00Z',
+      },
+    ]);
   });
 
   it('creates an appointment', async () => {
