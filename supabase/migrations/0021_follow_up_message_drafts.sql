@@ -2,7 +2,7 @@
 -- follow_up_message_drafts: un borrador por (paciente, ronda) con el ciclo
 -- draft -> approved/rejected -> sent/sent_failed y deduplicación por `dedup_key`.
 -- Idempotente: enum/tabla/índices/triggers/policies usan guardas IF NOT EXISTS.
--- Patrón espejo de 0018_appointment_reminders.sql / 0019_follow_up_contacts.sql (RLS).
+-- Patrón espejo de 0018_appointment_reminders.sql / 0020_follow_up_contacts.sql (RLS).
 
 -- Enum idempotente: follow_up_draft_status
 DO $$
