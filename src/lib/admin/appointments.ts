@@ -1,4 +1,5 @@
 import { getSupabaseAdmin } from '@/lib/supabase/server';
+import { buildTransitionStamp } from './metrics/transitions';
 import type {
   Appointment,
   AppointmentInput,
@@ -192,7 +193,8 @@ export async function createAppointment(
   try {
     const { data, error } = await supabase
       .from('appointments')
-      .insert(payload)
+      // Estampado de transición del status inicial en el mismo INSERT.
+      .insert({ ...payload, ...buildTransitionStamp(payload.status, new Date()) })
       .select(SELECT_COLUMNS)
       .single();
 
@@ -220,9 +222,25 @@ export async function updateAppointment(
   const supabase = getSupabaseAdmin();
 
   try {
+    // Lectura (no escritura) del status actual: solo se estampa el instante si
+    // el estado cambia, para no reescribir el histórico en un guardado sin
+    // transición. El UPDATE de abajo sigue siendo una sola sentencia atómica.
+    const { data: currentRow, error: currentError } = await supabase
+      .from('appointments')
+      .select('status')
+      .eq('id', parsedId)
+      .maybeSingle();
+    if (currentError) {
+      throw new Error(currentError.message);
+    }
+    const statusChanged = currentRow?.status !== payload.status;
+    const stamp = statusChanged
+      ? buildTransitionStamp(payload.status, new Date())
+      : {};
+
     const { data, error } = await supabase
       .from('appointments')
-      .update(payload)
+      .update({ ...payload, ...stamp })
       .eq('id', parsedId)
       .select(SELECT_COLUMNS)
       .single();
