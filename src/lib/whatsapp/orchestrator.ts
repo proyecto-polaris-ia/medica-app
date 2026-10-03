@@ -47,7 +47,8 @@ import type { WhatsAppStore, PersistedWhatsAppInboundEvent, JsonPayload } from '
 import { recordWhatsAppAiEvent } from '@/lib/observability/whatsapp-ai';
 
 // Constantes de configuración
-const FLOW_TIMEOUT_MINUTES = 30;
+/** Minutos de inactividad tras los que una sesión de flujo se considera expirada. */
+export const FLOW_TIMEOUT_MINUTES = 30;
 
 // Tipos de resultado del orchestrator
 export type OrchestratorResult = {
@@ -145,16 +146,28 @@ export async function orchestrate(context: OrchestratorContext): Promise<Orchest
 }
 
 /**
- * Verifica si el flujo ha expirado por timeout
+ * Verifica si el flujo ha expirado por timeout.
+ *
+ * `now` es inyectable para pruebas deterministas; en producción se usa el
+ * instante actual (comportamiento previo).
  */
-function isFlowExpired(flowState: FlowState): boolean {
+export function isFlowExpired(flowState: FlowState, now: Date = new Date()): boolean {
   if (!flowState.lastActivity) return false;
-  
+
   const lastActivity = new Date(flowState.lastActivity);
-  const now = new Date();
   const diffMinutes = (now.getTime() - lastActivity.getTime()) / (1000 * 60);
-  
+
   return diffMinutes > FLOW_TIMEOUT_MINUTES;
+}
+
+/**
+ * `true` si hay una sesión de flow engine activa y no expirada para la
+ * conversación. Se exporta para que el pre-chequeo de respuestas al recordatorio
+ * respete la precedencia del flujo en curso (design.md decisión 2): una sesión
+ * activa gana y el mensaje sigue el flujo de reserva sin tocarse.
+ */
+export function isFlowSessionActive(flowState: FlowState | null, now: Date): boolean {
+  return flowState != null && flowState.name !== 'complete' && !isFlowExpired(flowState, now);
 }
 
 /**

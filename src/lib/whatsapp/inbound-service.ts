@@ -12,6 +12,12 @@ import {
   type WhatsAppToolAction,
 } from '@/lib/ai/whatsapp-inbound-agent';
 import { createWhatsAppAiCorrelationContext, recordWhatsAppAiEvent, type WhatsAppAiCorrelationContext } from '@/lib/observability/whatsapp-ai';
+import { isReminderReplyEnabled } from '@/lib/citas/reminder-reply-flag';
+import {
+  handleReminderReply,
+  type HandleReminderReplyResult,
+  type ReminderReplyOutcome,
+} from '@/lib/citas/reminder-reply-service';
 import { buildWhatsAppEscalationWork } from './escalation';
 import { sendWhatsAppTextMessage, type WhatsAppSendResult } from './client';
 import { normalizeWhatsAppWebhookPayloadBundle, type NormalizedWhatsAppInboundEvent } from './normalize';
@@ -33,7 +39,7 @@ import {
   type WhatsAppStatusPersistenceResult,
   type WhatsAppStore,
 } from './store';
-import { orchestrate, type OrchestratorContext, type OrchestratorResult } from './orchestrator';
+import { orchestrate, isFlowSessionActive, type OrchestratorContext, type OrchestratorResult } from './orchestrator';
 
 export type WhatsAppInboundServiceResult = { received: number; processed: number; duplicates: number; autoAnswered: number; booked: number; escalated: number; sendFailures: number; events: WhatsAppInboundEventResult[] };
 export type WhatsAppWebhookProcessingResult = WhatsAppInboundServiceResult & { statusCallbacks: WhatsAppStatusPersistenceResult };
@@ -248,6 +254,78 @@ function buildConversationSummary(
   return full.length > 500 ? full.slice(-500) : full;
 }
 
+const REMINDER_REPLY_SUMMARIES: Record<ReminderReplyOutcome, string> = {
+  confirmation: 'Paciente confirmó su cita desde el recordatorio',
+  cancellation: 'Paciente canceló su cita desde el recordatorio',
+  ambiguous: 'Respuesta ambigua al recordatorio (posible señal clínica)',
+  already: 'Respuesta a un recordatorio ya atendido',
+  out_of_window: 'Respuesta al recordatorio fuera de la ventana',
+  none: 'Respuesta al recordatorio sin acción',
+};
+
+function buildReminderReplyDecision(reminderReply: HandleReminderReplyResult): WhatsAppInboundAgentDecision {
+  const summary = REMINDER_REPLY_SUMMARIES[reminderReply.outcome];
+  return {
+    intent: reminderReply.outcome === 'cancellation' ? 'cancel_request' : 'inquiry',
+    summary,
+    confidence: 1,
+    decision: reminderReply.needsHuman ? 'needs_human' : 'auto_answer',
+    responseText: reminderReply.responseText,
+    escalationReason: reminderReply.needsHuman ? summary : undefined,
+    citedKnowledgeIds: [],
+    citedToolCallIds: [],
+  };
+}
+
+/**
+ * Pre-chequeo de respuesta a recordatorio (design.md decisión 2): un único punto
+ * de inserción que cubre los paths flow-engine y legacy. La sesión de flujo
+ * activa gana; el flag de entorno es la primera guarda; solo texto es candidato. Si `handled` es
+ * `false` el mensaje sigue intacto hacia el pipeline general.
+ */
+async function processReminderReplyHook(
+  event: NormalizedWhatsAppInboundEvent,
+  persisted: PersistedWhatsAppInboundEvent,
+  conversation: Awaited<ReturnType<typeof loadWhatsAppConversationContext>>,
+  store: WhatsAppStore,
+  sendText: typeof sendWhatsAppTextMessage
+): Promise<WhatsAppInboundEventResult | null> {
+  if (!isReminderReplyEnabled()) return null;
+  if (event.messageType !== 'text' || !event.body) return null;
+  if (isFlowSessionActive(conversation.flowState ?? null, new Date())) return null;
+
+  const reminderReply = await handleReminderReply({
+    phone: event.fromPhone,
+    message: event.body,
+    providerMessageId: event.providerMessageId,
+    patientName: event.profileName,
+  });
+  if (!reminderReply.handled) return null;
+
+  const customerSend = await sendAndPersist({
+    store,
+    persisted,
+    to: event.fromPhone,
+    body: reminderReply.responseText,
+    purpose: reminderReply.needsHuman ? 'customer_escalation' : 'auto_answer',
+    sendText,
+  });
+  const decision = buildReminderReplyDecision(reminderReply);
+  const summary = buildConversationSummary(conversation.summary, event.body, decision.summary);
+  await store.updateConversationSummary({ conversationId: persisted.conversationId, summary });
+  await store.markInboundMessageProcessed({
+    messageId: persisted.messageId,
+    status: reminderReply.needsHuman ? 'escalated' : 'responded',
+  });
+
+  return {
+    providerMessageId: event.providerMessageId,
+    action: reminderReply.needsHuman ? 'needs_human' : 'auto_answer',
+    decision,
+    customerSend,
+  };
+}
+
 export async function processWhatsAppInboundEvent(event: NormalizedWhatsAppInboundEvent, options: WhatsAppInboundServiceOptions = {}): Promise<WhatsAppInboundEventResult> {
   const store = options.store ?? defaultStore;
   const sendText = options.sendText ?? sendWhatsAppTextMessage;
@@ -260,6 +338,13 @@ export async function processWhatsAppInboundEvent(event: NormalizedWhatsAppInbou
 
   const conversation = await store.loadConversationContext(persisted.conversationId);
   const recentMessages = await store.loadConversationHistory(persisted.conversationId);
+
+  // Pre-chequeo de respuesta a recordatorio (antes del branch de flow engine y
+  // cubriendo ambos paths). Si maneja el mensaje, cierra el turno.
+  const reminderReplyResult = await processReminderReplyHook(event, persisted, conversation, store, sendText);
+  if (reminderReplyResult) {
+    return reminderReplyResult;
+  }
 
   // Routing: Flow Engine vs Legacy
   if (isFlowEngineEnabled()) {
