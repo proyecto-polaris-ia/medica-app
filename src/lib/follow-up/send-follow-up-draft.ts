@@ -4,6 +4,7 @@ import { ValidationError } from '@/lib/admin/validate';
 import { followUpFirstName, validateFollowUpDraftText } from '@/lib/admin/follow-up/draft';
 import {
   FOLLOW_UP_DRAFT_DEDUP_PREFIX,
+  claimFollowUpDraftForSend,
   getFollowUpDraftById,
   markFollowUpDraftSent,
   markFollowUpDraftSentFailed,
@@ -173,7 +174,7 @@ export async function sendFollowUpDraft(input: {
   draftId: string;
   userId: string;
 }): Promise<SendFollowUpDraftResult> {
-  const draft = await getFollowUpDraftById(input.draftId);
+  let draft = await getFollowUpDraftById(input.draftId);
   if (!draft) {
     throw new NotFoundError('Follow-up draft');
   }
@@ -187,11 +188,14 @@ export async function sendFollowUpDraft(input: {
     };
   }
 
-  if (draft.status !== 'approved') {
+  const claimed = await claimFollowUpDraftForSend(draft.id);
+  if (!claimed) {
     throw new ConflictError(
       `Follow-up draft is ${draft.status}; only approved drafts can be sent.`
     );
   }
+
+  draft = claimed;
 
   const body = validateFollowUpDraftText(draft.body);
 

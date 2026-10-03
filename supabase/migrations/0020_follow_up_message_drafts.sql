@@ -9,7 +9,7 @@ DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'follow_up_draft_status') THEN
     CREATE TYPE follow_up_draft_status AS ENUM
-      ('draft', 'approved', 'rejected', 'sent', 'sent_failed');
+      ('draft', 'approved', 'rejected', 'sending', 'sent', 'sent_failed');
   END IF;
 END
 $$;

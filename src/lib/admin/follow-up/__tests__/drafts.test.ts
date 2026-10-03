@@ -3,6 +3,7 @@ import { getSupabaseAdmin } from '@/lib/supabase/server';
 import { ConflictError, NotFoundError } from '../../errors';
 import {
   buildDraftDedupKey,
+  claimFollowUpDraftForSend,
   createFollowUpDraft,
   transitionFollowUpDraft,
 } from '../drafts';
@@ -221,5 +222,17 @@ describe('transitionFollowUpDraft', () => {
     await expect(
       transitionFollowUpDraft({ id: DRAFT_ID, status: 'approved', userId: USER_ID })
     ).rejects.toBeInstanceOf(NotFoundError);
+  });
+});
+
+describe('claimFollowUpDraftForSend', () => {
+  it('claims approved as sending and returns null when it loses the race', async () => {
+    const drafts = buildQuery();
+    drafts.maybeSingle.mockResolvedValue({ data: draftRow({ status: 'sending' }), error: null });
+    mockAdminByTable({ follow_up_message_drafts: drafts });
+    expect((await claimFollowUpDraftForSend(DRAFT_ID))?.status).toBe('sending');
+    expect(drafts.eq).toHaveBeenCalledWith('status', 'approved');
+    drafts.maybeSingle.mockResolvedValue({ data: null, error: null });
+    expect(await claimFollowUpDraftForSend(DRAFT_ID)).toBeNull();
   });
 });

@@ -37,6 +37,7 @@ describe('migración 0020', () => {
       'draft',
       'approved',
       'rejected',
+      'sending',
       'sent',
       'sent_failed',
     ]) {

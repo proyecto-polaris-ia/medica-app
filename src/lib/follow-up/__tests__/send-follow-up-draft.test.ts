@@ -112,6 +112,13 @@ function buildTables(overrides: Partial<Tables> = {}): Tables {
     }),
     error: null,
   };
+  let reads = 0;
+  drafts.maybeSingle.mockImplementation(() => {
+    reads += 1;
+    const status = (drafts._maybeSingle.data as { status?: string })?.status;
+    const claim = status === 'approved' ? drafts._maybeSingle : { data: null, error: null };
+    return Promise.resolve(reads === 1 ? drafts._maybeSingle : claim);
+  });
 
   const patients = overrides.patients ?? buildQuery();
   patients._maybeSingle = {
@@ -391,5 +398,15 @@ describe('sendFollowUpDraft', () => {
     expect(result.skipped).toBe(false);
     expect(result.error).toContain('status 500');
     expect(result.draft.status).toBe('sent_failed');
+  });
+
+  it('rejects with ConflictError and does not send when the claim is lost', async () => {
+    const tables = buildTables();
+    tables.drafts.maybeSingle.mockResolvedValueOnce({ data: draftRow(), error: null })
+      .mockResolvedValueOnce({ data: null, error: null });
+    wire(tables);
+    await expect(sendFollowUpDraft({ draftId: DRAFT_ID, userId: USER_ID }))
+      .rejects.toBeInstanceOf(ConflictError);
+    expect(sendWhatsAppTemplateMessage).not.toHaveBeenCalled();
   });
 });

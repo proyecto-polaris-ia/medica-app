@@ -188,6 +188,25 @@ export async function transitionFollowUpDraft(input: {
   return mapFollowUpDraftRow(data as unknown as Record<string, unknown>);
 }
 
+/** Claim atómico `approved`→`sending`; null si otra petición ya lo ganó. */
+export async function claimFollowUpDraftForSend(
+  id: string
+): Promise<FollowUpDraft | null> {
+  const { data, error } = await getSupabaseAdmin()
+    .from('follow_up_message_drafts')
+    .update({ status: 'sending' })
+    .eq('id', id)
+    .eq('status', 'approved')
+    .select(DRAFT_SELECT_COLUMNS)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return data ? mapFollowUpDraftRow(data as unknown as Record<string, unknown>) : null;
+}
+
 /** Marca el borrador como `sent` con su `provider_message_id` y `sent_at`. */
 export async function markFollowUpDraftSent(input: {
   id: string;
