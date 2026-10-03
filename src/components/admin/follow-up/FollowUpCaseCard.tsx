@@ -19,17 +19,22 @@ export function formatReasonDate(iso: string): string {
  * Tarjeta de un caso de seguimiento con las acciones manuales.
  *
  * "Agendar cita" es un `<Link>` que solo navega al wizard existente; no crea
- * la cita ni cambia el estado de contacto. "Generar borrador" queda visible
- * como acción de Fase 3.
+ * la cita ni cambia el estado de contacto. "Generar borrador" hace `POST` a la
+ * API de borradores (no envía nada) y, al generarse, ofrece un enlace al
+ * WhatsApp Command Center para su aprobación.
  */
 export function FollowUpCaseCard({
   followUpCase,
   onMarkContacted,
   onDismiss,
+  onGenerateDraft,
+  draftGenerated,
 }: {
   followUpCase: FollowUpCase;
   onMarkContacted: (patientId: string) => void;
   onDismiss: (patientId: string) => void;
+  onGenerateDraft: (patientId: string) => void;
+  draftGenerated?: boolean;
 }) {
   return (
     <article className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
@@ -74,12 +79,19 @@ export function FollowUpCaseCard({
           </Link>
           <button
             type="button"
-            disabled
-            title="Disponible en la Fase 3"
-            className="rounded-md border border-gray-200 px-3 py-1.5 text-sm font-medium text-gray-400"
+            onClick={() => onGenerateDraft(followUpCase.patientId)}
+            className="rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
           >
             Generar borrador
           </button>
+          {draftGenerated && (
+            <Link
+              href="/whatsapp-command-center/follow-up-drafts"
+              className="rounded-md border border-emerald-300 px-3 py-1.5 text-sm font-medium text-emerald-700 hover:bg-emerald-50"
+            >
+              Aprobar en el centro de WhatsApp
+            </Link>
+          )}
         </div>
       </div>
     </article>

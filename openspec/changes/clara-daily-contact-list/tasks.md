@@ -416,7 +416,7 @@ migración `0020` + down, `src/lib/admin/follow-up/draft.ts`,
 `app/api/admin/follow-up/drafts/…` y la superficie
 `app/(admin)/whatsapp-command-center/follow-up-drafts/`.
 
-- [ ] 3.1 **Migración `0020` + down** — Crear
+- [x] 3.1 **Migración `0020` + down** — Crear
   `supabase/migrations/0020_follow_up_message_drafts.sql` (`design.md` §3.1):
   enum idempotente `follow_up_draft_status ('draft','approved','rejected',
   'sent','sent_failed')`; tabla `follow_up_message_drafts` con `patient_id`,
@@ -434,7 +434,7 @@ migración `0020` + down, `src/lib/admin/follow-up/draft.ts`,
     enum con guarda `pg_type`, `UNIQUE (dedup_key)`) y el down (orden inverso con
     `IF EXISTS`).
   - **Traza:** R14.
-- [ ] 3.2 **RED** — Escribir
+- [x] 3.2 **RED** — Escribir
   `src/lib/admin/follow-up/__tests__/draft.test.ts` (`design.md` §3.2):
   `buildFollowUpDraft({ patientName, reason })` produce un texto determinista por
   plantilla y correspondiente al motivo; **sin** precios/moneda, **sin**
@@ -448,7 +448,7 @@ migración `0020` + down, `src/lib/admin/follow-up/draft.ts`,
   - Verificación: `npm run test -- src/lib/admin/follow-up/__tests__/draft.test.ts`
     → **falla** (módulo inexistente; casos RED).
   - **Traza:** R13, R16.
-- [ ] 3.3 **GREEN** — Implementar `src/lib/admin/follow-up/draft.ts` (puro) con
+- [x] 3.3 **GREEN** — Implementar `src/lib/admin/follow-up/draft.ts` (puro) con
   las cuatro plantillas es-MX del design (`no_show`, `treatment_in_progress`,
   `quote_no_response`, `inactive`), `FOLLOW_UP_TEMPLATE_NAME =
   'seguimiento_paciente'`, `MAX_DRAFT_LENGTH = 600`,
@@ -456,7 +456,7 @@ migración `0020` + down, `src/lib/admin/follow-up/draft.ts`,
   - Verificación: `npm run test -- src/lib/admin/follow-up/__tests__/draft.test.ts`
     → **pasa**.
   - **Traza:** R13, R16.
-- [ ] 3.4 **RED** — Escribir `app/api/admin/follow-up/drafts/route.test.ts`: sin
+- [x] 3.4 **RED** — Escribir `app/api/admin/follow-up/drafts/route.test.ts`: sin
   sesión → `401`; `GET` devuelve borradores (con filtro opcional `?status=`) para
   el WCC; `POST { patientId }` genera y persiste un borrador determinista en
   `draft` → `201`; un segundo `POST` para el mismo paciente y ronda **no**
@@ -466,7 +466,7 @@ migración `0020` + down, `src/lib/admin/follow-up/draft.ts`,
   - Verificación: `npm run test -- app/api/admin/follow-up/drafts/route.test.ts`
     → **falla** (ruta inexistente; casos RED).
   - **Traza:** R13, R14.
-- [ ] 3.5 **GREEN** — Implementar `src/lib/wcc-follow-up-drafts.ts` (patrón
+- [x] 3.5 **GREEN** — Implementar `src/lib/wcc-follow-up-drafts.ts` (patrón
   `src/lib/wcc-appointments.ts`, `getSupabaseAdmin()` server-only) y
   `app/api/admin/follow-up/drafts/route.ts` con `requireUser()` +
   `handleAdminRequest()`: `GET` lista y `POST` genera/persiste con `dedup_key` e
@@ -474,7 +474,7 @@ migración `0020` + down, `src/lib/admin/follow-up/draft.ts`,
   - Verificación: `npm run test -- app/api/admin/follow-up/drafts/route.test.ts`
     → **pasa**.
   - **Traza:** R13, R14.
-- [ ] 3.6 **RED** — Escribir
+- [x] 3.6 **RED** — Escribir
   `app/api/admin/follow-up/drafts/[id]/route.test.ts` (`design.md` §3.3): sin
   sesión → `401`; `PATCH { status: 'approved' }` desde `draft` → transiciona y
   guarda `approved_by = user.id` y `approved_at`; `{ status: 'rejected' }` desde
@@ -483,13 +483,13 @@ migración `0020` + down, `src/lib/admin/follow-up/draft.ts`,
   - Verificación: `npm run test -- app/api/admin/follow-up/drafts/[id]/route.test.ts`
     → **falla** (ruta inexistente; casos RED).
   - **Traza:** R14.
-- [ ] 3.7 **GREEN** — Implementar
+- [x] 3.7 **GREEN** — Implementar
   `app/api/admin/follow-up/drafts/[id]/route.ts` con transiciones guardadas
   (`approve`/`reject` solo desde `draft`) y `ConflictError` en cualquier otra.
   - Verificación: `npm run test -- app/api/admin/follow-up/drafts/[id]/route.test.ts`
     → **pasa**.
   - **Traza:** R14.
-- [ ] 3.8 **RED** — Escribir
+- [x] 3.8 **RED** — Escribir
   `src/lib/follow-up/__tests__/send-follow-up-draft.test.ts` (`design.md` §3.4,
   mock de `@/lib/supabase/server`): un borrador no `approved` (`draft`/`rejected`)
   **no** se envía (`ConflictError`); `approved` re-valida el `body` con
@@ -503,7 +503,7 @@ migración `0020` + down, `src/lib/admin/follow-up/draft.ts`,
   - Verificación: `npm run test -- src/lib/follow-up/__tests__/send-follow-up-draft.test.ts`
     → **falla** (módulo inexistente; casos RED).
   - **Traza:** R15.
-- [ ] 3.9 **GREEN** — Implementar
+- [x] 3.9 **GREEN** — Implementar
   `src/lib/follow-up/send-follow-up-draft.ts` (`sendFollowUpDraft({ draftId,
   userId })`: exige `approved`, re-valida el texto, resuelve
   `patients.phone_e164`, asegura `whatsapp_contacts` (`source='manual'`) y una
@@ -514,23 +514,29 @@ migración `0020` + down, `src/lib/admin/follow-up/draft.ts`,
   'outbound'`, `message_type: 'template'`, `payload: { purpose: 'follow_up',
   draftId }`, `ignoreDuplicates: true`). Sin cron, queue, webhook ni job que
   invoque esta función.
+  - **Desviación registrada:** `insertFollowUpOutboundMessage` se implementó en
+    `src/lib/follow-up/send-follow-up-draft.ts` (exportado), no en
+    `src/lib/whatsapp/store.ts`, porque el alcance autorizado fijó
+    `store.ts`/`client.ts` como READ-ONLY. La semántica (`upsert` en
+    `whatsapp_messages` con `whatsapp_message_id = providerMessageId ??
+    idempotencyKey` e `ignoreDuplicates: true`) es la especificada.
   - Verificación: `npm run test -- src/lib/follow-up/__tests__/send-follow-up-draft.test.ts`
     → **pasa**.
   - **Traza:** R15.
-- [ ] 3.10 **RED** — Escribir
+- [x] 3.10 **RED** — Escribir
   `app/api/admin/follow-up/drafts/[id]/send/route.test.ts`: sin sesión → `401`;
   `POST` sobre `approved` → `200` con borrador `sent`; `POST` sobre
   `draft`/`rejected` → `409` y **no** envía; reintento idempotente no duplica.
   - Verificación: `npm run test -- app/api/admin/follow-up/drafts/[id]/send/route.test.ts`
     → **falla** (ruta inexistente; casos RED).
   - **Traza:** R15.
-- [ ] 3.11 **GREEN** — Implementar
+- [x] 3.11 **GREEN** — Implementar
   `app/api/admin/follow-up/drafts/[id]/send/route.ts` con `requireUser()` +
   `handleAdminRequest()` delegando en `sendFollowUpDraft({ draftId, userId })`.
   - Verificación: `npm run test -- app/api/admin/follow-up/drafts/[id]/send/route.test.ts`
     → **pasa**.
   - **Traza:** R15.
-- [ ] 3.12 **RED** — Escribir
+- [x] 3.12 **RED** — Escribir
   `app/(admin)/whatsapp-command-center/follow-up-drafts/page.test.tsx`: la
   página del WCC lista borradores con el nombre del paciente y expone las
   acciones Aprobar / Rechazar / Enviar solo cuando corresponden por estado
@@ -539,7 +545,7 @@ migración `0020` + down, `src/lib/admin/follow-up/draft.ts`,
   - Verificación: `npm run test -- app/(admin)/whatsapp-command-center/follow-up-drafts/page.test.tsx`
     → **falla** (página inexistente; casos RED).
   - **Traza:** R14, R15.
-- [ ] 3.13 **GREEN** — Implementar
+- [x] 3.13 **GREEN** — Implementar
   `app/(admin)/whatsapp-command-center/follow-up-drafts/page.tsx` (server
   component que consume `src/lib/wcc-follow-up-drafts.ts`),
   `…/draft-actions.tsx` (client con botones Aprobar/Rechazar/Enviar contra la
@@ -548,14 +554,14 @@ migración `0020` + down, `src/lib/admin/follow-up/draft.ts`,
   - Verificación: `npm run test -- app/(admin)/whatsapp-command-center/follow-up-drafts/page.test.tsx`
     → **pasa**.
   - **Traza:** R14.
-- [ ] 3.14 **GREEN** — Integrar la página `follow-up` con la Fase 3: la acción
+- [x] 3.14 **GREEN** — Integrar la página `follow-up` con la Fase 3: la acción
   "Generar borrador" en `FollowUpCaseCard.tsx` hace `POST` a
   `/api/admin/follow-up/drafts` y ofrece un enlace al WCC para aprobar. La
   generación **no** envía nada por sí misma.
   - Verificación: `npm run test -- src/components/admin/follow-up/__tests__/FollowUpList.test.tsx`
     → **pasa**; `npx tsc --noEmit` sin errores.
   - **Traza:** R13.
-- [ ] 3.15 **TRIANGULATE/REFACTOR** — Cubrir negativos que protegen el contrato:
+- [x] 3.15 **TRIANGULATE/REFACTOR** — Cubrir negativos que protegen el contrato:
   ningún proceso programado envía un `draft` (sin ruta cron); `anon` no accede a
   `follow_up_message_drafts` (RLS de 3.1); un borrador `sent` reenviado es no-op
   idempotente; un guardrail de la lista negra detecta precios, diagnósticos y

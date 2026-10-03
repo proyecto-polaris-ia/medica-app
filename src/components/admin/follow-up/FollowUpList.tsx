@@ -11,6 +11,7 @@ import { FollowUpCaseCard } from './FollowUpCaseCard';
 
 export const FOLLOW_UP_LIST_ENDPOINT = '/api/admin/follow-up';
 export const FOLLOW_UP_CONTACTS_ENDPOINT = '/api/admin/follow-up/contacts';
+export const FOLLOW_UP_DRAFTS_ENDPOINT = '/api/admin/follow-up/drafts';
 
 type FollowUpContactStatus = 'contacted' | 'dismissed';
 
@@ -41,6 +42,9 @@ export function FollowUpList() {
   const [cases, setCases] = useState<FollowUpCase[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [draftGeneratedFor, setDraftGeneratedFor] = useState<
+    Record<string, boolean>
+  >({});
 
   const loadCases = useCallback(async () => {
     setLoading(true);
@@ -78,6 +82,21 @@ export function FollowUpList() {
     [loadCases]
   );
 
+  const submitDraft = useCallback(async (patientId: string) => {
+    try {
+      const res = await fetch(FOLLOW_UP_DRAFTS_ENDPOINT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ patientId }),
+      });
+      if (res.ok) {
+        setDraftGeneratedFor((current) => ({ ...current, [patientId]: true }));
+      }
+    } catch {
+      // Sin enlace de aprobación si la generación falló; no se envía nada.
+    }
+  }, []);
+
   if (loading) {
     return <LoadingState message="Cargando lista de seguimiento..." />;
   }
@@ -110,6 +129,8 @@ export function FollowUpList() {
                 onDismiss={(patientId) =>
                   void submitContact(patientId, 'dismissed')
                 }
+                onGenerateDraft={(patientId) => void submitDraft(patientId)}
+                draftGenerated={draftGeneratedFor[item.patientId] === true}
               />
             ))}
           </div>
