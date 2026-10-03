@@ -34,5 +34,6 @@ Base branch: main (b717371)
 - a9140fb docs(openspec): ciclo SDD del change (proposal, spec, design, tasks)
 - 7536996 feat(follow-up): reglas de segmentación y capa de datos (fase 1)
 - 7329035 docs(odd): cierre de fase 1 en el task file
-- Review RDD: linaje review-35ad35ead838a7c3, riesgo medium, lente review-reliability → APROBADO y acknowledgement quemado (gentle-ai.review-acknowledged/v1).
+- Review RDD Fase 1: linaje review-35ad35ead838a7c3 → APROBADO y acknowledgement quemado. Hallazgos informativos: R3-failure-paths-untested, R3-lexicographic-time, R3-redundant-round-filter, R3-tasks-completion-contradiction, R3-unbounded-appointments-read, R3-upsert-overwrite.
+- Review RDD Fase 2 (delta vs 7329035; el candidato acumulado excedió lens_context_budget_exceeded → se redujo el alcance): linaje review-c89df4978889e20b → APROBADO y acknowledgement quemado. Hallazgos informativos: R3-catch-all-patient-preselect, R3-no-submit-inflight-guard, R3-note-unbounded, R3-silent-contact-post-failure.
 - Hallazgos informativos no bloqueantes (follow-ups separados): R3-failure-paths-untested (follow-up.test.ts:186-232), R3-lexicographic-time (rules.ts:76-80), R3-redundant-round-filter (follow-up.ts:259-264), R3-tasks-completion-contradiction (tasks.md:645-649), R3-unbounded-appointments-read (follow-up.ts:207-214), R3-upsert-overwrite (follow-up.ts:296-316).
