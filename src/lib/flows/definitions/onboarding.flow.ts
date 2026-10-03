@@ -5,8 +5,8 @@
  * Orden fijo: alergias → medicamentos → condiciones → embarazo (gating) →
  * hábitos → resumen → escritura única.
  *
- * La Fase 2 agrega `ask_email`/`show_contact_summary`/`save_contact`; aquí solo
- * viven los estados de la Fase 1.
+ * La Fase 2 agrega `ask_email`/`show_contact_summary`/`save_contact` con la
+ * acción `saveOnboardingContact` (solo `patients`, nunca la historia clínica).
  */
 
 import type { FlowDefinition } from '../types';
@@ -123,6 +123,35 @@ export const onboardingFlow: FlowDefinition = {
     save_history: {
       action: 'saveOnboardingHistory',
       prompt: 'Guardando tus datos…',
+      transitions: {
+        complete: 'complete',
+        needs_contact: 'ask_email',
+      },
+    },
+
+    ask_email: {
+      required: ['onboardingAnswer'],
+      action: 'evaluateOnboardingAnswer',
+      prompt: 'Para enviarte la confirmación, ¿me compartes tu correo electrónico?',
+      transitions: {
+        next: 'show_contact_summary',
+        retry: 'ask_email',
+      },
+    },
+
+    show_contact_summary: {
+      required: ['onboardingAnswer'],
+      action: 'evaluateOnboardingAnswer',
+      prompt: 'Tu correo es {onboardingContactSummary}. ¿Lo guardo?',
+      transitions: {
+        confirm: 'save_contact',
+        restart: 'ask_email',
+      },
+    },
+
+    save_contact: {
+      action: 'saveOnboardingContact',
+      prompt: 'Listo.',
       transitions: {
         complete: 'complete',
       },

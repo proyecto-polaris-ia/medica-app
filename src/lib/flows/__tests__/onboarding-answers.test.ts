@@ -296,6 +296,7 @@ describe('onboarding-answers', () => {
           smoking: 'never',
           alcohol: 'occasional',
           pregnancyStatus: 'no',
+          email: 'ana@example.com',
         }),
       });
       expect(result.transition).toBe('restart');
@@ -305,6 +306,7 @@ describe('onboarding-answers', () => {
       expect(result.draft.smoking).toBeNull();
       expect(result.draft.alcohol).toBeNull();
       expect(result.draft.pregnancyStatus).toBeNull();
+      expect(result.draft.email).toBeNull();
       expect(result.draft.context.patientId).toBe('patient-1');
     });
 
@@ -316,6 +318,70 @@ describe('onboarding-answers', () => {
       });
       expect(result.transition).toBe('restart');
       expect(result.draft.allergies).toBeNull();
+    });
+  });
+
+  describe('evaluateOnboardingStep — email (Fase 2)', () => {
+    it('guarda el email normalizado (trim + minúsculas) y avanza', () => {
+      const result = evaluateOnboardingStep({
+        step: 'ask_email',
+        rawAnswer: '  ANA.LOPEZ@EXAMPLE.COM ',
+        draft: makeDraft(),
+      });
+      expect(result.transition).toBe('next');
+      expect(result.draft.email).toBe('ana.lopez@example.com');
+    });
+
+    it('reintenta sin guardar ante un email inválido', () => {
+      const result = evaluateOnboardingStep({
+        step: 'ask_email',
+        rawAnswer: 'no-es-un-correo',
+        draft: makeDraft({ email: null }),
+      });
+      expect(result.transition).toBe('retry');
+      expect(result.clearAnswer).toBe(true);
+      expect(result.draft.email).toBeNull();
+    });
+
+    it('reintenta ante una respuesta vacía', () => {
+      const result = evaluateOnboardingStep({
+        step: 'ask_email',
+        rawAnswer: '   ',
+        draft: makeDraft(),
+      });
+      expect(result.transition).toBe('retry');
+      expect(result.draft.email).toBeNull();
+    });
+
+    it('confirma el resumen de contacto con una afirmación explícita', () => {
+      const result = evaluateOnboardingStep({
+        step: 'show_contact_summary',
+        rawAnswer: 'sí',
+        draft: makeDraft({ email: 'ana@example.com' }),
+      });
+      expect(result.transition).toBe('confirm');
+      expect(result.draft.email).toBe('ana@example.com');
+    });
+
+    it('reinicia el email ante "no" y vuelve a preguntarlo', () => {
+      const result = evaluateOnboardingStep({
+        step: 'show_contact_summary',
+        rawAnswer: 'no',
+        draft: makeDraft({ email: 'ana@example.com' }),
+      });
+      expect(result.transition).toBe('restart');
+      expect(result.clearAnswer).toBe(true);
+      expect(result.draft.email).toBeNull();
+    });
+
+    it('reinicia el email ante una frase no reconocida', () => {
+      const result = evaluateOnboardingStep({
+        step: 'show_contact_summary',
+        rawAnswer: 'mejor otro correo',
+        draft: makeDraft({ email: 'ana@example.com' }),
+      });
+      expect(result.transition).toBe('restart');
+      expect(result.draft.email).toBeNull();
     });
   });
 
