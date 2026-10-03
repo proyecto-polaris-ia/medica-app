@@ -50,7 +50,12 @@ Persistence mode: openspec (config.yaml, artifact_store hybrid)
 - Historia por WhatsApp marcada como autoreporte del paciente; el doctor la valida en consulta.
 
 ## Evidencia de commits
-(por registrar)
+- db101a2 docs(odd): task file y mapa de exploración (exploración)
+- f525bab docs(openspec): propuesta (propose)
+- 90760d9 docs(openspec): deltas de specs, 19 req/51 esc (spec)
+- bad47c8 docs(openspec): design D1–D12 (design)
+- 97f1d54 docs(openspec): tasks, 68 tareas (tasks)
+- 5531485 feat(clinical): provenance column source (Apply Fase 1, work unit A/D1) — migración 20261003155627 + down, types, medical-history, tests 10/10, tsc limpio
 
 ## Notas de contexto (memoria)
 - Subagentes sdd-{phase} no existen; usar gentle-ai-explore/worker/verify.
