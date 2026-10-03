@@ -24,7 +24,7 @@
 7. [x] Apply Fase 3 — trend.ts (previousRangeOf/bucketRange/computeTrend) + loader ext + serie accesible + 117 tests. Commit a0eb6ad
 8. [x] Verify — PASS WITH WARNINGS: 1076 tests, build OK, tsc OK, migración/N+1/TZ/clamp correctos. Pendiente: openspec validate (CLI no instalada) y verificación manual con BD (16.3/21.4)
 9. [x] Archive — openspec/changes/archive/2026-10-03-dashboard-agenda-metrics/ + spec materializada en openspec/specs/dashboard-metrics/spec.md
-10. [ ] PRs apilados por fase (Fase 1 base main → Fase 2 → Fase 3, Closes #88)
+10. [x] PRs apilados por fase — #100 (1-lib, base main) → #101 (2-panel, base #100) → #102 (3-tendencia, base #101, Closes #88)
 
 ## Evidence
 - Explore report: 2026-10-03, hallazgos clave en Engram.
