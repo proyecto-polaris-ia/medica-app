@@ -21,7 +21,7 @@ Base branch: main (b717371)
 - [x] Design: design.md con archivos concretos — 728 líneas, 11 decisiones. Migraciones 0019 (follow_up_contacts, ronda por round_date+UNIQUE) y 0020 (follow_up_message_drafts); aprobación en WCC (whatsapp-command-center/follow-up-drafts); inactivo normalizado a 180 días con constante semántica 6 meses.
 - [x] Tasks: tasks.md con forecast — 49 tareas (F1:17, F2:11, F3:15, F4:6), 16/16 requirements trazados, forecast High ~2650-3000 líneas. Lint no existe en el repo (verificación = test + tsc + build). Prerrequisito operativo: plantilla HSM seguimiento_paciente en Meta antes de release Fase 3.
 - [x] Apply Fase 1: reglas de segmentación (TDD) — 15 tareas implementadas, 1.13/1.14 SUPERADAS (clinicDayKey ya existe en timezone.ts, decisión C); 41 tests de follow-up verdes, 232 de admin, tsc limpio. Commit: ver evidencia abajo.
-- [ ] Apply Fase 2: página del panel con acciones (TDD) — PR apilado 2
+- [x] Apply Fase 2: página del panel con acciones (TDD) — commit 856af04: 20 archivos, +1007 líneas; 127 tests verdes, tsc limpio. Desviaciones documentadas: orden 2.9/2.10 antes de 2.4/2.5 (404 depende de getPatient) y test de preselección en ConfirmStep.test.tsx (jsdom).
 - [ ] Apply Fase 3: borradores de mensaje con aprobación humana (TDD) — PR apilado 3
 - [ ] Verify: verificación técnica
 - [ ] Archive: sincronizar specs y archivar change
