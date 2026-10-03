@@ -19,7 +19,7 @@
 2. [x] Spec — deltas RFC 2119 por capability (6 requisitos / 29 escenarios en specs/dashboard-metrics/spec.md)
 3. [x] Design — design.md con rutas y decisiones (692 líneas, sin open questions)
 4. [x] Tasks — tasks.md con forecast (68 tareas; Fase 1: 33, Fase 2: 18, Fase 3: 17; Decision needed: No)
-5. [ ] Apply Fase 1 — migración de transiciones + lib `src/lib/admin/metrics/` + tests (RED→GREEN)
+5. [x] Apply Fase 1 — migración 0019 (con down) + estampado atómico + lib `src/lib/admin/metrics/` + 99 tests (RED→GREEN). Commits 69e01a4, 1c56a82
 6. [ ] Apply Fase 2 — panel de métricas en dashboard (selector de rango, cards, desglose por proveedor)
 7. [ ] Apply Fase 3 — tendencia vs periodo anterior
 8. [ ] Verify — tsc + vitest + build

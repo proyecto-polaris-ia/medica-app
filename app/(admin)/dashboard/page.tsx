@@ -1,16 +1,26 @@
 import Link from 'next/link';
+import { getDashboardMetrics } from '@/lib/admin/metrics/loader';
+import { MetricsRangeSelector } from './components/MetricsRangeSelector';
+import { MetricsSection } from './components/MetricsSection';
 
 export const dynamic = 'force-dynamic';
 
-export default function DashboardPage() {
-  const sections = [
-    { href: '/appointments', title: 'Citas', description: 'Gestiona las citas del consultorio.' },
-    { href: '/patients', title: 'Pacientes', description: 'Administra los datos de los pacientes.' },
-    { href: '/providers', title: 'Proveedores', description: 'Administra los doctores y proveedores.' },
-    { href: '/services', title: 'Servicios', description: 'Configura los servicios y duraciones.' },
-    { href: '/business-hours', title: 'Horarios', description: 'Define los horarios de atención.' },
-    { href: '/appointments/new', title: 'Reservar cita', description: 'Registra una cita para un paciente.' },
-  ];
+const sections = [
+  { href: '/appointments', title: 'Citas', description: 'Gestiona las citas del consultorio.' },
+  { href: '/patients', title: 'Pacientes', description: 'Administra los datos de los pacientes.' },
+  { href: '/providers', title: 'Proveedores', description: 'Administra los doctores y proveedores.' },
+  { href: '/services', title: 'Servicios', description: 'Configura los servicios y duraciones.' },
+  { href: '/business-hours', title: 'Horarios', description: 'Define los horarios de atención.' },
+  { href: '/appointments/new', title: 'Reservar cita', description: 'Registra una cita para un paciente.' },
+];
+
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ preset?: string; from?: string; to?: string }>;
+}) {
+  const params = (await searchParams) ?? {};
+  const view = await getDashboardMetrics(params);
 
   return (
     <div>
@@ -19,6 +29,10 @@ export default function DashboardPage() {
         Bienvenido al panel de administración. Selecciona una opción para
         comenzar.
       </p>
+
+      <MetricsRangeSelector preset={view.preset} from={params.from} to={params.to} />
+      <MetricsSection view={view} />
+
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {sections.map((section) => (
           <Link
