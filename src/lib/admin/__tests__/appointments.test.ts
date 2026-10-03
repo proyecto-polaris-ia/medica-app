@@ -33,6 +33,7 @@ describe('appointments service', () => {
   const mockLt = vi.fn();
   const mockLimit = vi.fn();
   const mockSingle = vi.fn();
+  const mockMaybeSingle = vi.fn();
 
   // Cadena separada para `appointment_reminders`: evita compartir el terminal
   // `order` con la consulta de citas (mismo runner, distinta resolución).
@@ -53,6 +54,7 @@ describe('appointments service', () => {
       lt: mockLt.mockReturnThis(),
       limit: mockLimit.mockReturnThis(),
       single: mockSingle,
+      maybeSingle: mockMaybeSingle,
     };
   }
 
@@ -67,6 +69,9 @@ describe('appointments service', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     reminderOrder.mockResolvedValue({ data: [], error: null });
+    // Lectura previa de `status` en `updateAppointment`; por defecto la cita
+    // existe en `requested` (el update cambiaría el estado).
+    mockMaybeSingle.mockResolvedValue({ data: { status: 'requested' }, error: null });
     // Se construyen una sola vez para no reconfigurar los mocks compartidos
     // (`mockOrder`, etc.) después de que cada test fije su valor resuelto.
     const appointmentsQuery = buildQuery();
@@ -435,6 +440,171 @@ describe('appointments service', () => {
 
     expect(mockUpdate).toHaveBeenCalledWith(expect.objectContaining({ status: 'confirmed' }));
     expect(appointment.status).toBe('confirmed');
+  });
+
+  it('updateAppointment estampa confirmed_at cuando el status cambia', async () => {
+    mockMaybeSingle.mockResolvedValue({ data: { status: 'requested' }, error: null });
+    mockSingle.mockResolvedValue({
+      data: {
+        id: APPOINTMENT_ID,
+        patient_id: PATIENT_ID,
+        service_id: SERVICE_ID,
+        provider_id: PROVIDER_ID,
+        start_at: '2026-09-10T15:00:00.000Z',
+        end_at: '2026-09-10T15:30:00.000Z',
+        status: 'confirmed',
+        created_at: '2026-09-01T10:00:00Z',
+        updated_at: '2026-09-02T10:00:00Z',
+      },
+      error: null,
+    });
+
+    await updateAppointment(APPOINTMENT_ID, {
+      patientId: PATIENT_ID,
+      serviceId: SERVICE_ID,
+      providerId: PROVIDER_ID,
+      startAt: '2026-09-10T15:00:00.000Z',
+      endAt: '2026-09-10T15:30:00.000Z',
+      status: 'confirmed',
+    });
+
+    expect(mockMaybeSingle).toHaveBeenCalledTimes(1);
+    expect(mockUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: 'confirmed',
+        confirmed_at: expect.stringMatching(
+          /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/
+        ),
+      })
+    );
+  });
+
+  it('updateAppointment no reescribe el instante si el status no cambia', async () => {
+    mockMaybeSingle.mockResolvedValue({ data: { status: 'confirmed' }, error: null });
+    mockSingle.mockResolvedValue({
+      data: {
+        id: APPOINTMENT_ID,
+        patient_id: PATIENT_ID,
+        service_id: SERVICE_ID,
+        provider_id: PROVIDER_ID,
+        start_at: '2026-09-10T15:00:00.000Z',
+        end_at: '2026-09-10T15:30:00.000Z',
+        status: 'confirmed',
+        created_at: '2026-09-01T10:00:00Z',
+        updated_at: '2026-09-02T10:00:00Z',
+      },
+      error: null,
+    });
+
+    await updateAppointment(APPOINTMENT_ID, {
+      patientId: PATIENT_ID,
+      serviceId: SERVICE_ID,
+      providerId: PROVIDER_ID,
+      startAt: '2026-09-10T15:00:00.000Z',
+      endAt: '2026-09-10T15:30:00.000Z',
+      status: 'confirmed',
+    });
+
+    const payload = mockUpdate.mock.calls[0][0] as Record<string, unknown>;
+    expect(payload).not.toHaveProperty('confirmed_at');
+    expect(payload).not.toHaveProperty('cancelled_at');
+    expect(payload).not.toHaveProperty('no_show_at');
+  });
+
+  it('updateAppointment reestampa el nuevo estado sin tocar el anterior', async () => {
+    mockMaybeSingle.mockResolvedValue({ data: { status: 'cancelled' }, error: null });
+    mockSingle.mockResolvedValue({
+      data: {
+        id: APPOINTMENT_ID,
+        patient_id: PATIENT_ID,
+        service_id: SERVICE_ID,
+        provider_id: PROVIDER_ID,
+        start_at: '2026-09-10T15:00:00.000Z',
+        end_at: '2026-09-10T15:30:00.000Z',
+        status: 'confirmed',
+        created_at: '2026-09-01T10:00:00Z',
+        updated_at: '2026-09-02T10:00:00Z',
+      },
+      error: null,
+    });
+
+    await updateAppointment(APPOINTMENT_ID, {
+      patientId: PATIENT_ID,
+      serviceId: SERVICE_ID,
+      providerId: PROVIDER_ID,
+      startAt: '2026-09-10T15:00:00.000Z',
+      endAt: '2026-09-10T15:30:00.000Z',
+      status: 'confirmed',
+    });
+
+    const payload = mockUpdate.mock.calls[0][0] as Record<string, unknown>;
+    expect(payload.confirmed_at).toEqual(expect.any(String));
+    expect(payload).not.toHaveProperty('cancelled_at');
+  });
+
+  it('createAppointment estampa el status inicial estampable', async () => {
+    mockSingle.mockResolvedValue({
+      data: {
+        id: APPOINTMENT_ID,
+        patient_id: PATIENT_ID,
+        service_id: SERVICE_ID,
+        provider_id: PROVIDER_ID,
+        start_at: '2026-09-10T15:00:00.000Z',
+        end_at: '2026-09-10T15:30:00.000Z',
+        status: 'confirmed',
+        created_at: '2026-09-01T10:00:00Z',
+        updated_at: '2026-09-01T10:00:00Z',
+      },
+      error: null,
+    });
+
+    await createAppointment({
+      patientId: PATIENT_ID,
+      serviceId: SERVICE_ID,
+      providerId: PROVIDER_ID,
+      startAt: '2026-09-10T15:00:00.000Z',
+      endAt: '2026-09-10T15:30:00.000Z',
+      status: 'confirmed',
+    });
+
+    expect(mockInsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: 'confirmed',
+        confirmed_at: expect.stringMatching(
+          /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/
+        ),
+      })
+    );
+  });
+
+  it('createAppointment no agrega columnas de transición para requested', async () => {
+    mockSingle.mockResolvedValue({
+      data: {
+        id: APPOINTMENT_ID,
+        patient_id: PATIENT_ID,
+        service_id: SERVICE_ID,
+        provider_id: PROVIDER_ID,
+        start_at: '2026-09-10T15:00:00.000Z',
+        end_at: '2026-09-10T15:30:00.000Z',
+        status: 'requested',
+        created_at: '2026-09-01T10:00:00Z',
+        updated_at: '2026-09-01T10:00:00Z',
+      },
+      error: null,
+    });
+
+    await createAppointment({
+      patientId: PATIENT_ID,
+      serviceId: SERVICE_ID,
+      providerId: PROVIDER_ID,
+      startAt: '2026-09-10T15:00:00.000Z',
+      endAt: '2026-09-10T15:30:00.000Z',
+    });
+
+    const payload = mockInsert.mock.calls[0][0] as Record<string, unknown>;
+    expect(payload).not.toHaveProperty('confirmed_at');
+    expect(payload).not.toHaveProperty('cancelled_at');
+    expect(payload).not.toHaveProperty('no_show_at');
   });
 
   it('deletes an appointment', async () => {
