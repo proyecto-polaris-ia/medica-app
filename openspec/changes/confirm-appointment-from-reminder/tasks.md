@@ -202,14 +202,14 @@ Archivos de prueba: `src/lib/citas/__tests__/reminder-reply-flag.test.ts`,
 `src/lib/whatsapp/__tests__/orchestrator-flow-session.test.ts`,
 `src/lib/whatsapp/__tests__/inbound-service-reminder-reply.test.ts`.
 
-- [ ] 3.1 **RED** — Escribir
+- [x] 3.1 **RED** — Escribir
   `src/lib/citas/__tests__/reminder-reply-flag.test.ts`: `undefined`/ausente →
   `false`; `'false'`, `'0'`, `'no'`, `'on'`, `''` → `false`; `'true'`, `'1'`,
   `'yes'`, `' TRUE '` → `true` (espejo de `eve-flag.test.ts`).
   - Verificación:
     `npm run test -- src/lib/citas/__tests__/reminder-reply-flag.test.ts`
     → **falla** (módulo inexistente; casos RED).
-- [ ] 3.2 **GREEN** — Implementar `src/lib/citas/reminder-reply-flag.ts` con
+- [x] 3.2 **GREEN** — Implementar `src/lib/citas/reminder-reply-flag.ts` con
   `isReminderReplyEnabled(rawValue?: string | null): boolean` copiando el patrón
   de `src/lib/whatsapp/eve-flag.ts` (`TRUTHY_VALUES = true|1|yes`, `trim()` +
   `toLowerCase()`; ausente y todo lo demás → `false`, default **off**). No extender
@@ -234,7 +234,7 @@ Archivos de prueba: `src/lib/citas/__tests__/reminder-reply-flag.test.ts`,
   - Verificación:
     `npm run test -- src/lib/whatsapp/__tests__/orchestrator-flow-session.test.ts`
     → **pasa**.
-- [ ] 3.5 **RED** — Escribir
+- [x] 3.5 **RED** — Escribir
   `src/lib/whatsapp/__tests__/inbound-service-reminder-reply.test.ts` (integración
   con store mockeado, `design.md` §2): flag apagado → el gancho **no** se evalúa y
   el pipeline actual sigue intacto; sesión de flow engine activa → **no** hay
@@ -248,7 +248,7 @@ Archivos de prueba: `src/lib/citas/__tests__/reminder-reply-flag.test.ts`,
   - Verificación:
     `npm run test -- src/lib/whatsapp/__tests__/inbound-service-reminder-reply.test.ts`
     → **falla** (gancho inexistente; casos RED).
-- [ ] 3.6 **GREEN** — Cablear el gancho en
+- [x] 3.6 **GREEN** — Cablear el gancho en
   `src/lib/whatsapp/inbound-service.ts::processWhatsAppInboundEvent`, **después**
   de `loadConversationContext`/`loadConversationHistory` y **antes** del branch
   `if (isFlowEngineEnabled())`, exactamente con el orden de guardas del
@@ -262,7 +262,7 @@ Archivos de prueba: `src/lib/citas/__tests__/reminder-reply-flag.test.ts`,
   - Verificación:
     `npm run test -- src/lib/whatsapp/__tests__/inbound-service-reminder-reply.test.ts`
     → **pasa**.
-- [ ] 3.7 **TRIANGULATE/REFACTOR** — Reforzar la precedencia y el apagado
+- [x] 3.7 **TRIANGULATE/REFACTOR** — Reforzar la precedencia y el apagado
   seguro: con flag apagado, una confirmación elegible llega al pipeline normal
   (regresión); sesión `complete`/expirada **no** bloquea y sí aplica el manejo;
   mensaje no-texto (p. ej. imagen) no entra al gancho. Limpiar el dispatch
