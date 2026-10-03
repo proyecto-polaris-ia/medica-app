@@ -285,39 +285,55 @@ clasificación general).
 > implementar). Aquí las tres pruebas de aceptación del issue #87 se consolidan
 > como regresión explícita y quedan en verde.
 
-- [ ] 4.1 **Aceptación #87 (parse)** — Agregar en
+- [x] 4.1 **Aceptación #87 (parse)** — Agregar en
   `src/lib/citas/__tests__/reminder-reply.test.ts` un bloque de aceptación que
   nombre los tres casos del issue: positivos (`1`, `sí`, `confirmo`, `va`, `ok`),
   negativos (`no`, texto libre) y ambiguos (`"sí, pero me duele mucho"`).
-  - Verificación: `npm run test -- reminder-reply.test.ts` → **pasa** (regresión
-    de R2/R3; el RED de comportamiento se observó en 1.1).
-- [ ] 4.2 **Aceptación #87 (no confirma con síntoma)** — Agregar en
+  - Verificación:
+    `npm run test -- src/lib/citas/__tests__/reminder-reply-acceptance.test.ts -t "parseo"`
+    → **pasa** (regresión de R2/R3; el RED de comportamiento se observó en 1.1).
+- [x] 4.2 **Aceptación #87 (no confirma con síntoma)** — Agregar en
   `src/lib/whatsapp/__tests__/inbound-service-reminder-reply.test.ts` la prueba de
   aceptación: `"me duele mucho"` mezclado con confirmación crea escalación a
   humano y **no** aplica transición (estado intacto).
   - Verificación:
-    `npm run test -- src/lib/whatsapp/__tests__/inbound-service-reminder-reply.test.ts -t "duele"`
+    `npm run test -- src/lib/citas/__tests__/reminder-reply-acceptance.test.ts -t "síntoma"`
     → **pasa** (regresión de R6; RED observado en 2.5/3.5).
-- [ ] 4.3 **Aceptación #87 (sesión activa gana)** — Agregar la prueba de
+- [x] 4.3 **Aceptación #87 (sesión activa gana)** — Agregar la prueba de
   aceptación: con una sesión de flow engine activa y una cita elegible con
   recordatorio reciente, un `"1"` **no** produce transición ni escalación y el
   mensaje sigue el flujo de reserva.
   - Verificación:
     `npm run test -- src/lib/whatsapp/__tests__/inbound-service-reminder-reply.test.ts -t "sesión"`
     → **pasa** (regresión de R12/R13; RED observado en 3.5).
-- [ ] 4.4 **Aceptación (path legacy)** — Consolidar en
+- [x] 4.4 **Aceptación (path legacy)** — Consolidar en
   `src/lib/whatsapp/__tests__/inbound-service-reminder-reply.test.ts` la prueba
   del path legacy (`WHATSAPP_FLOW_ENGINE_ENABLED` apagado) que reconoce la
   respuesta a recordatorio antes de la clasificación general.
   - Verificación:
     `npm run test -- src/lib/whatsapp/__tests__/inbound-service-reminder-reply.test.ts -t "legacy"`
     → **pasa** (regresión de R14).
-- [ ] 4.5 **Aceptación (idempotencia por ledger)** — Consolidar la aserción de
+- [x] 4.5 **Aceptación (idempotencia por ledger)** — Consolidar la aserción de
   duplicado: un segundo webhook con el mismo `providerMessageId` no repite la
   transición ni duplica el acuse.
   - Verificación:
     `npm run test -- src/lib/whatsapp/__tests__/inbound-service-reminder-reply.test.ts -t "duplicado"`
     → **pasa** (regresión de R10/R14).
+
+> **Enmienda (parte C, Fase 4):** la aceptación del issue #87 se consolidó en
+> `src/lib/citas/__tests__/reminder-reply-acceptance.test.ts` (16 pruebas,
+> end-to-end sobre el borde de servicio: `classifyReminderReply` + elegibilidad +
+> `handleReminderReply` con Supabase/transición/escalación mockeados), porque ese
+> archivo sí está en las superficies de edición autorizadas de la parte C y
+> `src/lib/whatsapp/__tests__/inbound-service-reminder-reply.test.ts` no lo está.
+> 4.1 (positivos/negativos/ambiguos) y 4.2 (dolor/urgencia no confirma, escalación
+> creada y `appointments.notes` intactas) quedan cubiertos ahí; 4.3 (sesión activa
+> gana), 4.4 (path legacy) y 4.5 (duplicado por ledger) ya estaban cubiertos por
+> la suite de la Fase 3 en `inbound-service-reminder-reply.test.ts` ("con una
+> sesión de flow engine activa no hay transición ni escalación y el flujo
+> continúa (aceptación #87)", "reconoce la respuesta en el path legacy con el flow
+> engine apagado" y "un duplicado por ledger no repite transición ni acuse"), que
+> sigue en verde; no se duplican.
 
 **Cobertura de spec:** consolida R2, R3, R6, R10, R12, R13 y R14 como aceptación
 explícita del issue #87.
@@ -338,6 +354,13 @@ explícita del issue #87.
   - Verificación:
     `grep -rn "WHATSAPP_REMINDER_REPLY_ENABLED" .env.local.example src/lib/citas/reminder-reply-flag.ts`
     → mismo identificador en ambos, sin sinónimos.
+
+> **Pendiente (parte C):** 5.1 queda diferido al padre (`.env.local.example` está
+> bloqueado por la política de seguridad del harness: no se leen rutas `.env*`).
+> 5.2 no puede cerrarse mientras 5.1 no agregue la línea: la mitad `src/` está
+> verificada (identificador único `WHATSAPP_REMINDER_REPLY_ENABLED`, sin variantes,
+> única lectura en `src/lib/citas/reminder-reply-flag.ts`), pero la comparación
+> contra `.env.local.example` requiere esa ruta.
 
 **Cobertura de spec:** R11 (Control por feature flag, documentación del default
 apagado).
