@@ -60,6 +60,40 @@ describe('/api/admin/appointments', () => {
     expect(listAppointmentsRange).not.toHaveBeenCalled();
   });
 
+  it('GET includes reminders per appointment in the payload', async () => {
+    (listAppointments as ReturnType<typeof vi.fn>).mockResolvedValue([
+      {
+        id: 'appt-1',
+        serviceId: SERVICE_ID,
+        providerId: PROVIDER_ID,
+        reminders: [
+          {
+            cadence: 'h24',
+            status: 'sent',
+            sentAt: '2026-10-01T15:15:00.000Z',
+            dryRun: false,
+            createdAt: '2026-10-01T15:15:00.000Z',
+          },
+        ],
+      },
+      { id: 'appt-2', serviceId: SERVICE_ID, providerId: PROVIDER_ID, reminders: [] },
+    ]);
+
+    const res = await GET(
+      new Request('http://localhost/api/admin/appointments')
+    );
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body.appointments[0].reminders).toHaveLength(1);
+    expect(body.appointments[0].reminders[0]).toMatchObject({
+      cadence: 'h24',
+      status: 'sent',
+      sentAt: '2026-10-01T15:15:00.000Z',
+    });
+    expect(body.appointments[1].reminders).toEqual([]);
+  });
+
   it('GET lists appointments in range when start and end are provided', async () => {
     (listAppointmentsRange as ReturnType<typeof vi.fn>).mockResolvedValue([
       { id: 'appt-1', serviceId: SERVICE_ID, providerId: PROVIDER_ID },

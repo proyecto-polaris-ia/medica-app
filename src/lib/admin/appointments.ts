@@ -1,5 +1,10 @@
 import { getSupabaseAdmin } from '@/lib/supabase/server';
-import type { Appointment, AppointmentInput, ProviderAppointment } from './types';
+import type {
+  Appointment,
+  AppointmentInput,
+  AppointmentReminderSummary,
+  ProviderAppointment,
+} from './types';
 import {
   parseAppointmentStatus,
   parseIsoDate,
@@ -24,7 +29,60 @@ function mapRow(row: Record<string, unknown>): Appointment {
     notes: (row.notes as string | null) ?? null,
     createdAt: row.created_at as string,
     updatedAt: row.updated_at as string,
+    reminders: [],
   };
+}
+
+const REMINDER_SELECT =
+  'appointment_id, cadence, status, dry_run, sent_at, created_at';
+
+/**
+ * Agrupa los recordatorios de las citas por `appointment_id` con una sola
+ * consulta batch (`.in(...)`), evitando un N+1 en el panel.
+ */
+async function remindersFor(
+  ids: string[]
+): Promise<Map<string, AppointmentReminderSummary[]>> {
+  const unique = [...new Set(ids.filter(Boolean))];
+  if (unique.length === 0) return new Map();
+
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from('appointment_reminders')
+    .select(REMINDER_SELECT)
+    .in('appointment_id', unique)
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  const grouped = new Map<string, AppointmentReminderSummary[]>();
+  for (const row of data ?? []) {
+    const appointmentId = row.appointment_id as string;
+    if (!appointmentId) continue;
+    const list = grouped.get(appointmentId) ?? [];
+    list.push({
+      cadence: row.cadence as AppointmentReminderSummary['cadence'],
+      status: row.status as AppointmentReminderSummary['status'],
+      sentAt: (row.sent_at as string | null) ?? null,
+      dryRun: row.dry_run === true,
+      createdAt: row.created_at as string,
+    });
+    grouped.set(appointmentId, list);
+  }
+  return grouped;
+}
+
+async function withReminders(
+  appointments: Appointment[]
+): Promise<Appointment[]> {
+  if (appointments.length === 0) return appointments;
+  const grouped = await remindersFor(appointments.map((a) => a.id));
+  return appointments.map((appointment) => ({
+    ...appointment,
+    reminders: grouped.get(appointment.id) ?? [],
+  }));
 }
 
 export async function listAppointments(): Promise<Appointment[]> {
@@ -38,7 +96,7 @@ export async function listAppointments(): Promise<Appointment[]> {
     throw new Error(error.message);
   }
 
-  return (data ?? []).map(mapRow);
+  return withReminders((data ?? []).map(mapRow));
 }
 
 const MAX_RANGE_DAYS = 62;
@@ -82,7 +140,7 @@ export async function listAppointmentsRange(
     throw new Error(error.message);
   }
 
-  return (data ?? []).map(mapRow);
+  return withReminders((data ?? []).map(mapRow));
 }
 
 function validateAppointmentInput(input: AppointmentInput): {
