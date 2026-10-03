@@ -116,8 +116,27 @@ export class FlowEngine {
     const mergedEntities = { ...currentState.entities, ...additionalEntities };
     const mergedMetadata = { ...currentState.metadata, ...additionalMetadata };
 
+    const nextState: FlowState = {
+      name: nextStateName,
+      entities: mergedEntities,
+      metadata: mergedMetadata,
+    };
+
+    // Simetría con `execute`: si el estado destino exige `required` y falta
+    // alguna entidad, hay que preguntarla antes de ejecutar su acción.
+    const missingInNext = this.findMissingEntities(nextStateDef.required, mergedEntities);
+
+    if (missingInNext.length > 0) {
+      return {
+        nextState,
+        action: 'ask',
+        prompt: nextStateDef.prompt,
+        missingEntity: missingInNext[0],
+      };
+    }
+
     return {
-      nextState: { name: nextStateName, entities: mergedEntities, metadata: mergedMetadata },
+      nextState,
       action: nextStateDef.action || 'ask',
       prompt: nextStateDef.prompt,
     };

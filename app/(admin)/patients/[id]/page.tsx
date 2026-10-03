@@ -43,6 +43,7 @@ const EMPTY_HISTORY: MedicalHistory = {
   dentalHistory: null,
   oralHabits: [],
   clinicalNotes: null,
+  source: null,
   createdAt: '',
   updatedAt: '',
 };

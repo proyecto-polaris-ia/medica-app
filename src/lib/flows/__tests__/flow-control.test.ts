@@ -111,6 +111,56 @@ describe('flow-control', () => {
       const message = generateTopicChangeConfirmation('unknown_flow');
       expect(message).toContain('proceso actual');
     });
+
+    it('should generate confirmation message for onboarding flow', () => {
+      const message = generateTopicChangeConfirmation('onboarding');
+      expect(message).toContain('tu registro de datos médicos');
+      expect(message).toContain('sí');
+      expect(message).toContain('no');
+    });
+  });
+
+  describe('flowName-aware topic control', () => {
+    it('keeps booking behavior unchanged without flowName', () => {
+      expect(detectTopicChange('cuál es su horario', 'collect_service', 'inquiry')).toBe(true);
+      expect(
+        detectTopicChange('cuál es su horario', 'collect_service', 'inquiry', 'book_appointment')
+      ).toBe(true);
+    });
+
+    it('treats inquiry and support as expected for onboarding', () => {
+      expect(detectTopicChange('tengo alergia a la penicilina', 'ask_allergies', 'inquiry', 'onboarding')).toBe(false);
+      expect(detectTopicChange('quiero hablar con alguien', 'ask_allergies', 'support', 'onboarding')).toBe(false);
+      expect(detectTopicChange('algo random', 'ask_allergies', 'unknown', 'onboarding')).toBe(false);
+    });
+
+    it('detects booking intents as topic change during onboarding', () => {
+      for (const intent of [
+        'book_appointment',
+        'check_availability',
+        'reschedule_request',
+        'cancel_request',
+        'handoff',
+      ]) {
+        expect(detectTopicChange('mensaje', 'ask_allergies', intent, 'onboarding')).toBe(true);
+      }
+    });
+
+    it('continues an onboarding session when the intent is inquiry', () => {
+      const result = analyzeFlowControl('tengo alergia a la penicilina', 'ask_allergies', undefined, 'inquiry', 'onboarding');
+      expect(result.type).toBe('continue');
+    });
+
+    it('asks for confirmation when a booking intent interrupts onboarding', () => {
+      const result = analyzeFlowControl('quiero agendar una cita', 'ask_allergies', undefined, 'book_appointment', 'onboarding');
+      expect(result.type).toBe('topic_change');
+      expect(result.detectedIntent).toBe('book_appointment');
+    });
+
+    it('keeps booking flow control unchanged when flowName is book_appointment', () => {
+      const result = analyzeFlowControl('cuál es su horario', 'collect_service', undefined, 'inquiry', 'book_appointment');
+      expect(result.type).toBe('topic_change');
+    });
   });
 
   describe('generateCancellationConfirmation', () => {

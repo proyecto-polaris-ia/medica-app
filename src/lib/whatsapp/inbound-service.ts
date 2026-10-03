@@ -19,6 +19,7 @@ import {
   type ReminderReplyOutcome,
 } from '@/lib/citas/reminder-reply-service';
 import { buildWhatsAppEscalationWork } from './escalation';
+import { createEveWhatsAppEscalation } from './eve-escalation';
 import { sendWhatsAppTextMessage, type WhatsAppSendResult } from './client';
 import { normalizeWhatsAppWebhookPayloadBundle, type NormalizedWhatsAppInboundEvent } from './normalize';
 import {
@@ -53,6 +54,12 @@ export type WhatsAppInboundServiceOptions = {
   sendText?: typeof sendWhatsAppTextMessage;
   humanAlertPhone?: string;
   observabilityContext?: WhatsAppAiCorrelationContext;
+  /**
+   * Port inyectable para la escalación real del onboarding (design.md D7).
+   * Default: la función real que persiste `whatsapp_escalations` y alerta al
+   * humano. Se inyecta en tests para mantenerlos herméticos.
+   */
+  createEscalation?: typeof createEveWhatsAppEscalation;
 };
 
 const defaultStore: WhatsAppStore = {
@@ -395,6 +402,15 @@ async function processWithFlowEngine(
     });
   }
 
+  // Pausa del onboarding (design.md D7): limpiar el estado persistido para que
+  // el onboarding no pueda continuar.
+  if (result.clearFlowState) {
+    await store.updateConversationFlowState({
+      conversationId: persisted.conversationId,
+      flowState: null,
+    });
+  }
+
   // Construir decisión para compatibilidad
   const finalDecision: WhatsAppInboundAgentDecision = {
     ...result.decision,
@@ -420,16 +436,30 @@ async function processWithFlowEngine(
       status: 'escalated', 
       lastIntent: finalDecision.intent 
     });
-    const humanPhone = options.humanAlertPhone ?? process.env.WHATSAPP_HUMAN_ALERT_PHONE;
-    if (humanPhone) {
-      humanAlertSend = await sendAndPersist({ 
-        store, 
-        persisted, 
-        to: humanPhone, 
-        body: `Escalación: ${event.body}`, 
-        purpose: 'human_alert', 
-        sendText 
+    if (result.clearFlowState) {
+      // Escalación real (fila + alerta humana) vía el port; el teléfono usado es
+      // el confiable del canal, nunca uno escrito en el chat.
+      await (options.createEscalation ?? createEveWhatsAppEscalation)({
+        patientPhone: event.fromPhone,
+        profileName: event.profileName,
+        reason: finalDecision.escalationReason ?? finalDecision.summary,
+        summary: finalDecision.summary,
+        patientMessage: event.body ?? undefined,
+        intent: finalDecision.intent,
+        humanAlertPhone: options.humanAlertPhone,
       });
+    } else {
+      const humanPhone = options.humanAlertPhone ?? process.env.WHATSAPP_HUMAN_ALERT_PHONE;
+      if (humanPhone) {
+        humanAlertSend = await sendAndPersist({ 
+          store, 
+          persisted, 
+          to: humanPhone, 
+          body: `Escalación: ${event.body}`, 
+          purpose: 'human_alert', 
+          sendText 
+        });
+      }
     }
     await store.markInboundMessageProcessed({ messageId: persisted.messageId, status: 'escalated' });
   } else {

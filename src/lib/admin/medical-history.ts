@@ -1,5 +1,9 @@
 import { getSupabaseAdmin } from '@/lib/supabase/server';
-import type { MedicalHistory, MedicalHistoryInput } from './types';
+import type {
+  MedicalHistory,
+  MedicalHistoryInput,
+  MedicalHistorySource,
+} from './types';
 import {
   parseStatus,
   parseStringArray,
@@ -22,6 +26,7 @@ const SELECT_COLUMNS = [
   'dental_history',
   'oral_habits',
   'clinical_notes',
+  'source',
   'created_at',
   'updated_at',
 ].join(', ');
@@ -42,6 +47,7 @@ function mapRow(row: Record<string, unknown>): MedicalHistory {
     dentalHistory: (row.dental_history as string | null) ?? null,
     oralHabits: (row.oral_habits as string[] | null) ?? [],
     clinicalNotes: (row.clinical_notes as string | null) ?? null,
+    source: (row.source as MedicalHistorySource) ?? 'staff',
     createdAt: row.created_at as string,
     updatedAt: row.updated_at as string,
   };
@@ -64,6 +70,7 @@ function emptyHistory(patientId: string): MedicalHistory {
     dentalHistory: null,
     oralHabits: [],
     clinicalNotes: null,
+    source: null,
     createdAt: now,
     updatedAt: now,
   };
@@ -98,6 +105,12 @@ function validateMedicalHistoryInput(
     dental_history: parseOptionalString(input.dentalHistory),
     oral_habits: parseStringArray(input.oralHabits),
     clinical_notes: parseOptionalString(input.clinicalNotes),
+    source:
+      parseStatus(
+        input.source,
+        ['patient_autoreport', 'staff'] as const,
+        'source'
+      ) ?? 'staff',
   };
 }
 

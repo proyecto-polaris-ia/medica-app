@@ -6,7 +6,7 @@
  */
 
 import { flowEngine } from '@/lib/flows/flow-engine';
-import { getFlowDefinition } from '@/lib/flows/definitions/book-appointment.flow';
+import { getFlowDefinition } from '@/lib/flows/registry';
 import type { FlowState, ExtractedEntities, FlowResult } from '@/lib/flows/types';
 import {
   type WhatsAppInboundAgentDecision,
@@ -45,10 +45,40 @@ import {
 import type { NormalizedWhatsAppInboundEvent } from '@/lib/whatsapp/normalize';
 import type { WhatsAppStore, PersistedWhatsAppInboundEvent, JsonPayload } from '@/lib/whatsapp/store';
 import { recordWhatsAppAiEvent } from '@/lib/observability/whatsapp-ai';
+import {
+  buildOnboardingSummary,
+  evaluateOnboardingStep,
+  type OnboardingDraft,
+} from '@/lib/flows/onboarding-answers';
+import {
+  resolveOnboardingStartState,
+  shouldStartOnboarding,
+} from '@/lib/flows/onboarding-eligibility';
+import { detectOnboardingUrgency } from '@/lib/flows/onboarding-urgency';
+import { isOnboardingEnabled } from '@/lib/whatsapp/onboarding-flag';
+import {
+  loadOnboardingStartContext,
+  type OnboardingStartContext,
+} from '@/lib/whatsapp/onboarding-context';
+import { upsertMedicalHistory } from '@/lib/admin/medical-history';
+import type { MedicalHistoryInput } from '@/lib/admin/types';
 
 // Constantes de configuración
 /** Minutos de inactividad tras los que una sesión de flujo se considera expirada. */
 export const FLOW_TIMEOUT_MINUTES = 30;
+
+/**
+ * Intents conversacionales que pueden disparar el onboarding (design.md D5).
+ * No secuestra pedidos explícitos ni urgencias.
+ */
+export const ONBOARDING_TRIGGER_INTENTS = new Set<string>(['inquiry', 'unknown']);
+
+/**
+ * Respuesta exacta al paciente ante una urgencia detectada durante el
+ * onboarding (design.md D7).
+ */
+export const ONBOARDING_URGENCY_RESPONSE =
+  'Gracias por avisarme. Para cuidarte bien, una persona del consultorio te va a contactar ahora mismo.';
 
 // Tipos de resultado del orchestrator
 export type OrchestratorResult = {
@@ -57,6 +87,8 @@ export type OrchestratorResult = {
   responseText: string;
   booked?: boolean;
   needsHuman?: boolean;
+  /** Cuando `true` el servicio limpia `flow_state` (pausa del onboarding, D7). */
+  clearFlowState?: boolean;
 };
 
 // Contexto del orchestrator
@@ -102,15 +134,25 @@ export async function orchestrate(context: OrchestratorContext): Promise<Orchest
       return await handleNewMessage(context);
     }
     
+    // Pausa por urgencia durante onboarding (design.md D7): la detección
+    // determinista corre antes del control de tema.
+    if (activeFlow.flowName === 'onboarding' && event.body) {
+      const urgency = detectOnboardingUrgency(event.body);
+      if (urgency.urgent) {
+        return buildOnboardingUrgencyResult(urgency.matched);
+      }
+    }
+
     // Clasificar intent para detectar control de flujo
     const classification = await classifyIntent(event, conversation, knowledgeEntries, agentProvider);
     
-    // Analizar control de flujo
+    // Analizar control de flujo (sensible al flujo activo, design.md D6)
     const flowControl = analyzeFlowControl(
       event.body || '',
       activeFlow.name,
       activeFlow.pendingAction,
-      classification.intent
+      classification.intent,
+      activeFlow.flowName
     );
     
     debugLogger.debug('Orchestrator', 'Flow control analysis', { flowControl });
@@ -178,7 +220,12 @@ async function handleNewMessage(context: OrchestratorContext): Promise<Orchestra
   
   // Clasificar intent
   const classification = await classifyIntent(context.event, conversation, knowledgeEntries, agentProvider);
-  
+
+  // Disparador determinista del onboarding (design.md D5): tras clasificar y
+  // antes de enrutar. Si arranca, cierra el turno.
+  const onboarding = await maybeStartOnboarding(classification, context);
+  if (onboarding) return onboarding;
+
   // Routing según intent
   switch (classification.intent) {
     case 'inquiry':
@@ -199,6 +246,124 @@ async function handleNewMessage(context: OrchestratorContext): Promise<Orchestra
       debugLogger.orchestrator.routing(classification.intent, 'handleFallback');
       return handleFallback(classification, context);
   }
+}
+
+/**
+ * Disparador determinista del onboarding (design.md D5).
+ *
+ * La guarda del feature flag es la primera línea (default off). Solo intents
+ * conversacionales (`ONBOARDING_TRIGGER_INTENTS`). El paciente debe existir, no
+ * tener historia y tener una cita futura elegible. No crea paciente: un
+ * teléfono desconocido sigue su ruta normal.
+ */
+async function maybeStartOnboarding(
+  classification: WhatsAppInboundAgentDecision,
+  context: OrchestratorContext
+): Promise<OrchestratorResult | null> {
+  if (!isOnboardingEnabled()) return null;
+  if (!ONBOARDING_TRIGGER_INTENTS.has(classification.intent)) return null;
+
+  const startContext = await loadOnboardingStartContext({
+    phone: context.event.fromPhone,
+  });
+  if (!startContext) return null;
+
+  if (
+    !shouldStartOnboarding({
+      enabled: true,
+      historyExists: startContext.historyExists,
+      missingEmail: startContext.missingEmail,
+      hasFutureScheduledAppointment: startContext.hasFutureScheduledAppointment,
+    })
+  ) {
+    return null;
+  }
+
+  const startState = resolveOnboardingStartState({
+    historyExists: startContext.historyExists,
+    missingEmail: startContext.missingEmail,
+  });
+  if (!startState) return null;
+
+  const flow = getFlowDefinition('onboarding');
+  const flowState: FlowState = {
+    ...flowEngine.createInitialState(flow),
+    name: startState,
+    flowName: 'onboarding',
+    metadata: { onboarding: buildOnboardingDraft(startContext) },
+  };
+
+  const result = flowEngine.execute(flow, flowState, {});
+  const responseText = await generateFlowResponse(result, context);
+
+  debugLogger.flow.start('onboarding', startState, { intent: classification.intent });
+
+  return {
+    decision: classification,
+    flowState: {
+      ...result.nextState,
+      flowName: 'onboarding',
+      lastActivity: new Date().toISOString(),
+    },
+    responseText,
+  };
+}
+
+function buildOnboardingDraft(context: OnboardingStartContext): OnboardingDraft {
+  return {
+    context: {
+      patientId: context.patientId,
+      phone: context.phone,
+      patientName: context.patientName,
+      sex: context.sex,
+      missingEmail: context.missingEmail,
+    },
+    allergies: null,
+    medications: null,
+    conditions: null,
+    pregnancyStatus: null,
+    smoking: null,
+    alcohol: null,
+    email: context.email,
+  };
+}
+
+function readOnboardingDraft(
+  metadata: Record<string, unknown> | undefined
+): OnboardingDraft | null {
+  const value = metadata?.onboarding;
+  if (!value || typeof value !== 'object') return null;
+  return value as OnboardingDraft;
+}
+
+function toMedicalHistoryInput(draft: OnboardingDraft): MedicalHistoryInput {
+  return {
+    allergies: draft.allergies ?? [],
+    medications: draft.medications ?? [],
+    systemicConditions: draft.conditions ?? [],
+    pregnancyStatus: draft.pregnancyStatus,
+    smoking: draft.smoking,
+    alcohol: draft.alcohol,
+  };
+}
+
+function buildOnboardingUrgencyResult(matched?: string): OrchestratorResult {
+  debugLogger.info('Orchestrator', 'Onboarding urgency detected', { matched });
+  return {
+    decision: {
+      intent: 'support',
+      summary: 'Urgencia durante onboarding',
+      confidence: 1,
+      decision: 'needs_human',
+      escalationReason: matched,
+      responseText: '',
+      citedKnowledgeIds: [],
+      citedToolCallIds: [],
+    },
+    responseText: ONBOARDING_URGENCY_RESPONSE,
+    needsHuman: true,
+    clearFlowState: true,
+  };
 }
 
 /**
@@ -285,12 +450,16 @@ async function continueFlow(
     currentState: activeFlow.name,
   });
   
-  // Determinar qué flujo continuar (por ahora solo book_appointment)
+  // Determinar qué flujo continuar (booking por default, retrocompatible)
   const flowName = activeFlow.flowName || 'book_appointment';
   const flow = getFlowDefinition(flowName);
   
   // Extraer entidades del mensaje actual
-  const entities = extractEntities(event.body || '');
+  const entities = extractEntities(event.body || '') as ExtractedEntities;
+  if (flowName === 'onboarding') {
+    // La respuesta cruda del onboarding vive en el escalar `onboardingAnswer`.
+    entities.onboardingAnswer = event.body ?? '';
+  }
   
   debugLogger.debug('Orchestrator', 'Extracted entities for flow continuation', { entities });
   
@@ -313,6 +482,16 @@ async function continueFlow(
       result = flowEngine.advance(flow, nextState, actionResult.transition!, actionResult.entities);
       
       debugLogger.flow.transition(flowName, result.nextState.name, result.nextState.name, result.nextState.entities);
+    } else if (actionResult.escalate) {
+      // Escritura o identidad fallida: escalar y pausar sin reintentar (D4/D7).
+      return {
+        decision: createFallbackDecision(),
+        responseText:
+          actionResult.error ||
+          'Ocurrió un error. Una persona del consultorio te dará seguimiento.',
+        needsHuman: true,
+        clearFlowState: true,
+      };
     } else {
       return {
         decision: createFallbackDecision(),
@@ -542,7 +721,7 @@ async function executeFlowAction(
   result: FlowResult,
   event: NormalizedWhatsAppInboundEvent,
   persisted: PersistedWhatsAppInboundEvent
-): Promise<{ success: boolean; transition?: string; entities?: ExtractedEntities; metadata?: Record<string, unknown>; error?: string }> {
+): Promise<{ success: boolean; transition?: string; entities?: ExtractedEntities; metadata?: Record<string, unknown>; error?: string; escalate?: boolean }> {
   const { entities } = result.nextState;
 
   switch (result.action) {
@@ -636,6 +815,68 @@ async function executeFlowAction(
       };
     }
 
+    case 'evaluateOnboardingAnswer': {
+      const draft = readOnboardingDraft(result.nextState.metadata);
+      if (!draft) {
+        return { success: false, error: 'No encontré los datos del onboarding.' };
+      }
+
+      const raw =
+        typeof entities.onboardingAnswer === 'string' ? entities.onboardingAnswer : '';
+      const evaluated = evaluateOnboardingStep({
+        step: result.nextState.name,
+        rawAnswer: raw,
+        draft,
+      });
+
+      return {
+        success: true,
+        transition: evaluated.transition,
+        metadata: { onboarding: evaluated.draft },
+        // Toda transición consumida (avance o retry/restart) limpia la
+        // respuesta para que el estado destino la vuelva a pedir.
+        entities: evaluated.clearAnswer ? { onboardingAnswer: undefined } : undefined,
+      };
+    }
+
+    case 'saveOnboardingHistory': {
+      const draft = readOnboardingDraft(result.nextState.metadata);
+      if (!draft) {
+        return { success: false, error: 'No encontré los datos del onboarding.' };
+      }
+
+      // Identidad: solo el teléfono confiable del propio paciente escribe.
+      if (draft.context.phone !== event.fromPhone) {
+        return {
+          success: false,
+          error: 'No pude verificar tu identidad para guardar la historia.',
+          escalate: true,
+        };
+      }
+
+      try {
+        await upsertMedicalHistory(draft.context.patientId, {
+          ...toMedicalHistoryInput(draft),
+          source: 'patient_autoreport',
+        });
+      } catch {
+        return {
+          success: false,
+          error:
+            'No pude guardar tus datos. Una persona del consultorio te dará seguimiento.',
+          escalate: true,
+        };
+      }
+
+      return {
+        success: true,
+        // Fase 1: la historia es el único paso de escritura; el contacto llega
+        // en Fase 2 con `needs_contact`.
+        transition: 'complete',
+        metadata: { onboarding: { ...draft, confirmed: true } },
+      };
+    }
+
     default:
       return { success: false, error: `Acción desconocida: ${result.action}` };
   }
@@ -688,6 +929,20 @@ async function generateFlowResponse(
 
   if (prompt.includes('{provider}') && entities.providerName) {
     prompt = prompt.replace('{provider}', entities.providerName);
+  }
+
+  if (prompt.includes('{patientFirstName}')) {
+    const draft = readOnboardingDraft(metadata);
+    const firstName = draft?.context.patientName.trim().split(/\s+/)[0] ?? '';
+    prompt = prompt.replace('{patientFirstName}', firstName);
+  }
+
+  if (prompt.includes('{onboardingSummary}')) {
+    const draft = readOnboardingDraft(metadata);
+    prompt = prompt.replace(
+      '{onboardingSummary}',
+      draft ? buildOnboardingSummary(draft) : ''
+    );
   }
 
   return prompt;
