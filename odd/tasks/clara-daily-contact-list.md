@@ -22,7 +22,7 @@ Base branch: main (b717371)
 - [x] Tasks: tasks.md con forecast — 49 tareas (F1:17, F2:11, F3:15, F4:6), 16/16 requirements trazados, forecast High ~2650-3000 líneas. Lint no existe en el repo (verificación = test + tsc + build). Prerrequisito operativo: plantilla HSM seguimiento_paciente en Meta antes de release Fase 3.
 - [x] Apply Fase 1: reglas de segmentación (TDD) — 15 tareas implementadas, 1.13/1.14 SUPERADAS (clinicDayKey ya existe en timezone.ts, decisión C); 41 tests de follow-up verdes, 232 de admin, tsc limpio. Commit: ver evidencia abajo.
 - [x] Apply Fase 2: página del panel con acciones (TDD) — commit 856af04: 20 archivos, +1007 líneas; 127 tests verdes, tsc limpio. Desviaciones documentadas: orden 2.9/2.10 antes de 2.4/2.5 (404 depende de getPatient) y test de preselección en ConfirmStep.test.tsx (jsdom).
-- [ ] Apply Fase 3: borradores de mensaje con aprobación humana (TDD) — PR apilado 3
+- [x] Apply Fase 3: borradores de mensaje con aprobación humana (TDD) — commit d2bea90 (24 archivos, +2811 líneas) + corrección 007d806 (60 líneas, claim atómico approved→sending contra R3-race-double-send CRITICAL). 3 desviaciones documentadas (insertFollowUpOutboundMessage fuera de store.ts, guardrails Unicode, createWccClient).
 - [ ] Verify: verificación técnica
 - [ ] Archive: sincronizar specs y archivar change
 - [ ] PRs apilados: push + crear 3 PRs (el último con `Closes #89`)
@@ -36,4 +36,5 @@ Base branch: main (b717371)
 - 7329035 docs(odd): cierre de fase 1 en el task file
 - Review RDD Fase 1: linaje review-35ad35ead838a7c3 → APROBADO y acknowledgement quemado. Hallazgos informativos: R3-failure-paths-untested, R3-lexicographic-time, R3-redundant-round-filter, R3-tasks-completion-contradiction, R3-unbounded-appointments-read, R3-upsert-overwrite.
 - Review RDD Fase 2 (delta vs 7329035; el candidato acumulado excedió lens_context_budget_exceeded → se redujo el alcance): linaje review-c89df4978889e20b → APROBADO y acknowledgement quemado. Hallazgos informativos: R3-catch-all-patient-preselect, R3-no-submit-inflight-guard, R3-note-unbounded, R3-silent-contact-post-failure.
-- Hallazgos informativos no bloqueantes (follow-ups separados): R3-failure-paths-untested (follow-up.test.ts:186-232), R3-lexicographic-time (rules.ts:76-80), R3-redundant-round-filter (follow-up.ts:259-264), R3-tasks-completion-contradiction (tasks.md:645-649), R3-unbounded-appointments-read (follow-up.ts:207-214), R3-upsert-overwrite (follow-up.ts:296-316).
+- Review RDD Fase 3 (delta vs 4030f58): linaje review-385006c7ce061f94 → correction_required (R3-race-double-send CRITICAL) → corrección 007d806 (claim atómico, 60 diff lines) → validador dirigido APROBADO → acknowledgement quemado. Hallazgos informativos: R3-draft-actions-error-blind, R3-name-param-guardrail-gap, R3-send-mark-gap, R3-submit-draft-silent-failure, R3-wcc-catch-all-degradation.
+- Follow-up adicional: FollowUpDraftStatus (types.ts) no incluye 'sending' ( casteo en mapFollowUpDraftRow); comentario de cabecera de migración 0020 sin actualizar; carrera residual de doble POST si dos peticiones pasan el claim simultáneo (Meta no dedupe).

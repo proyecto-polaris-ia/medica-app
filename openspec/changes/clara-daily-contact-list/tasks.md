@@ -578,14 +578,14 @@ migración `0020` + down, `src/lib/admin/follow-up/draft.ts`,
 
 ## 4. Fase 4 — Verificación global
 
-- [ ] 4.1 Ejecutar la suite completa: `npm run test` → **en verde**. Si falla un
+- [x] 4.1 Ejecutar la suite completa: `npm run test` → **en verde**. Si falla un
   caso ajeno a este cambio, registrarlo como limitación del entorno, no como
   completado.
   - **Traza:** todos los requirements.
-- [ ] 4.2 Ejecutar el typecheck: `npx tsc --noEmit` → **sin errores**.
-- [ ] 4.3 Ejecutar el build: `npm run build` → **éxito** (compilación de las
+- [x] 4.2 Ejecutar el typecheck: `npx tsc --noEmit` → **sin errores**.
+- [x] 4.3 Ejecutar el build: `npm run build` → **éxito** (compilación de las
   rutas nuevas y de `app/(admin)/follow-up/`).
-- [ ] 4.4 **Revisión de migraciones** — Verificar idempotencia y reversión de
+- [x] 4.4 **Revisión de migraciones** — Verificar idempotencia y reversión de
   `0019` y `0020`: cada `CREATE`/`CREATE INDEX` con `IF NOT EXISTS`, cada enum
   con guarda `pg_type`, cada `CREATE POLICY`/trigger con guarda o `DROP POLICY IF
   EXISTS`, y que los `down` invierten el orden (índices → tabla → enum) con
@@ -597,14 +597,14 @@ migración `0020` + down, `src/lib/admin/follow-up/draft.ts`,
     `supabase/migrations/down/0019_follow_up_contacts.down.sql`,
     `supabase/migrations/0020_follow_up_message_drafts.sql` y
     `supabase/migrations/down/0020_follow_up_message_drafts.down.sql`.
-- [ ] 4.5 **Prerrequisito operativo (no bloquea el código)** — Registrar que la
+- [x] 4.5 **Prerrequisito operativo (no bloquea el código)** — Registrar que la
   plantilla HSM `seguimiento_paciente` debe registrarse y aprobarse en Meta
   **antes del release de la Fase 3** (envío proactivo fuera de la ventana de 24
   h). No es un cambio de código: el envío degrada con `sent_failed` +
   `error_message` visible mientras la plantilla no esté aprobada.
   - Verificación: nota escrita en este tasks.md y en `design.md` §3.4; sin
     comando ejecutable asociado.
-- [ ] 4.6 Registrar la limitación de lint: `npm run lint` **no** existe en
+- [x] 4.6 Registrar la limitación de lint: `npm run lint` **no** existe en
   `package.json` (no hay script `lint`); **no** se inventa runner. La
   verificación global se limita a `npm run test`, `npx tsc --noEmit` y
   `npm run build`.
