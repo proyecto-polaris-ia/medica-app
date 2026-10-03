@@ -264,3 +264,57 @@ it('allows an internal email-only patient and sends the email', async () => {
   await userEvent.click(screen.getByText('Confirmar reserva'));
   expect(onConfirm).toHaveBeenCalledWith(expect.objectContaining({ email: 'maria@example.com', phone: '' }));
 });
+
+describe('ConfirmStep initial patient', () => {
+  const initialPatient = {
+    id: 'pat-9',
+    fullName: 'Ana Torres',
+    phoneE164: '+5215598765432',
+    email: 'ana@ejemplo.com',
+  };
+
+  it('pre-selects the initial patient fields without searching', () => {
+    render(
+      <ConfirmStep
+        mode="internal"
+        service={service}
+        provider={provider}
+        slot={slot}
+        onConfirm={vi.fn()}
+        onBack={vi.fn()}
+        loading={false}
+        error={null}
+        initialPatient={initialPatient}
+      />
+    );
+
+    expect(screen.getByDisplayValue('Ana Torres')).toBeDisabled();
+    expect(screen.getByDisplayValue('+5215598765432')).toBeDisabled();
+    expect(screen.getByDisplayValue('ana@ejemplo.com')).toBeDisabled();
+  });
+
+  it('emits the preselected patientId without searching', async () => {
+    const onConfirm = vi.fn();
+    render(
+      <ConfirmStep
+        mode="internal"
+        service={service}
+        provider={provider}
+        slot={slot}
+        onConfirm={onConfirm}
+        onBack={vi.fn()}
+        loading={false}
+        error={null}
+        initialPatient={initialPatient}
+      />
+    );
+
+    await userEvent.click(screen.getByText('Confirmar reserva'));
+
+    await waitFor(() => {
+      expect(onConfirm).toHaveBeenCalledWith(
+        expect.objectContaining({ patientId: 'pat-9' })
+      );
+    });
+  });
+});

@@ -3,6 +3,7 @@ import { getSupabaseAdmin } from '@/lib/supabase/server';
 import {
   createPatient,
   deletePatient,
+  getPatient,
   listPatients,
   searchPatients,
   updatePatient,
@@ -25,6 +26,7 @@ describe('patients service', () => {
   const mockIlike = vi.fn();
   const mockOr = vi.fn();
   const mockSingle = vi.fn();
+  const mockMaybeSingle = vi.fn();
 
   function buildQuery() {
     return {
@@ -37,6 +39,7 @@ describe('patients service', () => {
       ilike: mockIlike.mockReturnThis(),
       or: mockOr.mockReturnThis(),
       single: mockSingle,
+      maybeSingle: mockMaybeSingle,
     };
   }
 
@@ -217,6 +220,53 @@ describe('patients service', () => {
 
     it('throws ValidationError for an invalid id', async () => {
       await expect(deletePatient('bad-id')).rejects.toThrow(ValidationError);
+    });
+  });
+
+  describe('getPatient', () => {
+    it('returns the mapped patient for a valid id', async () => {
+      mockMaybeSingle.mockResolvedValue({
+        data: {
+          id: PATIENT_ID,
+          full_name: 'María García',
+          phone_e164: '+5215512345678',
+          notes: null,
+          created_at: '2026-09-01T10:00:00Z',
+          updated_at: '2026-09-01T10:00:00Z',
+        },
+        error: null,
+      });
+
+      const patient = await getPatient(PATIENT_ID);
+
+      expect(mockSelect).toHaveBeenCalled();
+      expect(mockEq).toHaveBeenCalledWith('id', PATIENT_ID);
+      expect(patient).toEqual(
+        expect.objectContaining({
+          id: PATIENT_ID,
+          fullName: 'María García',
+          phoneE164: '+5215512345678',
+        })
+      );
+    });
+
+    it('returns null when the patient does not exist', async () => {
+      mockMaybeSingle.mockResolvedValue({ data: null, error: null });
+
+      await expect(getPatient(PATIENT_ID)).resolves.toBeNull();
+    });
+
+    it('throws ValidationError for an invalid id', async () => {
+      await expect(getPatient('bad-id')).rejects.toThrow(ValidationError);
+    });
+
+    it('throws when the query fails', async () => {
+      mockMaybeSingle.mockResolvedValue({
+        data: null,
+        error: { message: 'down' },
+      });
+
+      await expect(getPatient(PATIENT_ID)).rejects.toThrow('down');
     });
   });
 

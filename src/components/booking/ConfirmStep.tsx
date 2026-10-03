@@ -22,6 +22,13 @@ export type ConfirmPatient = {
   notes?: string;
 };
 
+export type ConfirmInitialPatient = {
+  id: string;
+  fullName: string;
+  phoneE164: string | null;
+  email: string | null;
+};
+
 export function ConfirmStep({
   mode,
   service,
@@ -32,6 +39,7 @@ export function ConfirmStep({
   loading,
   error,
   siteKey,
+  initialPatient,
 }: {
   mode: 'public' | 'internal';
   service: Service;
@@ -42,11 +50,14 @@ export function ConfirmStep({
   loading: boolean;
   error: string | null;
   siteKey?: string;
+  initialPatient?: ConfirmInitialPatient;
 }) {
-  const [phone, setPhone] = useState('');
-  const [email, setEmail] = useState('');
-  const [fullName, setFullName] = useState('');
-  const [patientId, setPatientId] = useState<string | null>(null);
+  const [phone, setPhone] = useState(initialPatient?.phoneE164 ?? '');
+  const [email, setEmail] = useState(initialPatient?.email ?? '');
+  const [fullName, setFullName] = useState(initialPatient?.fullName ?? '');
+  const [patientId, setPatientId] = useState<string | null>(
+    initialPatient?.id ?? null
+  );
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
   const [notes, setNotes] = useState('');
 

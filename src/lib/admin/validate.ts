@@ -308,6 +308,26 @@ export function parseMoneyPositive(value: unknown, field = 'amount'): number {
   return amount;
 }
 
+const FOLLOW_UP_CONTACT_STATUS_VALUES: string[] = ['contacted', 'dismissed'];
+
+/**
+ * Estado cerrado del contacto de seguimiento: `contacted | dismissed`.
+ * `ValidationError` cuando el valor no coincide con el enum.
+ */
+export function parseFollowUpContactStatus(
+  value: unknown,
+  field = 'status'
+): 'contacted' | 'dismissed' {
+  if (
+    typeof value !== 'string' ||
+    value.trim().length === 0 ||
+    !FOLLOW_UP_CONTACT_STATUS_VALUES.includes(value.trim())
+  ) {
+    throw new ValidationError(field, `Invalid ${field}`);
+  }
+  return value.trim() as 'contacted' | 'dismissed';
+}
+
 export function parsePaidAt(value: unknown, field = 'paidAt'): string {
   const date = parseIsoDate(value, field);
   return date.toISOString();
