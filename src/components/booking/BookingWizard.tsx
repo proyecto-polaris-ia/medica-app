@@ -1,7 +1,9 @@
 'use client';
 
 import { useEffect, useReducer } from 'react';
-import { ConfirmStep, type ConfirmPatient } from './ConfirmStep';
+import { ConfirmStep, type ConfirmInitialPatient, type ConfirmPatient } from './ConfirmStep';
+
+export type { ConfirmInitialPatient } from './ConfirmStep';
 import { ProviderStep } from './ProviderStep';
 import { ResultStep } from './ResultStep';
 import { ServiceStep } from './ServiceStep';
@@ -45,9 +47,11 @@ function toApiSlot(slot: Slot): ApiSlot {
 export function BookingWizard({
   mode,
   siteKey,
+  initialPatient,
 }: {
   mode: 'public' | 'internal';
   siteKey?: string;
+  initialPatient?: ConfirmInitialPatient;
 }) {
   const apiBase = mode === 'internal' ? ADMIN_API : PUBLIC_API;
   const [state, dispatch] = useReducer(wizardReducer, initState());
@@ -300,6 +304,7 @@ export function BookingWizard({
             loading={state.phase === 'loading'}
             error={state.error}
             siteKey={siteKey}
+            initialPatient={initialPatient}
           />
         </StepShell>
       )}

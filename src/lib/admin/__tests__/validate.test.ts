@@ -6,6 +6,7 @@ import {
   parseSex,
   parseStringArray,
   parseStatus,
+  parseFollowUpContactStatus,
   ValidationError,
 } from '../validate';
 
@@ -151,5 +152,30 @@ describe('parseStatus', () => {
     expect(() =>
       parseStatus('maybe', ['not_applicable', 'no', 'yes'], 'pregnancyStatus')
     ).toThrow('Invalid pregnancyStatus');
+  });
+});
+
+describe('parseFollowUpContactStatus', () => {
+  it('returns contacted', () => {
+    expect(parseFollowUpContactStatus('contacted')).toBe('contacted');
+  });
+
+  it('returns dismissed', () => {
+    expect(parseFollowUpContactStatus('dismissed')).toBe('dismissed');
+  });
+
+  it('throws ValidationError for any other value', () => {
+    expect(() => parseFollowUpContactStatus('maybe')).toThrow(ValidationError);
+    expect(() => parseFollowUpContactStatus('')).toThrow(ValidationError);
+    expect(() => parseFollowUpContactStatus(null)).toThrow(ValidationError);
+    expect(() => parseFollowUpContactStatus(undefined)).toThrow(
+      ValidationError
+    );
+  });
+
+  it('uses the provided field name in the error', () => {
+    expect(() => parseFollowUpContactStatus('maybe', 'status')).toThrow(
+      'Invalid status'
+    );
   });
 });
