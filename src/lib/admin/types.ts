@@ -185,6 +185,32 @@ export type ClinicalVisitInput = {
   notes?: string | null;
 };
 
+export type PatientFileCategory =
+  | 'radiograph'
+  | 'clinical_photo'
+  | 'document'
+  | 'consent'
+  | 'other';
+
+export type PatientFile = {
+  id: string;
+  patientId: string;
+  clinicalVisitId: string | null;
+  category: PatientFileCategory;
+  storagePath: string;
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  uploadedBy: string | null;
+  createdAt: string;
+  signedUrl?: string;
+};
+
+export type PatientFileInput = {
+  category?: PatientFileCategory | null;
+  clinicalVisitId?: string | null;
+};
+
 export type PatientRecordAppointment = Omit<Appointment, 'reminders'> & {
   serviceName: string;
   providerName: string;

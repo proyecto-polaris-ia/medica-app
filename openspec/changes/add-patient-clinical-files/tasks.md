@@ -24,25 +24,25 @@ Riesgo de merge registrado en `design.md` §1: la migración es `0020` porque
 
 ### 1. Migración `0020` (verificación estructural, sin runner de migraciones)
 
-- [ ] 1.1 Crear `supabase/migrations/0020_patient_files.sql` con la tabla
+- [x] 1.1 Crear `supabase/migrations/0020_patient_files.sql` con la tabla
   `patient_files` (`id`, `patient_id` FK a `patients`, `clinical_visit_id`
   nullable FK a `clinical_visits`, `category` con CHECK, `storage_path` UNIQUE,
   `file_name`, `mime_type`, `size_bytes` CHECK `> 0`, `uploaded_by`, `created_at`)
   siguiendo el estilo idempotente de `supabase/migrations/0013_clinical_record.sql`.
   - Verificación: lectura estructural; confirmar `CREATE TABLE IF NOT EXISTS`,
     la FK a `clinical_visits` y el `CHECK (size_bytes > 0)`.
-- [ ] 1.2 Agregar a `0020` los índices
+- [x] 1.2 Agregar a `0020` los índices
   `idx_patient_files_patient_created (patient_id, created_at DESC)` y
   `idx_patient_files_visit (clinical_visit_id)` con `CREATE INDEX IF NOT EXISTS`.
   - Verificación: `grep -c "CREATE INDEX IF NOT EXISTS" supabase/migrations/0020_patient_files.sql`
     → `2`.
-- [ ] 1.3 Agregar a `0020` el bloque RLS estilo `0017` / `0018`:
+- [x] 1.3 Agregar a `0020` el bloque RLS estilo `0017` / `0018`:
   `ENABLE` + `FORCE ROW LEVEL SECURITY`, `REVOKE ALL ... FROM anon`,
   `REVOKE ALL ... FROM authenticated`, `GRANT ... TO authenticated` y la policy
   `patient_files_admin_all` con `USING ((SELECT auth.uid()) IS NOT NULL)`.
   - Verificación: lectura estructural; la policy solo otorga a `authenticated` y
     no existe ninguna policy para `anon`.
-- [ ] 1.4 Agregar a `0020` la creación del bucket privado
+- [x] 1.4 Agregar a `0020` la creación del bucket privado
   `INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
   VALUES ('patient-files', 'patient-files', false, 10485760,
   ARRAY['image/jpeg','image/png','image/webp','application/pdf'])
@@ -52,19 +52,19 @@ Riesgo de merge registrado en `design.md` §1: la migración es `0020` porque
   - Verificación: `grep -c "bucket_id = 'patient-files'" supabase/migrations/0020_patient_files.sql`
     → `3`; y confirmar por lectura que `public` es `false` y que **no** hay
     policies para `anon`.
-- [ ] 1.5 Crear `supabase/migrations/down/0020_patient_files.down.sql` con
+- [x] 1.5 Crear `supabase/migrations/down/0020_patient_files.down.sql` con
   `DROP POLICY IF EXISTS` de las policies de storage y de la tabla, `DROP TABLE
   IF EXISTS patient_files` y `DELETE FROM storage.buckets WHERE id =
   'patient-files'` (higiene, patrón `supabase/migrations/down/`).
   - Verificación: lectura estructural; el `down` revierte exactamente lo de
     1.1–1.4 y nada más.
-- [ ] 1.6 Confirmar que el bucket es privado y que no hay acceso anónimo: buscar
+- [x] 1.6 Confirmar que el bucket es privado y que no hay acceso anónimo: buscar
   en `0020_*.sql` las cadenas `TO anon`, `public = true` y `GRANT ... TO anon`.
   - Verificación: las tres búsquedas devuelven **cero** coincidencias.
 
 ### 2. Tipos (`src/lib/admin/types.ts`)
 
-- [ ] 2.1 Agregar `PatientFileCategory` (`radiograph` | `clinical_photo` |
+- [x] 2.1 Agregar `PatientFileCategory` (`radiograph` | `clinical_photo` |
   `document` | `consent` | `other`), `PatientFile` (camelCase: `patientId`,
   `clinicalVisitId`, `category`, `storagePath`, `fileName`, `mimeType`,
   `sizeBytes`, `uploadedBy`, `createdAt`, `signedUrl?`) y `PatientFileInput`,
@@ -76,14 +76,14 @@ Riesgo de merge registrado en `design.md` §1: la migración es `0020` porque
 Archivo de implementación: `src/lib/admin/patient-files.ts` (nuevo).
 Archivo de prueba: `src/lib/admin/__tests__/patient-files.test.ts` (nuevo).
 
-- [ ] 3.1 **RED** — Escribir `src/lib/admin/__tests__/patient-files.test.ts`
+- [x] 3.1 **RED** — Escribir `src/lib/admin/__tests__/patient-files.test.ts`
   (patrón de `src/lib/admin/__tests__/clinical-visits.test.ts`) con:
   `validatePatientFileUpload` acepta `image/jpeg`, `image/png`, `image/webp` y
   `application/pdf`, y rechaza tipo no permitido y tamaño > 10 MB **con mensaje
   en español**; `mapRow` correcto.
   - Verificación: `npx vitest run src/lib/admin/__tests__/patient-files.test.ts`
     → falla (módulo/exports inexistentes).
-- [ ] 3.2 **GREEN** — Crear `src/lib/admin/patient-files.ts` con las constantes
+- [x] 3.2 **GREEN** — Crear `src/lib/admin/patient-files.ts` con las constantes
   `PATIENT_FILES_BUCKET = 'patient-files'`, `MAX_FILE_SIZE_BYTES = 10 * 1024 *
   1024`, `ALLOWED_MIME_TYPES`, `PATIENT_FILE_CATEGORIES`,
   `SIGNED_URL_EXPIRES_SECONDS`; `validatePatientFileUpload` (mensajes en
@@ -91,14 +91,14 @@ Archivo de prueba: `src/lib/admin/__tests__/patient-files.test.ts` (nuevo).
   validadores de `./validate`.
   - Verificación: `npx vitest run src/lib/admin/__tests__/patient-files.test.ts`
     → pasa.
-- [ ] 3.3 **GREEN** — Implementar `uploadPatientFile(patientId, input)`:
+- [x] 3.3 **GREEN** — Implementar `uploadPatientFile(patientId, input)`:
   valida uuid y categoría (`parseStatus`), verifica que la consulta (si viene)
   pertenece al paciente con una lectura `clinical_visits.select('id')...`, sube
   el objeto a `patient-files` en la ruta `{patientId}/{crypto.randomUUID()}.{ext}`,
   inserta los metadatos y compensa con `storage.remove()` si el insert falla.
   - Verificación: `npx vitest run src/lib/admin/__tests__/patient-files.test.ts`
     → pasa con los casos de subida y compensación.
-- [ ] 3.4 **GREEN** — Implementar `listPatientFiles(patientId, { clinicalVisitId? })`
+- [x] 3.4 **GREEN** — Implementar `listPatientFiles(patientId, { clinicalVisitId? })`
   (filtro por `patient_id` y `clinical_visit_id`, orden `created_at DESC`),
   `listPatientFilesWithUrls` (firmas en lote con `createSignedUrls`),
   `getPatientFileDownloadUrl(patientId, fileId)` (firma con `download` y
@@ -106,13 +106,13 @@ Archivo de prueba: `src/lib/admin/__tests__/patient-files.test.ts` (nuevo).
   (`storage.remove()` + `delete` de la fila).
   - Verificación: `npx vitest run src/lib/admin/__tests__/patient-files.test.ts`
     → pasa.
-- [ ] 3.5 **TRIANGULATE** — Cubrir casos negativos que protegen el contrato:
+- [x] 3.5 **TRIANGULATE** — Cubrir casos negativos que protegen el contrato:
   tipo no permitido no sube nada; tamaño excedido no sube nada; consulta de otro
   paciente → `NotFoundError`; descarga de archivo inexistente → `NotFoundError`;
   sin N+1 en el listado (una sola firma en lote).
   - Verificación: `npx vitest run src/lib/admin/__tests__/patient-files.test.ts`
     → sigue en verde.
-- [ ] 3.6 **REFACTOR** — Limpiar nombres y la construcción de la ruta del objeto
+- [x] 3.6 **REFACTOR** — Limpiar nombres y la construcción de la ruta del objeto
   y del payload de metadatos manteniendo la prueba en verde.
   - Verificación: `npx vitest run src/lib/admin/__tests__/patient-files.test.ts`
     → sigue en verde.
@@ -125,14 +125,14 @@ Archivos de implementación:
 Archivos de prueba co-locados: `.../files/route.test.ts` y
 `.../files/[fileId]/route.test.ts` (nuevos).
 
-- [ ] 4.1 **RED** — Escribir `app/api/admin/patients/[id]/files/route.test.ts`:
+- [x] 4.1 **RED** — Escribir `app/api/admin/patients/[id]/files/route.test.ts`:
   `GET` y `POST` sin sesión → 401 (`requireUser` mockeado); `POST` con tipo no
   permitido → 400 `{ error: 'invalid_file', message }` con mensaje en español;
   `POST` con tamaño excedido → 400 con mensaje en español; `POST` válido → 201;
   `GET` devuelve `files` con `signedUrl`.
   - Verificación:
     `npx vitest run "app/api/admin/patients/[id]/files/route.test.ts"` → falla.
-- [ ] 4.2 **GREEN** — Implementar `app/api/admin/patients/[id]/files/route.ts`
+- [x] 4.2 **GREEN** — Implementar `app/api/admin/patients/[id]/files/route.ts`
   con `export const dynamic = 'force-dynamic'`, `handleAdminRequest` +
   `requireUser()`, `GET` (`listPatientFilesWithUrls`, query opcional
   `?clinicalVisitId=`) y `POST` (`request.formData()`, valida `file instanceof
@@ -140,21 +140,21 @@ Archivos de prueba co-locados: `.../files/route.test.ts` y
   handler y luego llama a `uploadPatientFile` con `uploadedBy: user.id`).
   - Verificación:
     `npx vitest run "app/api/admin/patients/[id]/files/route.test.ts"` → pasa.
-- [ ] 4.3 **RED** — Escribir
+- [x] 4.3 **RED** — Escribir
   `app/api/admin/patients/[id]/files/[fileId]/route.test.ts`: `GET` sin sesión →
   401; `GET` válido → `{ url, fileName }`; `DELETE` → `{ ok: true }`; `GET` de
   archivo inexistente → 404.
   - Verificación:
     `npx vitest run "app/api/admin/patients/[id]/files/[fileId]/route.test.ts"`
     → falla.
-- [ ] 4.4 **GREEN** — Implementar
+- [x] 4.4 **GREEN** — Implementar
   `app/api/admin/patients/[id]/files/[fileId]/route.ts` con
   `handleAdminRequest` + `requireUser()`: `GET` → `getPatientFileDownloadUrl`;
   `DELETE` → `deletePatientFile` y `{ ok: true }`.
   - Verificación:
     `npx vitest run "app/api/admin/patients/[id]/files/[fileId]/route.test.ts"`
     → pasa.
-- [ ] 4.5 **TRIANGULATE/REFACTOR** — Verificar que el mapeo de errores de
+- [x] 4.5 **TRIANGULATE/REFACTOR** — Verificar que el mapeo de errores de
   `_lib/responses.ts` se respeta (`UnauthorizedError` → 401, `NotFoundError` →
   404, fallo interno → 500) y que el `POST` no llama a la lib cuando la
   validación falla; limpiar sin cambiar el contrato.
@@ -164,11 +164,11 @@ Archivos de prueba co-locados: `.../files/route.test.ts` y
 
 ### 5. Verificación de Fase 1
 
-- [ ] 5.1 Ejecutar las pruebas focales:
+- [x] 5.1 Ejecutar las pruebas focales:
   `npx vitest run src/lib/admin/__tests__/patient-files.test.ts "app/api/admin/patients/[id]/files/route.test.ts" "app/api/admin/patients/[id]/files/[fileId]/route.test.ts"`
   → todo en verde.
-- [ ] 5.2 Ejecutar el typecheck: `npm run typecheck` → sin errores.
-- [ ] 5.3 Verificación estructural de 1.1–1.6 (tabla, índices, RLS sin `anon`,
+- [x] 5.2 Ejecutar el typecheck: `npm run typecheck` → sin errores.
+- [x] 5.3 Verificación estructural de 1.1–1.6 (tabla, índices, RLS sin `anon`,
   bucket privado, `down` completo) y confirmación de que la API exige sesión y
   no expone credenciales de servicio al cliente.
 
