@@ -327,3 +327,30 @@ WHATSAPP_AGENT_LLM_BASE_URL=
 
 Todas server-side; ninguna con prefijo `NEXT_PUBLIC_` salvo las dos primeras. Las
 variables de referencia viven en `.env.local.example`.
+
+## 9. Estrategia de pruebas de datos (Supabase local)
+
+Las suites de datos (`src/lib/admin/__tests__/`, `src/lib/booking/__tests__/booking|catalog|reschedule`,
+`src/lib/wcc-*`, `src/lib/admin/__tests__/rls`) corren **contra una base Supabase local
+(CLI)**, no contra mocks del query builder. Los mocks a mano de Postgres se eliminaron:
+ocultaban bugs reales (errores PGRST116 devueltos como 500 en vez de 404, traducciones de
+código muertas, errores de BD tragados como "sin historial").
+
+- **Levantar**: `supabase start` (puertos locales desplazados en `config.toml`: API 54331,
+  Postgres 54332, Studio 54333, para no chocar con otros stacks de Supabase en la misma
+  máquina). Tras arrancar de un backup, correr `supabase db reset` (aplica migraciones +
+  `supabase/seed.sql`).
+- **Correr**: `npm run test:local` (equivale a `SUPABASE_LOCAL=1 vitest run`). Sin esa
+  variable, las suites de datos se omiten (`npm run test` sigue funcionando sin Docker).
+- **Aislamiento**: cada suite trunca el esquema `public` (`truncateAllTables`) y se
+  serializa entre archivos con un advisory lock (`acquireDbSuiteLock`), porque vitest
+  corre los archivos en paralelo. Helper: `src/test-utils/local-db.ts`.
+- **Lo que se mockea y qué no**: los tests de datos no mockean Supabase; sí conservan
+  mocks legítimos de frontera (tests de rutas API que prueban contrato HTTP, lógica pura,
+  Turnstile, cliente de WhatsApp). La inyección de fallas de red se hace a nivel `fetch`.
+- **RLS**: las tablas con política `*_admin_all` (TO authenticated) y las tablas con RLS
+  sin políticas (solo service_role) están cubiertas en `src/lib/admin/__tests__/rls.test.ts`.
+- **Seed**: `supabase/seed.sql` con datos mínimos deterministas; las suites crean sus
+  propios fixtures vía funciones de dominio.
+- **CI**: job `test-local-db` en `.github/workflows/ci.yml` levanta Supabase local sin
+  credenciales de producción y corre `npm run test:local`.

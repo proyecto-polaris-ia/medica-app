@@ -2,7 +2,7 @@
 
 > Un PR por fase. No mezclar migración de tests con cambios de producción.
 
-> **Estado**: fase 1 completa (commit `5b3d04e` en rama `test/supabase-local-testing`). Piloto exitoso: 7/7 tests contra BD local, bug real corregido (`updateService` → `.maybeSingle()`).
+> **Estado**: fases 1–3 completas. 21 suites de datos migradas a Supabase local; suite completa verde en ambas modalidades (regular: 1138 passed / 213 skipped; local: 1230 passed / 121 skipped, ~33s). 7 bugs reales corregidos (todos ocultos por el mock). Report-only pendientes de decisión: plan draft huérfano (`treatment-plans.ts:267`, el más grave); `updated_at` sin trigger en varias tablas; `searchPatients` sensible a acentos; `uploaded_by` sin validar; reschedule `.single()` race; booking reintenta errores permanentes; catálogos públicos sin orden. Lint: 13 errores preexistentes en archivos no tocados (`agent/agent.ts`, `patient-resolution.test.ts`, `tests/agent/`) — deuda previa, fuera de alcance.
 
 ## Fase 1 — Infraestructura de base local
 
@@ -15,17 +15,20 @@
 
 ## Fase 2 — Migración de tests de dominio (un PR por dominio)
 
-- [ ] 2.1 `src/lib/admin/__tests__/` (providers, services, business-hours, clinic-time).
-- [ ] 2.2 `src/lib/admin/__tests__/` (appointments, patients, payments, clinical-visits, medical-history, treatment-plans, patient-files, patient-record, accounts-receivable, onboarding-status).
-- [ ] 2.3 `src/lib/booking/__tests__/` (availability, catalog, booking, patient-resolution, next-available) — incluir verificación de disponibilidad real desde BD.
-- [ ] 2.4 `src/lib/wcc-*.test.ts` (appointments, contacts, payments, follow-up drafts, dashboard, conversaciones).
-- [ ] 2.5 Tests de RLS: políticas críticas (pacientes aislados, booking público con `anon`) con clientes `anon`/`authenticated` locales.
+> Ejecutada en 6 lotes secuenciales en la misma rama (commits `c947f4f`, `71185a7`,
+> `d780220`, `91219c8`, `7ee418c`, `349f26d`).
+
+- [x] 2.1 `src/lib/admin/__tests__/` (providers, services, business-hours, clinic-time*). *clinic-time es lógica pura: se conserva sin BD.*
+- [x] 2.2 `src/lib/admin/__tests__/` (appointments, patients, payments, clinical-visits, medical-history, treatment-plans, patient-files, patient-record*, accounts-receivable, onboarding-status*). *patient-record y onboarding-status no mockean Supabase: se conservan.*
+- [x] 2.3 `src/lib/booking/__tests__/` (booking, catalog, reschedule) — solapamiento y conflictos verificados con el constraint EXCLUDE real. *Nota: `availability`/`next-available`/`patient-resolution` no tienen suite que mockee Supabase; cobertura pendiente de evaluar en otro change.*
+- [x] 2.4 `src/lib/wcc-*.test.ts` (appointments, contacts, payments). *dashboard/conversations/drafts no mockean el cliente: se conservan.*
+- [x] 2.5 Tests de RLS (`src/lib/admin/__tests__/rls.test.ts`): tablas `*_admin_all` (TO authenticated) accesibles para usuario autenticado local y negadas a anon; tablas con RLS sin políticas solo accesibles vía service_role.
 
 ## Fase 3 — CI y documentación
 
-- [ ] 3.1 Job de CI: levantar Supabase local (sin credenciales de producción), `db reset` + seed, correr `npm run test:local`.
-- [ ] 3.2 Actualizar `architecture.md` (estrategia de pruebas: BD local, qué se mockea y qué no) y `AGENTS.md` (instrucción: tests de datos corren contra Supabase local).
-- [ ] 3.3 Actualizar `.env.local.example` y README con instrucciones de setup para desarrollo.
+- [x] 3.1 Job `test-local-db` en `.github/workflows/ci.yml`: Supabase CLI + `db reset` + `npm run test:local`.
+- [x] 3.2 `architecture.md` §9 (estrategia de pruebas) y `AGENTS.md` (instrucción para agentes).
+- [x] 3.3 `README.md` con instrucciones de setup local. *(La escritura de `.env.test`/`.env.local.example` está bloqueada por la política de seguridad del harness; los defaults viven en código — `src/test-utils/local-db.ts` — y el README documenta el flujo.)*
 
 ## Criterio de cierre
 
