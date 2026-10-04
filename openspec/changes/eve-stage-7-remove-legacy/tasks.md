@@ -31,18 +31,18 @@ Verification: `npx tsc --noEmit && npm run test`.
 
 ## 4. Delete flows onboarding modules
 
-- [ ] 4.1 Delete `src/lib/flows/onboarding-answers.ts`, `onboarding-eligibility.ts`, `onboarding-urgency.ts`.
-- [ ] 4.2 Delete their tests (`onboarding-answers`, `onboarding-eligibility`, `onboarding-urgency`).
-- [ ] 4.3 Confirm `flows/flow-engine|flow-control|registry|types|definitions` and the onboarding flow definition/registry entry are untouched.
+- [x] 4.1 Delete `src/lib/flows/onboarding-answers.ts`, `onboarding-eligibility.ts`, `onboarding-urgency.ts`.
+- [x] 4.2 Delete their tests (`onboarding-answers`, `onboarding-eligibility`, `onboarding-urgency`).
+- [x] 4.3 Confirm `flows/flow-engine|flow-control|registry|types|definitions` and the onboarding flow definition/registry entry are untouched.
 
 Verification: `npx tsc --noEmit && npm run test`.
 
 ## 5. Delete AI inbound agent + LLM provider + npm dependency review
 
-- [ ] 5.1 Delete `src/lib/ai/whatsapp-inbound-agent.ts` and `src/lib/ai/whatsapp-llm-provider.ts` (shared types already extracted).
-- [ ] 5.2 Delete `src/lib/ai/__tests__/whatsapp-inbound-agent.test.ts` and any legacy-only AI tests.
-- [ ] 5.3 Run `npm ls ai @ai-sdk/openai`; remove `@ai-sdk/openai` (no importer) and remove `ai` only if `eve` does not require it as a peer.
-- [ ] 5.4 Confirm `@ai-sdk/openai-compatible` stays (`agent/agent.ts`).
+- [x] 5.1 Delete `src/lib/ai/whatsapp-inbound-agent.ts` and `src/lib/ai/whatsapp-llm-provider.ts` (shared types already extracted).
+- [x] 5.2 Delete `src/lib/ai/__tests__/whatsapp-inbound-agent.test.ts` and any legacy-only AI tests.
+- [x] 5.3 Run `npm ls ai @ai-sdk/openai`; remove `@ai-sdk/openai` (no importer) and remove `ai` only if `eve` does not require it as a peer.
+- [x] 5.4 Confirm `@ai-sdk/openai-compatible` stays (`agent/agent.ts`).
 
 Verification: `npx tsc --noEmit && npm run test`.
 
