@@ -4,7 +4,7 @@ import {
   FLOW_TIMEOUT_MINUTES,
   isFlowExpired,
   isFlowSessionActive,
-} from '../orchestrator';
+} from '@/lib/flows/flow-engine';
 
 const NOW = new Date('2026-10-05T13:00:00.000Z');
 
@@ -22,9 +22,10 @@ function minutesBefore(minutes: number): string {
 }
 
 /**
- * Fase 3 — precedencia de la sesión de flow engine (design.md decisión 2).
- * `isFlowSessionActive` debe reutilizar el timeout de 30 minutos sin cambiar la
- * semántica del bloque privado de `orchestrate`.
+ * Precedencia de la sesión de flow engine (design.md decisión 2).
+ * `isFlowSessionActive` reutiliza el timeout de 30 minutos; los helpers puros se
+ * movieron desde el orquestador legacy (Stage 7 Fase 3) a
+ * `@/lib/flows/flow-engine`, que es un módulo vivo.
  */
 describe('FLOW_TIMEOUT_MINUTES', () => {
   it('expone el timeout de sesión de 30 minutos', () => {

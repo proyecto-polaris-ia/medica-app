@@ -14,18 +14,18 @@ Verification: `npx tsc --noEmit && npm run test` (unchanged tree: both green).
 
 ## 2. Shared-type extraction (prerequisite)
 
-- [ ] 2.1 Add `src/lib/whatsapp/inbound-decision.ts` exporting `WhatsAppInboundIntent` and the decision shape `store.ts` picks over.
-- [ ] 2.2 Re-point `src/lib/whatsapp/eve-escalation.ts`, `src/lib/whatsapp/store.ts`, and `src/lib/ai/whatsapp-intent-classifier.ts` to the shared module.
-- [ ] 2.3 Keep `whatsapp-inbound-agent.ts` re-exporting the shared types temporarily so nothing else breaks.
+- [x] 2.1 Add `src/lib/whatsapp/inbound-decision.ts` exporting `WhatsAppInboundIntent` and the decision shape `store.ts` picks over.
+- [x] 2.2 Re-point `src/lib/whatsapp/eve-escalation.ts`, `src/lib/whatsapp/store.ts`, and `src/lib/ai/whatsapp-intent-classifier.ts` to the shared module.
+- [x] 2.3 Keep `whatsapp-inbound-agent.ts` re-exporting the shared types temporarily so nothing else breaks.
 
 Verification: `npx tsc --noEmit && npm run test`.
 
 ## 3. Delete the legacy WhatsApp pipeline + refactor the reminder-reply test
 
-- [ ] 3.1 Relocate `isFlowSessionActive`/`isFlowExpired` to a live flow module and re-point `src/lib/citas/__tests__/reminder-reply-acceptance.test.ts`.
-- [ ] 3.2 Decouple `app/api/whatsapp/webhook/route.ts` from `inbound-service` (drop the legacy branch/import so it forwards unconditionally); full flag/observability rewrite lands in phase 6.
-- [ ] 3.3 Delete `src/lib/whatsapp/orchestrator.ts`, `inbound-service.ts`, `escalation.ts`, `onboarding-context.ts`.
-- [ ] 3.4 Delete legacy-only tests: `orchestrator-flow-session`, `orchestrator-onboarding`, `inbound-service`, `inbound-service-onboarding`, `inbound-service-reminder-reply`, `onboarding-context`.
+- [x] 3.1 Relocate `isFlowSessionActive`/`isFlowExpired` to a live flow module and re-point `src/lib/citas/__tests__/reminder-reply-acceptance.test.ts`.
+- [x] 3.2 Decouple `app/api/whatsapp/webhook/route.ts` from `inbound-service` (drop the legacy branch/import so it forwards unconditionally); full flag/observability rewrite lands in phase 6.
+- [x] 3.3 Delete `src/lib/whatsapp/orchestrator.ts`, `inbound-service.ts`, `escalation.ts`, `onboarding-context.ts`.
+- [x] 3.4 Delete legacy-only tests: `orchestrator-onboarding`, `inbound-service`, `inbound-service-onboarding`, `inbound-service-reminder-reply`, `onboarding-context`. `orchestrator-flow-session` was retained and re-pointed to `@/lib/flows/flow-engine` because it covers the relocated (kept) helpers.
 
 Verification: `npx tsc --noEmit && npm run test`.
 

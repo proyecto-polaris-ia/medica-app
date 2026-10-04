@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getSupabaseAdmin } from '@/lib/supabase/server';
 import { createEveWhatsAppEscalation } from '@/lib/whatsapp/eve-escalation';
-import { isFlowSessionActive } from '@/lib/whatsapp/orchestrator';
+import { isFlowSessionActive } from '@/lib/flows/flow-engine';
 import { transitionAppointmentFromReminder } from '../appointment-status';
 import { formatClinicDateLabel } from '../send-appointment-reminder';
 import { clinicTimeLabel } from '@/lib/admin/timezone';
@@ -44,26 +44,17 @@ vi.mock('@/lib/whatsapp/eve-escalation', () => ({
  *    `describe('aceptación #87 (2) — síntoma/urgencia')` (`tasks.md` 4.2). El
  *    síntoma **puro** no es una respuesta a recordatorio: el servicio devuelve
  *    `handled:false` sin tocar estado ni escalar por su cuenta, y la escalación
- *    humana la decide el pipeline general (orquestador), cubierta en
- *    `src/lib/whatsapp/__tests__/inbound-service*.test.ts`. La respuesta mezclada
- *    con clínica sí crea la escalación aquí y **no** transiciona (R6).
+ *    humana la decide el pipeline general (Eve). La respuesta mezclada con
+ *    clínica sí crea la escalación aquí y **no** transiciona (R6).
  * 3. **Una sesión de flow engine activa gana** →
  *    `describe('aceptación #87 (3) — coexistencia con flow engine activo')`
- *    (`tasks.md` 4.3). El caso de integración completo **ya existe y pasa** en
- *    `src/lib/whatsapp/__tests__/inbound-service-reminder-reply.test.ts`
- *    ("con una sesión de flow engine activa no hay transición ni escalación y el
- *    flujo continúa (aceptación #87)"). Como `inbound-service.ts` y su suite
- *    están fuera de las superficies de edición de esta parte, ese caso **no se
- *    duplica**: aquí se fija el contrato compuesto con las funciones puras reales
+ *    (`tasks.md` 4.3). La suite de integración del pipeline legacy (que contenía
+ *    el caso completo) se eliminó junto con el pipeline legacy en la Fase 3
+ *    (Stage 7). Aquí se fija el contrato compuesto con las funciones puras reales
  *    (`classifyReminderReply`, `isEligibleReminderReplyCandidate` y
- *    `isFlowSessionActive`), que demuestra que la única razón por la que un "1"
- *    elegible deja de procesarse es la precedencia de la sesión activa.
- *
- * `tasks.md` 4.4 (path legacy) y 4.5 (duplicado por ledger) viven también en
- * `src/lib/whatsapp/__tests__/inbound-service-reminder-reply.test.ts` ("reconoce
- * la respuesta en el path legacy con el flow engine apagado" y "un duplicado por
- * ledger no repite transición ni acuse"), escritos y en verde desde la Fase 3
- * (3.5); tampoco se duplican aquí.
+ *    `isFlowSessionActive`, ahora en `src/lib/flows/flow-engine.ts`), que
+ *    demuestra que la única razón por la que un "1" elegible deja de procesarse
+ *    es la precedencia de la sesión activa.
  */
 
 const APPOINTMENT_ID = '990e8400-e29b-41d4-a716-446655440000';
@@ -252,9 +243,9 @@ describe('aceptación #87 (2) — síntoma/urgencia nunca confirma', () => {
   it('"me duele mucho" no es respuesta a recordatorio: no transiciona y cede el turno al pipeline general', async () => {
     const { from } = mockReminders(buildQuery());
 
-    // Señal clínica sin confirmación ni cancelación → el pipeline general escala
-    // (esa escalación la decide el orquestador; aquí se prueba el borde del
-    // servicio de recordatorio, que NO confirma nada).
+    // Señal clínica sin confirmación ni cancelación → el pipeline general
+    // (Eve) escala; aquí se prueba el borde del servicio de recordatorio, que
+    // NO confirma nada.
     expect(classifyReminderReply('me duele mucho')).toBe('none');
 
     const result = await handleReminderReply(baseInput({ message: 'me duele mucho' }));
@@ -305,7 +296,7 @@ describe('aceptación #87 (3) — coexistencia con flow engine activo', () => {
     lastActivity: '2026-10-05T12:59:00.000Z',
   };
 
-  it('la sesión activa es lo único que impide procesar un "1" elegible (integración completa en inbound-service-reminder-reply.test.ts)', () => {
+  it('la sesión activa es lo único que impide procesar un "1" elegible', () => {
     // El "1" sí sería una confirmación de una cita elegible...
     expect(classifyReminderReply('1')).toBe('confirmation');
     expect(

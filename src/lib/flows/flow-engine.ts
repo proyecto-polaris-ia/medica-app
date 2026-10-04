@@ -170,3 +170,29 @@ export class FlowEngine {
 
 // Instancia singleton
 export const flowEngine = new FlowEngine();
+
+/** Minutes of inactivity after which a flow session is considered expired. */
+export const FLOW_TIMEOUT_MINUTES = 30;
+
+/**
+ * `true` when the flow session has been idle longer than `FLOW_TIMEOUT_MINUTES`.
+ * `now` is injectable for deterministic tests.
+ */
+export function isFlowExpired(flowState: FlowState, now: Date = new Date()): boolean {
+  if (!flowState.lastActivity) return false;
+
+  const lastActivity = new Date(flowState.lastActivity);
+  const diffMinutes = (now.getTime() - lastActivity.getTime()) / (1000 * 60);
+
+  return diffMinutes > FLOW_TIMEOUT_MINUTES;
+}
+
+/**
+ * `true` when there is an active, non-expired flow-engine session.
+ * Exported so the reminder-reply pre-check can respect the precedence of an
+ * in-progress flow (the active session wins and the message keeps flowing
+ * through the booking flow untouched).
+ */
+export function isFlowSessionActive(flowState: FlowState | null, now: Date): boolean {
+  return flowState != null && flowState.name !== 'complete' && !isFlowExpired(flowState, now);
+}

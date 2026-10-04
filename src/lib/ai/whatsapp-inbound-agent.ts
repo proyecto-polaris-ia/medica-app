@@ -1,19 +1,28 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { recordWhatsAppAiEvent, type WhatsAppAiCorrelationContext } from '@/lib/observability/whatsapp-ai';
 import { createWhatsAppLLMProvider } from './whatsapp-llm-provider';
+import type {
+  WhatsAppDynamicToolResult,
+  WhatsAppInboundAgentDecision,
+  WhatsAppInboundAgentDiagnostics,
+  WhatsAppInboundDecisionType,
+  WhatsAppInboundIntent,
+  WhatsAppToolAction,
+  WhatsAppToolActionName,
+} from '@/lib/whatsapp/inbound-decision';
 
-export type WhatsAppInboundIntent =
-  | 'inquiry'
-  | 'book_appointment'
-  | 'check_availability'
-  | 'reschedule_request'
-  | 'cancel_request'
-  | 'support'
-  | 'handoff'
-  | 'unknown';
-
-export type WhatsAppToolActionName = 'check_availability' | 'book_appointment';
-export type WhatsAppInboundDecisionType = 'auto_answer' | 'tool_action' | 'needs_human';
+// Temporary Stage 7 phase-2 bridge: shared types now live in
+// `inbound-decision.ts` and are re-exported here until this legacy module is
+// deleted (phase 5).
+export type {
+  WhatsAppDynamicToolResult,
+  WhatsAppInboundAgentDecision,
+  WhatsAppInboundAgentDiagnostics,
+  WhatsAppInboundDecisionType,
+  WhatsAppInboundIntent,
+  WhatsAppToolAction,
+  WhatsAppToolActionName,
+} from '@/lib/whatsapp/inbound-decision';
 
 export type WhatsAppKnowledgeEntry = {
   id: string;
@@ -22,30 +31,6 @@ export type WhatsAppKnowledgeEntry = {
   answer: string;
   tags: string[];
   source: string | null;
-};
-
-export type WhatsAppDynamicToolResult = {
-  id: string;
-  tool: string;
-  status: 'success' | 'blocked' | 'not_found' | 'error';
-  data?: unknown;
-  reason?: string;
-};
-
-export type WhatsAppToolAction = {
-  name: WhatsAppToolActionName;
-  args: {
-    serviceId?: string;
-    providerId?: string;
-    serviceName?: string;
-    providerName?: string;
-    knowledgeServiceName?: string;
-    localDate?: string;
-    startAt?: string;
-    endAt?: string;
-    fullName?: string;
-    selectedCandidateIndex?: number;
-  };
 };
 
 export type WhatsAppRecentMessage = {
@@ -68,26 +53,6 @@ export type WhatsAppInboundAgentInput = {
 
 export type WhatsAppInboundAgentProviderInput = WhatsAppInboundAgentInput & { knowledgeEntries: WhatsAppKnowledgeEntry[] };
 export type WhatsAppInboundAgentProvider = (input: WhatsAppInboundAgentProviderInput) => Promise<unknown> | unknown;
-
-export type WhatsAppInboundAgentDiagnostics = {
-  providerErrorType: 'invalid_json' | 'invalid_structured_output';
-  rawOutputPreview?: string;
-  validationIssues?: Array<{ path: string; message: string }>;
-};
-
-export type WhatsAppInboundAgentDecision = {
-  intent: WhatsAppInboundIntent;
-  summary: string;
-  confidence: number;
-  decision: WhatsAppInboundDecisionType;
-  responseText?: string;
-  escalationReason?: string;
-  toolAction?: WhatsAppToolAction;
-  citedKnowledgeIds: string[];
-  citedToolCallIds: string[];
-  dynamicToolResults?: WhatsAppDynamicToolResult[];
-  providerDiagnostics?: WhatsAppInboundAgentDiagnostics;
-};
 
 type WhatsAppSupabaseClient = Pick<SupabaseClient, 'from'>;
 

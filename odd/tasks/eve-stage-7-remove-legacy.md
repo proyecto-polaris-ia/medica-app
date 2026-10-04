@@ -32,8 +32,10 @@ Persistencia: este archivo + espejo Engram odd/eve-stage-7-remove-legacy/tasks
 
 - [x] Explore: mapa de dependencias legacy vs vivo (gentle-ai-explore, evidencia path:line) — hecho, ver decisión de scope arriba
 - [x] OpenSpec: crear cambio (proposal, spec deltas, design, tasks) según convención del repo — 6 artefactos en openspec/changes/eve-stage-7-remove-legacy/; deltas: eve-framework (4 REMOVED, 2 MODIFIED, 1 ADDED), whatsapp-inbound-automation (8 REMOVED, 1 ADDED), flow-engine (2 REMOVED, 3 MODIFIED, 1 ADDED); correcciones del writer: store.ts también consume WhatsAppInboundAgentDecision (Pick), y fases 3↔6 acopladas para build verde
-- [ ] Extraer tipo compartido `WhatsAppInboundIntent` a módulo chico; actualizar importers (eve-escalation, store, escalation, intent-classifier, web-chat); tests + tsc verdes; commit
-- [ ] Borrar pipeline legacy WhatsApp: orchestrator, inbound-service, escalation, onboarding-context + tests legacy-only; refactorizar reminder-reply-acceptance.test.ts; tests + tsc verdes; commit
+- [x] Extraer tipo compartido `WhatsAppInboundIntent` a módulo chico; actualizar importers — hecho por writer: src/lib/whatsapp/inbound-decision.ts (7 tipos incl. WhatsAppInboundAgentDecision); importers re-apuntados (store, eve-escalation, intent-classifier); bridge temporal en whatsapp-inbound-agent.ts; tsc 0 / suite verde
+- [x] Borrar pipeline legacy WhatsApp: orchestrator, inbound-service, escalation, onboarding-context + tests legacy-only; refactorizar reminder-reply-acceptance.test.ts — hecho por writer: helpers isFlowSessionActive/isFlowExpired reubicados en flows/flow-engine.ts (TDD RED→GREEN); webhook reenvía incondicionalmente a /eve/v1/whatsapp (502 en fallo); 9 archivos borrados; tsc 0 / 1392 tests OK
+  - Nota: writer retuvo y re-apuntó orchestrator-flow-session.test.ts (cubre helpers reubicados que se conservan)
+  - Hallazgo nuevo: citas/reminder-reply.ts, reminder-reply-service.ts, reminder-reply-flag.ts quedaron huérfanos (su único llamador era inbound-service); decisión pendiente del usuario
 - [ ] Borrar flows/onboarding-answers|eligibility|urgency + sus tests; tests + tsc verdes; commit
 - [ ] Borrar ai/whatsapp-inbound-agent + whatsapp-llm-provider + tests; revisar deps npm (ai / @ai-sdk/openai); tests + tsc verdes; commit
 - [ ] Webhook Eve-only: reescribir route.ts, borrar eve-flag.ts, actualizar route.test.ts, limpiar .env.local.example (WHATSAPP_EVE_ENABLED, WHATSAPP_FLOW_ENGINE_ENABLED) y specs OpenSpec que referencian flags; tests + tsc verdes; commit

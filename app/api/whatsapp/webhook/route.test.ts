@@ -8,10 +8,6 @@ vi.mock('@/lib/observability/whatsapp-ai', () => ({
   recordWhatsAppAiEvent: vi.fn(),
 }));
 
-vi.mock('@/lib/whatsapp/inbound-service', () => ({
-  processWhatsAppWebhookPayload: vi.fn().mockResolvedValue({ received: 1 }),
-}));
-
 vi.mock('@/lib/whatsapp/client', () => ({
   sendWhatsAppTypingIndicator: vi.fn().mockResolvedValue({ ok: true, status: 200 }),
 }));
@@ -20,14 +16,9 @@ vi.mock('@/lib/whatsapp/signature', () => ({
   verifyWhatsAppWebhookSignature: vi.fn().mockReturnValue({ ok: true }),
 }));
 
-vi.mock('@/lib/whatsapp/store', () => ({
-  WhatsAppStoreConfigurationError: class extends Error {},
-}));
-
 import { POST } from './route';
 import type { NextRequest } from 'next/server';
 import { sendWhatsAppTypingIndicator } from '@/lib/whatsapp/client';
-import { processWhatsAppWebhookPayload } from '@/lib/whatsapp/inbound-service';
 import { verifyWhatsAppWebhookSignature } from '@/lib/whatsapp/signature';
 
 function makeRawBody(message: Record<string, unknown> = { id: 'wamid.test', type: 'text', text: { body: 'Hola' } }) {
@@ -53,37 +44,20 @@ const UNSUPPORTED_RAW_BODY = makeRawBody({
   image: { id: 'media.test' },
 });
 
-describe('POST /api/whatsapp/webhook routing', () => {
+/**
+ * Phase 3.2 contracts only (unconditional Eve forwarding). Phase 6 rewrites this
+ * suite to the full always-forward contract (signature-before-forward,
+ * forward-failure surfacing, no legacy invocation, GET verification).
+ */
+describe('POST /api/whatsapp/webhook forwards to Eve', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.stubGlobal('fetch', vi.fn());
-    delete process.env.WHATSAPP_EVE_ENABLED;
     (verifyWhatsAppWebhookSignature as ReturnType<typeof vi.fn>).mockReturnValue({ ok: true });
-    (processWhatsAppWebhookPayload as ReturnType<typeof vi.fn>).mockResolvedValue({ received: 1 });
     (sendWhatsAppTypingIndicator as ReturnType<typeof vi.fn>).mockResolvedValue({ ok: true, status: 200 });
   });
 
-  it('routes to legacy when the flag is unset', async () => {
-    const fetchMock = vi.mocked(fetch);
-    const res = await POST(makeRequest());
-    expect(res.status).toBe(200);
-    expect(fetchMock).not.toHaveBeenCalled();
-    expect(sendWhatsAppTypingIndicator).toHaveBeenCalledWith({ messageId: 'wamid.test' });
-    expect(processWhatsAppWebhookPayload).toHaveBeenCalledTimes(1);
-  });
-
-  it('routes to legacy when the flag is false', async () => {
-    process.env.WHATSAPP_EVE_ENABLED = 'false';
-    const fetchMock = vi.mocked(fetch);
-    const res = await POST(makeRequest());
-    expect(res.status).toBe(200);
-    expect(fetchMock).not.toHaveBeenCalled();
-    expect(sendWhatsAppTypingIndicator).toHaveBeenCalledWith({ messageId: 'wamid.test' });
-    expect(processWhatsAppWebhookPayload).toHaveBeenCalledTimes(1);
-  });
-
-  it('forwards to Eve when the flag is true', async () => {
-    process.env.WHATSAPP_EVE_ENABLED = 'true';
+  it('forwards every inbound request to Eve', async () => {
     const fetchMock = vi.mocked(fetch);
     fetchMock.mockResolvedValue(new Response(JSON.stringify({ ok: true }), { status: 200 }));
 
@@ -95,47 +69,47 @@ describe('POST /api/whatsapp/webhook routing', () => {
     expect(init?.method).toBe('POST');
     expect((init?.headers as Record<string, string>)['x-hub-signature-256']).toBe('sha256=abc');
     expect(sendWhatsAppTypingIndicator).toHaveBeenCalledWith({ messageId: 'wamid.test' });
-    expect(processWhatsAppWebhookPayload).not.toHaveBeenCalled();
   });
 
-  it('continues routing when the typing indicator request fails', async () => {
+  it('continues forwarding when the typing indicator request fails', async () => {
     (sendWhatsAppTypingIndicator as ReturnType<typeof vi.fn>).mockResolvedValue({
       ok: false,
       status: 400,
       error: 'typing failed',
     });
+    const fetchMock = vi.mocked(fetch);
+    fetchMock.mockResolvedValue(new Response('{}', { status: 200 }));
 
     const res = await POST(makeRequest());
     expect(res.status).toBe(200);
     expect(sendWhatsAppTypingIndicator).toHaveBeenCalledWith({ messageId: 'wamid.test' });
-    expect(processWhatsAppWebhookPayload).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it('does not send a typing indicator for unsupported inbound message types', async () => {
+    const fetchMock = vi.mocked(fetch);
+    fetchMock.mockResolvedValue(new Response('{}', { status: 200 }));
+
     const res = await POST(makeRequest('sha256=abc', UNSUPPORTED_RAW_BODY));
     expect(res.status).toBe(200);
     expect(sendWhatsAppTypingIndicator).not.toHaveBeenCalled();
-    expect(processWhatsAppWebhookPayload).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it('falls back to legacy when the Eve forward throws', async () => {
-    process.env.WHATSAPP_EVE_ENABLED = 'true';
+  it('surfaces a forward failure with an error status instead of falling back to legacy', async () => {
     vi.mocked(fetch).mockRejectedValue(new Error('network down'));
 
     const res = await POST(makeRequest());
-    expect(res.status).toBe(200);
-    expect(processWhatsAppWebhookPayload).toHaveBeenCalledTimes(1);
+    expect(res.status).toBe(502);
   });
 
-  it('rejects an invalid signature before any routing', async () => {
+  it('rejects an invalid signature before forwarding', async () => {
     (verifyWhatsAppWebhookSignature as ReturnType<typeof vi.fn>).mockReturnValue({ ok: false, reason: 'invalid_signature' });
-    process.env.WHATSAPP_EVE_ENABLED = 'true';
     const fetchMock = vi.mocked(fetch);
 
     const res = await POST(makeRequest());
     expect(res.status).toBe(401);
     expect(fetchMock).not.toHaveBeenCalled();
     expect(sendWhatsAppTypingIndicator).not.toHaveBeenCalled();
-    expect(processWhatsAppWebhookPayload).not.toHaveBeenCalled();
   });
 });
