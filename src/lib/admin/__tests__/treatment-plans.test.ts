@@ -23,7 +23,11 @@ import {
 } from '../treatment-plans';
 import { NotFoundError, ConflictError } from '../errors';
 import { ValidationError } from '../validate';
-import type { TreatmentPlan, TreatmentPlanStatus } from '../types';
+import type {
+  TreatmentPlan,
+  TreatmentPlanItemInput,
+  TreatmentPlanStatus,
+} from '../types';
 
 /**
  * Suite contra Supabase local (ver openspec/changes/supabase-local-testing).
@@ -312,31 +316,61 @@ d('treatment-plans data layer', () => {
       expect(items).toEqual([]);
     });
 
-    it('aborts creation without persisting rows when item validation fails', async () => {
-      const { patient, provider } = await seedPatientAndProvider();
+    // Issue #127: las tres causas de validación de ítems comparten el mismo
+    // camino (el .map previo al primer INSERT), así que cada variante se
+    // ejercita explícitamente (R3-single-variant-coverage).
+    const invalidItemCases: Array<{ label: string; item: TreatmentPlanItemInput }> = [
+      {
+        label: 'tooth FDI inválido',
+        item: { description: 'Resina', tooth: '99', quantity: 1, unitPrice: 500 },
+      },
+      {
+        label: 'unitPrice negativo',
+        item: { description: 'Resina', quantity: 1, unitPrice: -500 },
+      },
+      {
+        label: 'description vacía',
+        item: { description: '   ', quantity: 1, unitPrice: 500 },
+      },
+    ];
 
-      // `tooth: '99'` es FDI inválido: el error se lanza validando en memoria,
-      // ANTES del insert de ítems (issue #123: aquí quedaba un plan huérfano
-      // en draft porque el .map corría después del insert del plan y fuera
-      // del try/catch del cleanup).
-      await expect(
-        createTreatmentPlan(patient.id, {
-          providerId: provider.id,
-          name: 'Plan X',
-          items: [
-            { description: 'Resina', tooth: '99', quantity: 1, unitPrice: 500 },
-          ],
-        })
-      ).rejects.toThrow(ValidationError);
+    it.each(invalidItemCases)(
+      'aborts creation without persisting rows when item validation fails ($label)',
+      async ({ item }) => {
+        // Línea base con filas reales: la aserción es un delta contra estas
+        // filas conocidas, no "tabla vacía" (frágil ante residuos de otra
+        // fuente; R3-fragile-unfiltered-items-assertion).
+        const base = await seedDraftPlan('Plan base');
+        await createTreatmentPlanItem(base.plan.id, {
+          description: 'Limpieza',
+          unitPrice: 100,
+          quantity: 1,
+        });
+        const baselinePlans = await listTreatmentPlans(base.patient.id);
+        const baselineItems = await listItemRows(base.plan.id);
+        expect(baselinePlans.map((p) => p.id)).toEqual([base.plan.id]);
+        expect(baselineItems).toHaveLength(1);
 
-      // Invariante de atomicidad: si la creación falla, nada persiste.
-      expect(await listTreatmentPlans(patient.id)).toEqual([]);
-      const { data: items, error } = await getSupabaseAdmin()
-        .from('treatment_plan_items')
-        .select('id');
-      expect(error).toBeNull();
-      expect(items).toEqual([]);
-    });
+        // El error se lanza validando en memoria, ANTES del insert de ítems
+        // (issue #123: aquí quedaba un plan huérfano en draft porque el .map
+        // corría después del insert del plan y fuera del try/catch del cleanup).
+        await expect(
+          createTreatmentPlan(base.patient.id, {
+            providerId: base.provider.id,
+            name: 'Plan X',
+            items: [item],
+          })
+        ).rejects.toThrow(ValidationError);
+
+        // Invariante de atomicidad, acotado al intento: el paciente conserva
+        // exactamente su línea base (ni el plan fallido ni huérfanos) y los
+        // ítems del plan base no cambiaron.
+        expect((await listTreatmentPlans(base.patient.id)).map((p) => p.id)).toEqual([
+          base.plan.id,
+        ]);
+        expect(await listItemRows(base.plan.id)).toEqual(baselineItems);
+      }
+    );
   });
 
   describe('updateTreatmentPlan', () => {
