@@ -4,6 +4,8 @@ import {
   sendAppointmentReminder,
   type AppointmentReminderCadence,
 } from '@/lib/citas/send-appointment-reminder';
+import { sendOnboardingNudge } from '@/lib/citas/send-onboarding-nudge';
+import { isOnboardingNudgeEnabled } from '@/lib/whatsapp/onboarding-flag';
 
 /**
  * Cron único de recordatorios de citas (issue #86, slice 2/3).
@@ -13,6 +15,12 @@ import {
  * idempotente— en `src/lib/citas/send-appointment-reminder.ts`. Aquí sólo vive
  * la orquestación: auth bearer timing-safe, feature flag, dry-run fail-closed y
  * el conteo real por cadencia.
+ *
+ * Tras un recordatorio enviado (`sent === true`) y con
+ * `WHATSAPP_ONBOARDING_NUDGE_ENABLED` encendido, se dispara el nudge de
+ * onboarding pendiente (`src/lib/citas/send-onboarding-nudge.ts`). El nudge es
+ * aditivo y aguas abajo: un fallo suyo nunca afecta el resultado del
+ * recordatorio (se envuelve en try/catch).
  *
  * Referencia de patrón: `app/api/cron/payment-reminders/route.ts`.
  */
@@ -106,6 +114,22 @@ export async function POST(request: Request): Promise<Response> {
         // fallos del proveedor se contabilizan como `skipped` (nada salió).
         if (result.sent) {
           counters.sent += 1;
+          // Nudge de onboarding aguas abajo del recordatorio. Un fallo del
+          // nudge NUNCA afecta el resultado del recordatorio.
+          if (isOnboardingNudgeEnabled()) {
+            try {
+              await sendOnboardingNudge({
+                patientId: candidate.patientId,
+                patientName: candidate.patientName,
+                patientPhoneE164: candidate.patientPhoneE164,
+                appointmentId: candidate.appointmentId,
+                startAt: candidate.startAt,
+                dryRun,
+              });
+            } catch {
+              // Degradación: el nudge es aditivo; el recordatorio ya salió.
+            }
+          }
         } else {
           counters.skipped += 1;
         }

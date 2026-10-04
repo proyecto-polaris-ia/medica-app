@@ -1,5 +1,5 @@
 import { flowEngine } from '@/lib/flows/flow-engine';
-import { getFlowDefinition } from '@/lib/flows/definitions/book-appointment.flow';
+import { getFlowDefinition } from '@/lib/flows/registry';
 import type { FlowState, ExtractedEntities, FlowResult } from '@/lib/flows/types';
 import {
   classifyIntentSimple,

@@ -83,21 +83,3 @@ export const bookAppointmentFlow: FlowDefinition = {
     },
   },
 };
-
-/**
- * Registry de todos los flujos disponibles
- */
-export const flowRegistry: Record<string, FlowDefinition> = {
-  book_appointment: bookAppointmentFlow,
-};
-
-/**
- * Obtiene un flujo por nombre
- */
-export function getFlowDefinition(flowName: string): FlowDefinition {
-  const flow = flowRegistry[flowName];
-  if (!flow) {
-    throw new Error(`Flow no encontrado: ${flowName}`);
-  }
-  return flow;
-}

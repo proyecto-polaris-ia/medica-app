@@ -44,7 +44,14 @@ export type FlowStateDefinition = {
   // Entidades opcionales
   optional?: Array<keyof ExtractedEntities>;
   // Acción a ejecutar cuando se cumplen las entidades
-  action?: 'getFreeSlots' | 'bookAppointment' | 'resolveService' | 'resolveProvider';
+  action?:
+    | 'getFreeSlots'
+    | 'bookAppointment'
+    | 'resolveService'
+    | 'resolveProvider'
+    | 'evaluateOnboardingAnswer'
+    | 'saveOnboardingHistory'
+    | 'saveOnboardingContact';
   // Prompt para pedir información al usuario
   prompt: string;
   // Transiciones posibles basadas en resultado
@@ -67,7 +74,16 @@ export type FlowDefinition = {
 // Resultado de ejecutar el flow engine
 export type FlowResult = {
   nextState: FlowState;
-  action: 'ask' | 'getFreeSlots' | 'bookAppointment' | 'resolveService' | 'resolveProvider' | 'complete';
+  action:
+    | 'ask'
+    | 'getFreeSlots'
+    | 'bookAppointment'
+    | 'resolveService'
+    | 'resolveProvider'
+    | 'evaluateOnboardingAnswer'
+    | 'saveOnboardingHistory'
+    | 'saveOnboardingContact'
+    | 'complete';
   prompt: string;
   missingEntity?: keyof ExtractedEntities;
   data?: unknown;

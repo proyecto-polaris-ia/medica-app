@@ -124,6 +124,9 @@ export type PregnancyStatus = 'not_applicable' | 'no' | 'yes';
 export type SmokingStatus = 'never' | 'former' | 'current';
 export type AlcoholStatus = 'never' | 'occasional' | 'frequent';
 
+/** Procedencia del dato de la historia clínica. */
+export type MedicalHistorySource = 'patient_autoreport' | 'staff';
+
 export type MedicalHistory = {
   patientId: string;
   allergies: string[];
@@ -139,6 +142,7 @@ export type MedicalHistory = {
   dentalHistory: string | null;
   oralHabits: string[];
   clinicalNotes: string | null;
+  source: MedicalHistorySource | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -157,6 +161,7 @@ export type MedicalHistoryInput = {
   dentalHistory?: string | null;
   oralHabits?: string[];
   clinicalNotes?: string | null;
+  source?: MedicalHistorySource | null;
 };
 
 export type ClinicalVisit = {
