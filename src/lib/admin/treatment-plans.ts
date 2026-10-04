@@ -248,6 +248,22 @@ export async function createTreatmentPlan(
     notes: input.notes === undefined ? null : parseNotes(input.notes, 'notes'),
   };
 
+  // Issue #123: validar TODOS los ítems antes del primer INSERT. Un ítem
+  // inválido debe abortar sin tocar la BD; si el mapeo corriera después del
+  // insert (fuera del try/catch del cleanup), quedaría un plan huérfano en
+  // draft con 0 ítems y total 0.
+  const itemsPayload =
+    input.items && input.items.length > 0
+      ? input.items.map((it) => ({
+          description: parseNonEmptyString(it.description, 'description'),
+          service_id: normalizeServiceId(it.serviceId),
+          tooth: parseFdiTooth(it.tooth, 'tooth'),
+          quantity: it.quantity ?? 1,
+          unit_price: parseMoney(it.unitPrice, 'unitPrice'),
+          status: 'pending' as const,
+        }))
+      : [];
+
   const { data: planData, error: planError } = await getSupabaseAdmin()
     .from('treatment_plans')
     .insert(planPayload)
@@ -263,21 +279,16 @@ export async function createTreatmentPlan(
 
   const planId = (planData as unknown as Record<string, unknown>).id as string;
 
-  if (input.items && input.items.length > 0) {
-    const itemsPayload = input.items.map((it) => ({
-      treatment_plan_id: planId,
-      description: parseNonEmptyString(it.description, 'description'),
-      service_id: normalizeServiceId(it.serviceId),
-      tooth: parseFdiTooth(it.tooth, 'tooth'),
-      quantity: it.quantity ?? 1,
-      unit_price: parseMoney(it.unitPrice, 'unitPrice'),
-      status: 'pending' as const,
-    }));
-
+  if (itemsPayload.length > 0) {
     try {
       const { error: itemsError } = await getSupabaseAdmin()
         .from('treatment_plan_items')
-        .insert(itemsPayload);
+        .insert(
+          itemsPayload.map((it) => ({
+            ...it,
+            treatment_plan_id: planId,
+          }))
+        );
 
       if (itemsError) {
         throw new Error(itemsError.message);
