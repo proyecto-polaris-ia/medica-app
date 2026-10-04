@@ -17,5 +17,10 @@ export default defineConfig({
       ['app/**/*.test.ts*', 'jsdom'],
     ],
     setupFiles: ['./vitest.setup.ts'],
+    coverage: {
+      // Keep producing coverage summaries even when tests fail, so the
+      // sanity-kit dashboard can report coverage independently of test health.
+      reportOnFailure: true,
+    },
   },
 });

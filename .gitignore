@@ -50,3 +50,4 @@ opencode.json
 
 # Archify: diagramas generados (regenerar con bin/archify.mjs finalize)
 .archify/
+coverage/
