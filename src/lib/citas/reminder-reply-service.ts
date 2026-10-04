@@ -6,8 +6,8 @@
  * empareja el teléfono normalizado en JS, aplica la transición guardada y
  * escala a humano cuando corresponde. La interpretación pura vive en
  * `reminder-reply.ts`; el update de estado en `appointment-status.ts`. Este
- * módulo nunca reclasifica el mensaje ni envía WhatsApps: eso lo hace el hook
- * del pipeline (`inbound-service.ts`).
+ * módulo nunca reclasifica el mensaje ni envía WhatsApps: la clasificación y el
+ * envío los maneja el agente Eve.
  */
 
 import { getSupabaseAdmin } from '@/lib/supabase/server';

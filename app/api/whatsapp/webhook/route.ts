@@ -1,10 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createWhatsAppAiCorrelationContext, recordWhatsAppAiEvent } from '@/lib/observability/whatsapp-ai';
-import { processWhatsAppWebhookPayload } from '@/lib/whatsapp/inbound-service';
 import { sendWhatsAppTypingIndicator } from '@/lib/whatsapp/client';
-import { isEveWhatsAppEnabled } from '@/lib/whatsapp/eve-flag';
 import { verifyWhatsAppWebhookSignature } from '@/lib/whatsapp/signature';
-import { WhatsAppStoreConfigurationError } from '@/lib/whatsapp/store';
 import type { WhatsAppAiCorrelationContext } from '@/lib/observability/whatsapp-ai';
 
 export const dynamic = 'force-dynamic';
@@ -35,16 +32,35 @@ export async function POST(request: NextRequest) {
   const messageId = extractMessageId(payload);
   await showTypingIndicator(messageId, context);
 
-  if (isEveWhatsAppEnabled(process.env.WHATSAPP_EVE_ENABLED)) {
-    logRouteDecision(context, 'eve', messageId);
-    const eveResponse = await forwardToEve(request, rawBody);
-    if (eveResponse) return eveResponse;
-    // Forward failure: fall through to the legacy path so no message is dropped.
-    console.warn('[Eve] forward failed, falling back to legacy agent', { correlationId: context.correlationId });
+  // Eve is the only WhatsApp path: forward every verified message, no legacy fallback.
+  const eveResponse = await forwardToEve(request, rawBody);
+  if (eveResponse) {
+    recordForwardOutcome(context, 'success', messageId);
+    return eveResponse;
   }
 
-  logRouteDecision(context, 'legacy', messageId);
-  return handleLegacy(payload, context);
+  console.error('[Eve] forwarding failed', { correlationId: context.correlationId, messageId });
+  recordForwardOutcome(context, 'failure', messageId);
+  return NextResponse.json({ error: 'WhatsApp webhook processing failed' }, { status: 502 });
+}
+
+/**
+ * Structured routing observability for every verified message: names the Eve
+ * forwarding target and the forward outcome, plus the correlation id and, when
+ * available, the inbound message id.
+ */
+function recordForwardOutcome(
+  context: WhatsAppAiCorrelationContext,
+  outcome: 'success' | 'failure',
+  messageId: string | undefined,
+) {
+  recordWhatsAppAiEvent({
+    context,
+    type: outcome === 'success' ? 'webhook.accepted' : 'webhook.failed',
+    outcome,
+    identifiers: { forwardingTarget: 'eve', ...(messageId ? { inboundMessageId: messageId } : {}) },
+    ...(outcome === 'failure' ? { diagnostics: { reason: 'eve_forward_failed' } } : {}),
+  });
 }
 
 async function forwardToEve(request: NextRequest, rawBody: string): Promise<NextResponse | null> {
@@ -69,17 +85,6 @@ async function forwardToEve(request: NextRequest, rawBody: string): Promise<Next
   } catch (error) {
     console.error('[Eve] forwarding error:', error);
     return null;
-  }
-}
-
-async function handleLegacy(payload: unknown, context: WhatsAppAiCorrelationContext): Promise<NextResponse> {
-  try {
-    recordWhatsAppAiEvent({ context, type: 'webhook.accepted', outcome: 'success' });
-    return NextResponse.json(await processWhatsAppWebhookPayload(payload, { observabilityContext: context }));
-  } catch (error) {
-    recordWhatsAppAiEvent({ context, type: 'webhook.failed', outcome: 'failure', diagnostics: { error } });
-    if (error instanceof WhatsAppStoreConfigurationError) return NextResponse.json({ error: 'WhatsApp webhook persistence is not configured' }, { status: 503 });
-    return NextResponse.json({ error: 'WhatsApp webhook processing failed' }, { status: 500 });
   }
 }
 
@@ -109,14 +114,4 @@ async function showTypingIndicator(messageId: string | undefined, context: Whats
       error: result.error,
     });
   }
-}
-
-function logRouteDecision(context: WhatsAppAiCorrelationContext, agent: 'eve' | 'legacy', messageId?: string) {
-  console.log(JSON.stringify({
-    type: 'whatsapp_webhook_route',
-    agent,
-    correlationId: context.correlationId,
-    ...(messageId ? { messageId } : {}),
-    timestamp: new Date().toISOString(),
-  }));
 }

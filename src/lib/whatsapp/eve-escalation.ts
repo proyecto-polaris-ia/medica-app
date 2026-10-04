@@ -1,5 +1,5 @@
 import { getSupabaseAdmin } from '@/lib/supabase/server';
-import type { WhatsAppInboundIntent } from '@/lib/ai/whatsapp-inbound-agent';
+import type { WhatsAppInboundIntent } from './inbound-decision';
 import { sendWhatsAppTextMessage, type WhatsAppSendResult } from './client';
 import type { NormalizedWhatsAppInboundEvent } from './normalize';
 import {

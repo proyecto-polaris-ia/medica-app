@@ -17,7 +17,6 @@
     "whatsapp:simulate": "node scripts/whatsapp-simulate-inbound.mjs"
   },
   "dependencies": {
-    "@ai-sdk/openai": "^3.0.109",
     "@ai-sdk/openai-compatible": "^2.0.74",
     "@chat-adapter/state-memory": "^4.34.0",
     "@chat-adapter/state-redis": "^4.34.0",

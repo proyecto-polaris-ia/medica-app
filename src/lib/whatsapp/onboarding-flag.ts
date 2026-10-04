@@ -3,9 +3,8 @@
  *
  * `WHATSAPP_ONBOARDING_ENABLED` habilita el disparador determinista del flujo
  * de onboarding; `WHATSAPP_ONBOARDING_NUDGE_ENABLED` habilitará el nudge de la
- * Fase 3. Siguen la misma convención que `src/lib/citas/reminder-reply-flag.ts`
- * y `src/lib/whatsapp/eve-flag.ts`: `true`, `1` o `yes` (case-insensitive)
- * encienden; cualquier otra cosa (y una variable ausente) apaga, por lo que el
+ * Fase 3. Convención estándar del repo: `true`, `1` o `yes`
+ * (case-insensitive) encienden; cualquier otra cosa (y una variable ausente) apaga, por lo que el
  * default es **off**.
  *
  * Este módulo es la única lectura de estas variables de entorno; los
