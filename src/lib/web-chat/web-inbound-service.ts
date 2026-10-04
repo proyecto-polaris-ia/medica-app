@@ -1,6 +1,6 @@
 import { flowEngine } from '@/lib/flows/flow-engine';
 import { getFlowDefinition } from '@/lib/flows/registry';
-import type { FlowState, ExtractedEntities, FlowResult } from '@/lib/flows/types';
+import type { FlowState, ExtractedEntities, FlowResult, SlotCandidate } from '@/lib/flows/types';
 import {
   classifyIntentSimple,
   extractEntities,
@@ -408,8 +408,9 @@ async function generateWebFlowResponse(
   }
 
   if (prompt.includes('{slots}')) {
-    const candidates = (metadata?.candidates as any[]) || [];
-    const slotsText = candidates.map((slot: any, index: number) => {
+    const rawCandidates = metadata?.candidates;
+    const candidates = Array.isArray(rawCandidates) ? (rawCandidates as SlotCandidate[]) : [];
+    const slotsText = candidates.map((slot, index) => {
       const start = new Date(slot.startAt);
       return `${index + 1}) ${formatTime(start)}`;
     }).join('\n');

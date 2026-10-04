@@ -29,10 +29,29 @@ const { default: resolvePatientTool } = await import("../../../agent/tools/resol
 const { default: bookAppointmentTool } = await import("../../../agent/tools/book-appointment");
 const { default: nextAvailableTool } = await import("../../../agent/tools/get-next-available");
 
-const checkAvailability = availabilityTool.execute as (input: { serviceName: string; providerName: string; date: string }) => Promise<any>;
-const resolvePatientExec = resolvePatientTool.execute as (input: { phone: string; fullName?: string }) => Promise<any>;
-const bookAppointmentExec = bookAppointmentTool.execute as (input: any) => Promise<any>;
-const getNextAvailable = nextAvailableTool.execute as (input: { serviceName: string; providerName: string; afterDate: string }) => Promise<any>;
+// Minimal structural type for what this suite asserts about tool outputs.
+type BookingToolResult = {
+  available?: boolean;
+  success?: boolean;
+  conflict?: boolean;
+  error?: string;
+  patient?: Record<string, unknown>;
+  appointment?: Record<string, unknown>;
+  slot?: { start: string; end: string };
+};
+type ToolFn<TInput> = (input: TInput) => Promise<BookingToolResult>;
+
+const checkAvailability = availabilityTool.execute as unknown as ToolFn<{ serviceName: string; providerName: string; date: string }>;
+const resolvePatientExec = resolvePatientTool.execute as unknown as ToolFn<{ phone: string; fullName?: string }>;
+const bookAppointmentExec = bookAppointmentTool.execute as unknown as ToolFn<{
+  patientPhone: string;
+  patientName: string;
+  serviceName: string;
+  providerName: string;
+  startAt: string;
+  endAt: string;
+}>;
+const getNextAvailable = nextAvailableTool.execute as unknown as ToolFn<{ serviceName: string; providerName: string; afterDate: string }>;
 
 // Future UTC datetime so booking-flow fixtures never expire as wall-clock time advances.
 function futureIso(daysFromNow: number, hour: number, minute = 0): string {
@@ -103,6 +122,7 @@ describe("Eve complete booking flow integration", () => {
 
     const next = await getNextAvailable({ serviceName: "limpieza", providerName: "ana", afterDate: futureIso(7, 12, 0).slice(0, 10) });
     expect(next).toMatchObject({ success: true, available: true });
+    if (!next.slot) throw new Error("expected next-available slot in tool result");
 
     const bookedNext = await bookAppointmentExec({
       patientPhone: "+5215512345678",

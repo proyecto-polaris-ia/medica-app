@@ -3,11 +3,13 @@ import { getSupabaseAdmin } from '../../supabase/server';
 import { PatientIdentityConflictError, resolvePatient, resolvePatientById } from '../patient-resolution';
 
 vi.mock('../../supabase/server', () => ({ getSupabaseAdmin: vi.fn() }));
-type Result = { data: unknown; error: any };
+type Result = { data: unknown; error: { code?: string; message: string } | null };
 function lookup(result: Result) { return { select: vi.fn().mockReturnThis(), eq: vi.fn().mockReturnThis(), maybeSingle: vi.fn().mockResolvedValue(result) }; }
 function insert(result: Result) { return { insert: vi.fn().mockReturnThis(), select: vi.fn().mockReturnThis(), single: vi.fn().mockResolvedValue(result) }; }
 function conditional(result: Result) { return { update: vi.fn().mockReturnThis(), eq: vi.fn().mockReturnThis(), is: vi.fn().mockReturnThis(), select: vi.fn().mockReturnThis(), maybeSingle: vi.fn().mockResolvedValue(result) }; }
-function queue(...queries: any[]) { (getSupabaseAdmin as any).mockReturnValue({ from: vi.fn(() => queries.shift()) }); }
+type MockedGetSupabaseAdmin = { mockReturnValue: (value: unknown) => unknown };
+const mockedGetSupabaseAdmin = getSupabaseAdmin as unknown as MockedGetSupabaseAdmin;
+function queue(...queries: unknown[]) { mockedGetSupabaseAdmin.mockReturnValue({ from: vi.fn(() => queries.shift()) }); }
 const patient = { id: 'pat-1', full_name: 'María García' };
 
 beforeEach(() => vi.resetAllMocks());
@@ -23,7 +25,7 @@ describe('resolvePatient', () => {
     await expect(resolvePatient({ phone: '+5215512345678', email: 'maria@example.com' })).resolves.toEqual(patient);
   });
   it('rejects no contact before querying the database', async () => {
-    const from = vi.fn(); (getSupabaseAdmin as any).mockReturnValue({ from });
+    const from = vi.fn(); mockedGetSupabaseAdmin.mockReturnValue({ from });
     await expect(resolvePatient({})).rejects.toMatchObject({ field: 'contact' });
     expect(from).not.toHaveBeenCalled();
   });

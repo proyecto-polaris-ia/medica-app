@@ -1,5 +1,5 @@
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
-// @ts-ignore - defineDynamic is available at runtime but TypeScript can't resolve it
+// @ts-expect-error - defineDynamic is available at runtime but TypeScript can't resolve it
 import { defineAgent, defineDynamic } from "eve";
 
 const apiKey = process.env.WHATSAPP_AGENT_LLM_API_KEY ?? "";
