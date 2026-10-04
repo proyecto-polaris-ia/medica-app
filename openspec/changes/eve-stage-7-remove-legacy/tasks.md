@@ -58,12 +58,12 @@ Verification: `npx tsc --noEmit && npm run test`.
 
 ## 7. Documentation update
 
-- [ ] 7.1 `architecture.md`: remove the Flow Engine feature-flag and legacy-path sections; describe the Eve-only webhook.
-- [ ] 7.2 `README.md`: update the WhatsApp agent description and env list.
-- [ ] 7.3 `docs/flow-engine.md`: remove the WhatsApp feature-flag/rollback sections; state web chat ownership.
-- [ ] 7.4 `docs/whatsapp-agent-architecture.md`: remove legacy pipeline and flag sections.
-- [ ] 7.5 `docs/eve-runbook.md`: document Eve-only forwarding, `git revert` + redeploy rollback, `vercel env rm WHATSAPP_EVE_ENABLED` operator step, unchanged Meta URL, monitoring.
-- [ ] 7.6 `docs/eve/eve-migration-plan.md`: check off the Stage 7 checklist and correct the "delete `src/lib/flows/`" instruction.
+- [x] 7.1 `architecture.md`: remove the Flow Engine feature-flag and legacy-path sections; describe the Eve-only webhook.
+- [x] 7.2 `README.md`: update the WhatsApp agent description and env list.
+- [x] 7.3 `docs/flow-engine.md`: remove the WhatsApp feature-flag/rollback sections; state web chat ownership.
+- [x] 7.4 `docs/whatsapp-agent-architecture.md`: remove legacy pipeline and flag sections.
+- [x] 7.5 `docs/eve-runbook.md`: document Eve-only forwarding, `git revert` + redeploy rollback, `vercel env rm WHATSAPP_EVE_ENABLED` operator step, unchanged Meta URL, monitoring.
+- [x] 7.6 `docs/eve/eve-migration-plan.md`: check off the Stage 7 checklist and correct the "delete `src/lib/flows/`" instruction.
 
 Verification: `npx tsc --noEmit && npm run test`.
 

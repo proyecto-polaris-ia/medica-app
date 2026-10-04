@@ -1,5 +1,10 @@
 # Plan de Migración a Vercel Eve - Agente de WhatsApp
 
+> **Estado (Etapa 7, issue #37, ejecutada):** este documento es el plan original
+> de la migración. Las secciones 1 y 2 describen el punto de partida y las
+> predicciones del plan; el **estado final ejecutado**, con las correcciones a
+> esas predicciones, está en la [sección 12](#12-estado-final-de-la-etapa-7-ejecutado).
+
 ## Resumen Ejecutivo
 
 Este documento detalla el plan completo para migrar el agente de WhatsApp de medica-app a Vercel Eve, manteniendo toda la funcionalidad actual (knowledge base, flujo de agendamiento, guardrails clínicos) y aprovechando las capacidades nativas de Eve (durabilidad, HITL, observabilidad).
@@ -57,7 +62,7 @@ Cada etapa tiene su issue asociado con instrucciones detalladas:
 
 ## 1. Arquitectura Actual vs. Nueva
 
-### 1.1 Arquitectura Actual
+### 1.1 Arquitectura Actual (previa a la migración)
 
 ```
 Meta WhatsApp → Webhook (Next.js API) → inbound-service.ts → orchestrator.ts
@@ -69,7 +74,7 @@ Meta WhatsApp → Webhook (Next.js API) → inbound-service.ts → orchestrator.
                                     Supabase (BD + RPC functions)
 ```
 
-**Componentes actuales:**
+**Componentes previos a la migración:**
 - `app/api/whatsapp/webhook/route.ts` - Webhook handler
 - `src/lib/whatsapp/normalize.ts` - Normalización de payloads Meta
 - `src/lib/whatsapp/signature.ts` - Verificación HMAC
@@ -129,19 +134,19 @@ Meta WhatsApp → Eve Channel (Chat SDK) → Eve Agent
 
 | Componente Actual | Reemplazado por Eve | Razón |
 |------------------|---------------------|-------|
-| `flow-engine.ts` | Eve durable sessions | Eve maneja estado de sesión nativamente |
-| `flow-control.ts` | Eve HITL + sessions | Eve maneja timeout, cancelación, confirmaciones |
-| `whatsapp-intent-classifier.ts` | Eve model routing | Eve clasifica intents automáticamente |
+| `flow-engine.ts` | Revisado: **se conserva** | Eve maneja el estado de WhatsApp, pero el Flow Engine sigue siendo el runtime del web chat (sección 12) |
+| `flow-control.ts` | Revisado: **se conserva** | Ídem: timeout y cancelación del web chat |
+| `whatsapp-intent-classifier.ts` | Revisado: **se conserva** | Clasificador simple del web chat |
 | `orchestrator.ts` | Eve agent loop | Eve orquesta el flujo automáticamente |
 | `whatsapp-inbound-agent.ts` | Eve agent + instructions | Eve maneja el LLM directamente |
 | `whatsapp-llm-provider.ts` | Eve AI Gateway | Eve maneja llamadas al LLM |
-| `normalize.ts` | Chat SDK WhatsApp adapter | Eve/Chat SDK normaliza payloads |
-| `signature.ts` | Chat SDK WhatsApp adapter | Eve/Chat SDK verifica firmas |
-| `client.ts` | Chat SDK WhatsApp adapter | Eve/Chat SDK envía mensajes |
-| `store.ts` (whatsapp_*) | Eve sessions + state | Eve maneja estado de conversación |
+| `normalize.ts` | Revisado: **se conserva** | El webhook sigue normalizando payloads de Meta |
+| `signature.ts` | Revisado: **se conserva** | El webhook sigue verificando la firma |
+| `client.ts` | Revisado: **se conserva** | Envío de mensajes desde crons y tools de Eve |
+| `store.ts` (whatsapp_*) | Revisado: **se conserva** | Persistencia del webhook, crons y `eve-escalation` |
 | `inbound-service.ts` | Eve channel + agent | Eve orquesta todo |
-| Feature flag `WHATSAPP_FLOW_ENGINE_ENABLED` | N/A | Eve siempre usa flujos durables |
-| `debug-logger.ts` | Eve observability | Eve tiene Agent Runs nativo |
+| Feature flag `WHATSAPP_FLOW_ENGINE_ENABLED` | N/A | Eliminada en la Etapa 7 |
+| `debug-logger.ts` | Revisado: **se conserva** | Lo usa `flows/flow-control.ts` |
 
 ### 2.3 Se Mantiene Sin Cambios
 
@@ -197,28 +202,31 @@ medica-app/
 │   ├── supabase/                       # Cliente Supabase (SIN CAMBIOS)
 │   │   └── server.ts
 │   │
-│   └── whatsapp/                       # SE ELIMINA (reemplazado por Eve)
-│       ├── normalize.ts                # ❌ Eliminar
-│       ├── signature.ts                # ❌ Eliminar
-│       ├── client.ts                   # ❌ Eliminar
-│       ├── store.ts                    # ❌ Eliminar
+│   └── whatsapp/                       # SE CONSERVA EN PARTE
+│       ├── normalize.ts                # ✅ Se conserva (webhook)
+│       ├── signature.ts                # ✅ Se conserva (webhook)
+│       ├── client.ts                   # ✅ Se conserva (crons, tools)
+│       ├── store.ts                    # ✅ Se conserva (webhook, crons, escalación)
 │       ├── inbound-service.ts          # ❌ Eliminar
 │       ├── orchestrator.ts             # ❌ Eliminar
 │       └── escalation.ts               # ❌ Eliminar
 │
-├── src/lib/flows/                      # SE ELIMINA (reemplazado por Eve)
-│   ├── flow-engine.ts                  # ❌ Eliminar
-│   ├── flow-control.ts                 # ❌ Eliminar
-│   ├── types.ts                        # ❌ Eliminar
-│   └── definitions/                    # ❌ Eliminar
+├── src/lib/flows/                      # ✅ SE CONSERVA (runtime del web chat)
+│   ├── flow-engine.ts                  # ✅ Se conserva
+│   ├── flow-control.ts                 # ✅ Se conserva
+│   ├── types.ts                        # ✅ Se conserva
+│   ├── onboarding-answers.ts           # ❌ Eliminar (módulo de onboarding)
+│   ├── onboarding-eligibility.ts       # ❌ Eliminar
+│   ├── onboarding-urgency.ts           # ❌ Eliminar
+│   └── definitions/                    # ✅ Se conserva
 │
-├── src/lib/ai/                         # SE ELIMINA (reemplazado por Eve)
-│   ├── whatsapp-intent-classifier.ts   # ❌ Eliminar
+├── src/lib/ai/                         # SE ELIMINA EN PARTE
+│   ├── whatsapp-intent-classifier.ts   # ✅ Se conserva (web chat)
 │   ├── whatsapp-inbound-agent.ts       # ❌ Eliminar
 │   └── whatsapp-llm-provider.ts        # ❌ Eliminar
 │
-├── app/api/whatsapp/                   # SE ELIMINA (reemplazado por Eve channel)
-│   └── webhook/route.ts                # ❌ Eliminar
+├── app/api/whatsapp/                   # ✅ SE CONSERVA (forwarder Eve-only)
+│   └── webhook/route.ts                # ✅ Se conserva (verifica firma y reenvía)
 │
 └── supabase/migrations/                # SIN CAMBIOS
     └── *.sql
@@ -744,14 +752,25 @@ https://tu-dominio.vercel.app/eve/v1/whatsapp
 Enviar mensajes de prueba y verificar que el agente responda correctamente.
 
 ### Paso 9: Eliminar código legacy
-Una vez confirmado que Eve funciona correctamente:
-- Eliminar `src/lib/whatsapp/`
-- Eliminar `src/lib/flows/`
-- Eliminar `src/lib/ai/whatsapp-*.ts`
-- Eliminar `app/api/whatsapp/webhook/`
+Una vez confirmado que Eve funciona correctamente (resultado real en la sección
+12 y en el `proposal.md` del cambio `eve-stage-7-remove-legacy`):
+- Eliminar `src/lib/whatsapp/orchestrator.ts`, `inbound-service.ts`,
+  `escalation.ts` y `onboarding-context.ts`
+- Eliminar solo `src/lib/flows/onboarding-{answers,eligibility,urgency}.ts`
+  (**no** todo `src/lib/flows/`: el Flow Engine se conserva para el web chat)
+- Eliminar `src/lib/ai/whatsapp-inbound-agent.ts` y `whatsapp-llm-provider.ts`
+  (**no** `whatsapp-intent-classifier.ts`, que usa el web chat)
+- Conservar `app/api/whatsapp/webhook/route.ts` como forwarder Eve-only: Meta
+  sigue apuntando ahí
 
 ### Paso 10: Limpiar variables de entorno
-Eliminar `WHATSAPP_FLOW_ENGINE_ENABLED` (ya no es necesario).
+Eliminar del código y de `.env.local.example` `WHATSAPP_EVE_ENABLED`,
+`WHATSAPP_FLOW_ENGINE_ENABLED` y `WHATSAPP_AGENT_LLM_API_STYLE`. En Vercel,
+`vercel env rm WHATSAPP_EVE_ENABLED production` es una acción del operador (ver
+`docs/eve-runbook.md`).
+
+> Ejecutado. Ver la [sección 12](#12-estado-final-de-la-etapa-7-ejecutado) para el
+> estado final y las correcciones al plan.
 
 ---
 
@@ -759,7 +778,8 @@ Eliminar `WHATSAPP_FLOW_ENGINE_ENABLED` (ya no es necesario).
 
 ### 6.1 Durabilidad Nativa
 - Eve maneja sesiones durables automáticamente
-- No necesitas `flow-engine.ts` ni `flow-control.ts`
+- Eve maneja el estado de la conversación de WhatsApp; el Flow Engine
+  (`flow-engine.ts`, `flow-control.ts`) se conserva como runtime del web chat
 - El estado de la conversación sobrevive crashes y redeploys
 
 ### 6.2 HITL (Human-in-the-Loop)
@@ -770,7 +790,7 @@ Eliminar `WHATSAPP_FLOW_ENGINE_ENABLED` (ya no es necesario).
 ### 6.3 Observabilidad
 - Eve tiene Agent Runs nativo en el dashboard de Vercel
 - Puedes ver cada turno, tool call, y el reasoning del modelo
-- No necesitas `debug-logger.ts`
+- `debug-logger.ts` se conserva porque `flows/flow-control.ts` lo usa
 
 ### 6.4 Menos Código
 - Eliminas ~2000 líneas de código de orquestación
@@ -852,6 +872,9 @@ El agente Eve se considera exitoso cuando:
 7. **Monitorear** - Observar métricas y logs durante 1 semana
 8. **Cleanup** - Eliminar código legacy si todo funciona correctamente
 
+> Plan ejecutado; el cleanup de código ya se realizó (Etapa 7). El estado final y
+> las correcciones están en la [sección 12](#12-estado-final-de-la-etapa-7-ejecutado).
+
 ---
 
 ## 11. Recursos Adicionales
@@ -862,3 +885,60 @@ El agente Eve se considera exitoso cuando:
 - [Eve Channels Overview](https://eve.dev/docs/channels/overview)
 - [Eve Tools Guide](https://eve.dev/docs/tools)
 - [Eve Skills Guide](https://eve.dev/docs/skills)
+
+---
+
+## 12. Estado final de la Etapa 7 (ejecutado)
+
+Issue [#37](https://github.com/proyecto-polaris-ia/medica-app/issues/37). Branch
+`eliumontoya/eve-migration-stage-7-remove-legacy-whatsapp-age`; commits
+`141dbd7`, `5b72110`, `37916e8`.
+
+- [x] Webhook Eve-only: reenvía **siempre** a `/eve/v1/whatsapp`, sin flag y sin
+  fallback legacy; `GET` de verificación de Meta intacto (`502` si falla el reenvío).
+- [x] Tipos compartidos extraídos a `src/lib/whatsapp/inbound-decision.ts`
+  (prerrequisito para borrar el agente legacy).
+- [x] Eliminados `whatsapp/orchestrator.ts`, `inbound-service.ts`, `escalation.ts`,
+  `onboarding-context.ts` y `eve-flag.ts`.
+- [x] Eliminados `flows/onboarding-answers.ts`, `onboarding-eligibility.ts` y
+  `onboarding-urgency.ts`.
+- [x] Eliminados `ai/whatsapp-inbound-agent.ts` y `ai/whatsapp-llm-provider.ts`.
+- [x] Helpers `isFlowSessionActive`/`isFlowExpired` reubicados en
+  `src/lib/flows/flow-engine.ts`.
+- [x] Flags fuera del código y de `.env.local.example`: `WHATSAPP_EVE_ENABLED`,
+  `WHATSAPP_FLOW_ENGINE_ENABLED`, `WHATSAPP_AGENT_LLM_API_STYLE`.
+- [x] npm: `@ai-sdk/openai` eliminado; `ai` conservado (peer no opcional de `eve`);
+  `@ai-sdk/openai-compatible` conservado (`agent/agent.ts`).
+- [x] Docs del cambio actualizados (`architecture.md`, `README.md`,
+  `docs/flow-engine.md`, `docs/whatsapp-agent-architecture.md`,
+  `docs/eve-runbook.md`, este plan).
+- [ ] Acción del operador (no de código): `vercel env rm WHATSAPP_EVE_ENABLED production`
+  cuando convenga; el código ya no la lee (ver `docs/eve-runbook.md`).
+
+### Correcciones al plan original
+
+1. **`src/lib/flows/` NO se elimina.** El Paso 9 y el árbol de la sección 3 decían
+   "eliminar `src/lib/flows/`"; el análisis de importadores mostró que
+   `flow-engine`, `flow-control`, `registry`, `types` y `definitions` siguen siendo
+   el runtime determinístico del **web chat** (`app/api/web-chat/message` →
+   `src/lib/web-chat/web-inbound-service.ts`). Solo se eliminaron los módulos de
+   onboarding (`flows/onboarding-*.ts`).
+2. **`src/lib/whatsapp/` no se elimina completo.** Se conservan `client.ts`,
+   `normalize.ts`, `store.ts`, `signature.ts`, `onboarding-flag.ts` e
+   `inbound-decision.ts`: los usan el webhook, las tools de Eve, `eve-escalation` y
+   los crons.
+3. **`app/api/whatsapp/webhook/route.ts` no se elimina.** Meta sigue apuntando
+   ahí; es el forwarder Eve-only.
+4. **`src/lib/ai/whatsapp-intent-classifier.ts` se conserva** (web chat); solo se
+   elimina el agente LLM y su provider.
+5. **`debug-logger.ts` se conserva** (`flows/flow-control.ts` lo usa).
+6. **Los crons siguen activos** (`appointment-reminders`, `send-onboarding-nudge`).
+7. **Rollback real**: `git revert` + redeploy, sin flag de routing ni cambios en
+   Meta (ver `docs/eve-runbook.md`).
+8. **Base real: `main`.** El branch padre `feat/eve-migration` quedó obsoleto; los
+   merges recientes van directo a `main`.
+
+### Pendiente conocido
+
+`src/lib/citas/reminder-reply*.ts` quedó huérfano tras la eliminación del pipeline
+legacy; seguimiento en el issue #114.

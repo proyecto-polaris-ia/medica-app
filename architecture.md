@@ -33,6 +33,12 @@ Base: `src/` del agente inbound de
 | `loadApprovedWhatsAppKnowledgeEntries` + `whatsapp_knowledge_entries` | Copiar | FAQ estático |
 | Migración `whatsapp_inbound_data_foundation.sql` | Copiar + adaptar | FK a `patients`; incluir `set_updated_at()` (hoy en `0016`) |
 
+> **Nota (Etapa 7, issue #37):** esta tabla es el registro histórico de la
+> reutilización desde TravelHub. Los archivos `lib/ai/whatsapp-llm-provider.ts`,
+> `lib/ai/whatsapp-inbound-agent.ts`, `lib/whatsapp/inbound-service.ts` y
+> `lib/whatsapp/escalation.ts` ya **no existen**: el pipeline legacy de WhatsApp
+> se eliminó y Eve es el único runtime conversacional de ese canal.
+
 **Nuevo (sin equivalente en TravelHub):**
 
 ```
@@ -47,34 +53,36 @@ src/lib/ai/booking-agent.ts   # intents book_appointment / check_availability
 ## 3. Componentes
 
 ### 3.1 Webhook de WhatsApp (`app/api/whatsapp/webhook/route.ts`)
-Recibe `GET` (verificación de Meta) y `POST` (eventos entrantes). Valida token,
-normaliza, persiste raw, responde rápido `200 OK`, delega al orquestador.
+`GET` atiende la verificación de Meta (`hub.mode`, `hub.verify_token`,
+`hub.challenge`). `POST` verifica la firma `x-hub-signature-256`, parsea el
+payload, emite el indicador de "escribiendo" y un registro de observabilidad, y
+**siempre** reenvía el cuerpo crudo a `/eve/v1/whatsapp` (propagando la cabecera
+de firma de Meta) y refleja la respuesta de Eve. No hay rama legacy ni
+alternativa: si el reenvío falla responde `502` y registra `webhook.failed`.
 
-### 3.2 Orquestador inbound (`lib/whatsapp/inbound-service.ts`)
-Único componente que coordina el flujo: normaliza → persiste → carga contexto →
-invoca al agente → ejecuta la acción decidida (responder, reservar, escalar) →
-registra. El webhook no implementa lógica; el LLM no escribe ni envía.
+### 3.2 Agente Eve (`agent/`)
+Único runtime conversacional de WhatsApp. `agent/agent.ts` configura el agente;
+`agent/instructions.md` define instrucciones y guardrails; `agent/tools/*.ts`
+expone las acciones deterministas (catálogo, disponibilidad, reserva,
+escalación, pagos) y `agent/skills/*.md` los procedimientos. El LLM interpreta y
+redacta; las tools ejecutan contra Supabase. El webhook solo reenvía: el LLM no
+escribe en BD ni envía mensajes por sí mismo.
 
-### 3.3 Agente dual (`lib/ai/whatsapp-inbound-agent.ts` + `booking-agent.ts`)
-Clasifica intención y devuelve decisión estructurada:
-
-```
-decision ∈ auto_answer (FAQ) | tool_action (booking) | needs_human (escalar)
-```
-
-- **`auto_answer`**: responde con conocimiento aprobado (`citedKnowledgeIds`).
-- **`tool_action`**: propone `{ name: "check_availability"|"book", args }`; el
-  backend calcula disponibilidad y reserva.
-- **`needs_human`**: escalación (dolor, urgencia, receta, costo, ambigüedad).
+### 3.3 Tipos compartidos de decisión inbound (`lib/whatsapp/inbound-decision.ts`)
+`WhatsAppInboundIntent` y la forma de decisión que consume el store
+(`WhatsAppInboundAgentDecision`) viven en este módulo. Lo usan
+`lib/whatsapp/eve-escalation.ts`, `lib/whatsapp/store.ts` y
+`lib/ai/whatsapp-intent-classifier.ts` (web chat), módulos que sobrevivieron a la
+limpieza de la Etapa 7.
 
 ### 3.4 Motor de disponibilidad y reserva (`lib/booking/`)
 Slots libres derivados de `business_hours − appointments`. La reserva es
 atómica (constraint de exclusión por proveedor). `next-available.ts` calcula la
 siguiente hora libre cuando el rango pedido no tiene espacio.
 
-### 3.5 Escalación humana (`lib/whatsapp/escalation.ts`)
-Crea escalación en Supabase, alerta al WhatsApp humano y responde al paciente
-que una persona dará seguimiento.
+### 3.5 Escalación humana (`lib/whatsapp/eve-escalation.ts`)
+Crea la escalación en Supabase y genera el texto de alerta al WhatsApp humano. La
+invocan las tools de Eve `escalate-to-human` y `register-payment-intent`.
 
 ## 4. Modelo de datos (Supabase)
 
@@ -125,18 +133,33 @@ cambios de estado de cita escriben su columna de transición
 (`confirmed_at`, `cancelled_at`, `no_show_at`) además del `status`
 (ver decisiones en issues #86–#89).
 
-## 5. Flujo del agente dual
+## 5. Flujos conversacionales
+
+Hay dos canales y cada uno tiene su propio runtime.
+
+### 5.1 WhatsApp (Eve)
 
 ```
-mensaje → normalize → persist → preflight
- ├─ patrón clínico (dolor/urgencia/medicamento/receta/infección) → needs_human
- ├─ patrón costo/precio → needs_human (invitar valoración)
- ├─ intención booking → tool_action
- │    ├─ check_availability → SQL calcula slots → proponer → guardar booking_context
- │    ├─ book → reserva atómica → éxito: confirmar | conflicto: recomendar próxima hora
- │    └─ paciente elige opción del contexto → book
- └─ intención FAQ → auto_answer con conocimiento aprobado
+mensaje → webhook verifica firma → Eve agent (/eve/v1/whatsapp)
+ ├─ guardrail clínico (dolor/urgencia/medicamento/receta/infección) → escalar a humano
+ ├─ intención de costo/precio → invitar a valoración
+ ├─ intención de agendamiento → tools (catálogo, disponibilidad, reserva)
+ └─ intención FAQ → conocimiento aprobado
 ```
+
+El webhook solo verifica y reenvía; la orquestación y el estado de la
+conversación viven en Eve, no en este repo.
+
+### 5.2 Web chat (Flow Engine)
+
+```
+mensaje → app/api/web-chat/message → lib/web-chat/web-inbound-service
+ ├─ inquiry → handler de conocimiento
+ ├─ book_appointment / check_availability → Flow Engine (flujo book_appointment)
+ └─ support / handoff → handoff a humano
+```
+
+El Flow Engine sigue siendo el runtime determinístico del web chat (sección 8).
 
 ## 6. Guardrails (reglas duras, en backend)
 
@@ -157,6 +180,11 @@ mensaje → normalize → persist → preflight
 
 ## 8. Flow Engine (arquitectura de flujos conversacionales)
 
+> **Alcance (Etapa 7, issue #37):** el Flow Engine es el runtime determinístico
+> **exclusivo del web chat** (`app/api/web-chat/message/route.ts` →
+> `src/lib/web-chat/web-inbound-service.ts`). Su consumidor de WhatsApp
+> (orchestrator) se eliminó y el engine ya no se usa para ese canal.
+
 ### 8.1 Problema resuelto
 
 El agente anterior dependía completamente del LLM para:
@@ -170,7 +198,7 @@ Esto causaba inconsistencias: el agente perdía el hilo de la conversación, no 
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    WhatsApp Orchestrator                     │
+│        Web chat inbound (web-inbound-service.ts)            │
 │  (Routing basado en intent: flows vs handlers directos)     │
 └─────────────────────────────────────────────────────────────┘
                               │
@@ -197,9 +225,9 @@ Esto causaba inconsistencias: el agente perdía el hilo de la conversación, no 
 | **Flow Engine** | `src/lib/flows/flow-engine.ts` | Motor determinístico que ejecuta flujos conversacionales |
 | **Flow Definitions** | `src/lib/flows/definitions/*.flow.ts` | Configuración declarativa de flujos |
 | **Types** | `src/lib/flows/types.ts` | Definiciones de tipos (FlowState, FlowResult, etc.) |
-| **Orchestrator** | `src/lib/whatsapp/orchestrator.ts` | Routing basado en intent, ejecuta acciones de negocio |
+| **Web chat inbound** | `src/lib/web-chat/web-inbound-service.ts` | Routing basado en intent, ejecuta acciones de negocio |
 
-### 8.4 Routing de intents
+### 8.4 Routing de intents (web chat)
 
 | Intent | Handler | Usa Flow Engine? |
 |--------|---------|------------------|
@@ -228,7 +256,8 @@ collect_date → collect_service → collect_provider → check_availability
 
 ### 8.6 Persistencia de estado
 
-El estado del flujo se persiste en `whatsapp_conversations.flow_state` (jsonb):
+El estado del flujo se persiste por conversación en el store del consumidor. En
+web chat se guarda en `web_chat_sessions.flow_state` (jsonb):
 
 ```typescript
 type FlowState = {
@@ -236,19 +265,16 @@ type FlowState = {
   entities: ExtractedEntities;  // entidades recolectadas
   candidates?: Array<{...}>;    // slots disponibles (si aplica)
   metadata?: Record<string, unknown>;  // datos adicionales
+  flowName?: string;      // nombre del flujo activo
+  lastActivity?: string;  // timestamp ISO de la última actividad
 };
 ```
 
-### 8.7 Feature flag
+### 8.7 Sin feature flag
 
-```bash
-WHATSAPP_FLOW_ENGINE_ENABLED=true
-```
-
-- `true`: Usa Flow Engine (determinístico)
-- `false` o no definido: Usa path legacy (LLM decide todo)
-
-Permite rollback inmediato sin redeploy.
+El engine no tiene interruptor de activación en runtime: sus consumidores
+(web chat) lo invocan directamente. La variable `WHATSAPP_FLOW_ENGINE_ENABLED`
+se eliminó en la Etapa 7.
 
 ### 8.8 Ventajas
 
@@ -259,13 +285,12 @@ Permite rollback inmediato sin redeploy.
 | **Testeable** | Flows son código puro, fácil de testear |
 | **Mantenible** | Separación clara entre lógica y lenguaje |
 | **Auditable** | Cada transición de estado queda registrada |
-| **Backward compatible** | Puede coexistir con path legacy |
 
 ### 8.9 Agregar un nuevo flujo
 
 1. Crear definición en `src/lib/flows/definitions/nuevo-flow.flow.ts`
 2. Registrar en `flowRegistry`
-3. Agregar routing en `orchestrator.ts`
+3. Agregar routing en `src/lib/web-chat/web-inbound-service.ts`
 4. Agregar tests unitarios
 
 Ejemplo de definición:
@@ -284,12 +309,6 @@ export const rescheduleFlow: FlowDefinition = {
 };
 ```
 
-### 8.10 Variables de entorno adicionales
-
-```
-WHATSAPP_FLOW_ENGINE_ENABLED=  # true para activar Flow Engine
-```
-
 ## 9. Variables de entorno
 
 ```
@@ -304,8 +323,7 @@ WHATSAPP_HUMAN_ALERT_PHONE=
 WHATSAPP_AGENT_LLM_API_KEY=
 WHATSAPP_AGENT_LLM_MODEL=
 WHATSAPP_AGENT_LLM_BASE_URL=
-WHATSAPP_AGENT_LLM_API_STYLE=
-WHATSAPP_FLOW_ENGINE_ENABLED=
 ```
 
-Todas server-side; ninguna con prefijo `NEXT_PUBLIC_` salvo las dos primeras.
+Todas server-side; ninguna con prefijo `NEXT_PUBLIC_` salvo las dos primeras. Las
+variables de referencia viven en `.env.local.example`.
