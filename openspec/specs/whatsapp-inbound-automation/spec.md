@@ -122,56 +122,6 @@ WhatsApp contact, conversation, and message tables.
 - THEN the webhook MUST return success
 - AND no duplicate WhatsApp message row SHOULD be created for that provider message id
 
-### Requirement: Side-effect-free agent decisioning
-The system MUST classify inbound messages and return a validated structured
-decision without writing database rows or sending WhatsApp messages.
-
-#### Scenario: Static knowledge supports an answer
-- GIVEN an inbound message and approved knowledge that directly answers it
-- AND the model returns valid structured output citing that knowledge
-- WHEN the decisioning module evaluates the message
-- THEN the result MUST include intent, summary, confidence, decision
-  `auto_answer`, response text, and cited knowledge ids
-
-#### Scenario: Booking request proposes a tool action
-- GIVEN an inbound message asks for an appointment
-- WHEN the decisioning module evaluates the message
-- THEN the result MUST use decision `tool_action`
-- AND include a tool request with name and typed arguments for availability or booking
-
-#### Scenario: Clinical or commercial-specific request
-- GIVEN an inbound message reports pain, urgency, medication, or asks for pricing
-- WHEN the decisioning module evaluates the message
-- THEN the result MUST use decision `needs_human`
-- AND include an escalation reason
-
-### Requirement: Name-to-ID resolution for booking
-The system MUST resolve natural language service and provider names to their
-corresponding UUIDs when the agent returns a booking tool action with names
-instead of IDs.
-
-#### Scenario: User mentions doctor by name
-- GIVEN an inbound message requests an appointment with "Dra. Ana Martínez"
-- WHEN the agent returns a tool_action with providerName
-- THEN the system MUST resolve the name to a provider UUID
-- AND proceed with the booking flow using the resolved ID
-
-#### Scenario: Name resolution fails
-- GIVEN an inbound message mentions a service or provider name that cannot be resolved
-- WHEN the system attempts name-to-ID resolution
-- THEN the system MUST show a formatted list of available services and doctors
-- AND request the user to select from the available options
-
-### Requirement: Booking catalog injection
-The system MUST provide the booking catalog (services and providers) to the
-agent so it can use natural language names in tool actions.
-
-#### Scenario: Agent receives catalog
-- GIVEN a new inbound message is being processed
-- WHEN the agent is invoked
-- THEN the agent MUST receive the list of available services with names
-- AND the list of available providers with names
-
 ### Requirement: Knowledge-Service Mapping
 The system MUST resolve knowledge entries to service IDs using explicit links first, then fuzzy matching as fallback, with logging for debugging.
 
@@ -224,79 +174,6 @@ The system MUST provide a nullable `summary` text column on `whatsapp_conversati
 - GIVEN a conversation is escalated to a human
 - WHEN the escalation is created
 - THEN the escalation context MUST include the conversation summary
-
-### Requirement: Validated conservative model output
-The system MUST validate structured model/provider output before using it.
-
-#### Scenario: Low-confidence auto-answer
-- GIVEN the model returns `auto_answer` with confidence below the safe threshold
-- WHEN the decisioning module validates the output
-- THEN the result MUST be converted to `needs_human`
-- AND include an escalation reason
-
-### Requirement: Inbound orchestration side effects
-The system MUST orchestrate each newly persisted inbound message through agent
-decisioning, durable intent persistence, and either an automatic response,
-a booking tool execution, or human escalation.
-
-#### Scenario: Booking tool action is executed and recorded
-- GIVEN a new inbound message resolves to a `tool_action` booking decision
-- WHEN inbound orchestration processes the message
-- THEN the system MUST execute the availability or booking tool against the DB
-- AND it MUST persist the detected intent and outbound response
-
-#### Scenario: Human escalation is executed and recorded
-- GIVEN a new inbound message cannot be answered safely by automation
-- WHEN inbound orchestration processes the message
-- THEN the system MUST create an open human escalation record
-- AND it MUST attempt a customer follow-up WhatsApp message
-
-### Requirement: Flow Engine integration
-The system MUST support deterministic flow execution for multi-step conversations
-when the Flow Engine is enabled via feature flag, including starting and
-continuing the pre-appointment onboarding flow inside the flow-engine path.
-
-(Previously: The Flow Engine integration handled only the booking intent, with no
-onboarding flow started or continued in the flow-engine path.)
-
-#### Scenario: Flow Engine processes booking intent
-- GIVEN `WHATSAPP_FLOW_ENGINE_ENABLED=true`
-- AND a message is classified as `book_appointment`
-- WHEN the orchestrator processes the message
-- THEN the Flow Engine MUST handle the conversation flow
-- AND the flow state MUST be persisted in `whatsapp_conversations.flow_state`
-- AND the flow MUST follow the defined states (see `flow-engine` spec)
-
-#### Scenario: Flow Engine starts onboarding
-- GIVEN `WHATSAPP_FLOW_ENGINE_ENABLED=true`
-- AND the onboarding feature flag enabled
-- AND a patient that satisfies the onboarding trigger
-- WHEN the orchestrator processes the message
-- THEN the Flow Engine MUST start the onboarding flow
-- AND the flow state MUST be persisted in `whatsapp_conversations.flow_state`
-
-#### Scenario: Flow Engine continues onboarding
-- GIVEN a conversation with a persisted onboarding flow state within the timeout
-- WHEN a new inbound message arrives
-- THEN the system MUST continue the onboarding from the previous state
-- AND previously collected values MUST remain available
-
-#### Scenario: Legacy path when Flow Engine disabled
-- GIVEN `WHATSAPP_FLOW_ENGINE_ENABLED=false` or not set
-- WHEN a message is processed
-- THEN the legacy LLM-based path MUST be used
-- AND backward compatibility MUST be maintained
-
-**See also**: `flow-engine` spec for detailed Flow Engine requirements.
-
-### Requirement: Orchestration idempotency
-The system MUST NOT duplicate outbound sends or side effects for a provider
-message id that was already persisted and processed.
-
-#### Scenario: Duplicate delivery skips side effects
-- GIVEN a WhatsApp provider message id already exists in the message ledger
-- WHEN inbound orchestration receives the same inbound event again
-- THEN it MUST acknowledge the duplicate and MUST NOT send an outbound message
 
 ### Requirement: WhatsApp Cloud API transport
 The system MUST centralize server-side WhatsApp Cloud API text sends in a
@@ -359,39 +236,27 @@ When the Eve WhatsApp agent escalates a conversation to a human, it MUST persist
 - WHEN Eve responds to the patient
 - THEN it MAY say a person from the clinic will follow up
 
-### Requirement: Respuestas a recordatorio antes de la clasificación general
-El pipeline de entrada MUST reconocer, antes de la clasificación general de
-intención, los mensajes entrantes que son respuestas a un recordatorio de cita
-reciente y en estado elegible. El reconocimiento MUST ejecutarse tanto en el path
-de flow engine como en el path legacy cuando NO existe una sesión de flow engine
-activa y no expirada, y MUST regirse por la ventana de 36 horas desde
-`appointment_reminders.sent_at` y por la idempotencia del ledger de mensajes.
+### Requirement: Legacy Pipeline Removal Boundary
 
-#### Scenario: Confirmación reconocida antes de clasificar
+The system MUST NOT expose a legacy WhatsApp processing path. After signature
+verification, the Meta webhook MUST forward every inbound message to the Eve
+agent; `src/lib/whatsapp/orchestrator.ts`, `inbound-service.ts`, `escalation.ts`,
+`onboarding-context.ts`, `eve-flag.ts`, and `src/lib/ai/whatsapp-inbound-agent.ts`
+MUST NOT exist, while the shared `store.ts`, `client.ts`, `normalize.ts`,
+`signature.ts`, and `eve-escalation.ts` MUST remain.
 
-- GIVEN un mensaje entrante que es una confirmación a un recordatorio elegible
-- WHEN el pipeline procesa el mensaje
-- THEN el sistema MUST reconocerlo como respuesta a recordatorio
-- AND el sistema MUST NOT clasificarlo como una intención nueva general
+#### Scenario: no legacy path remains
+- GIVEN the Stage 7 tree
+- WHEN `app/api/whatsapp/webhook/route.ts` is inspected
+- THEN it forwards to `/eve/v1/whatsapp` and imports no legacy orchestrator or
+  inbound-service module
+- AND the deleted modules are absent
+- AND `eve-escalation.ts` and the shared store, client, normalize, and signature
+  modules are present
 
-#### Scenario: Sesión de flow engine activa conserva el flujo de reserva
-
-- GIVEN una conversación con una sesión de flow engine activa y no expirada
-- WHEN llega un mensaje que parece una confirmación a un recordatorio
-- THEN el sistema MUST NOT ejecutar el reconocimiento de respuesta a recordatorio
-- AND el sistema MUST continuar el flujo de reserva
-
-#### Scenario: Path legacy reconoce la respuesta
-
-- GIVEN `WHATSAPP_FLOW_ENGINE_ENABLED` apagado
-- AND el manejo de respuestas a recordatorio habilitado
-- AND un mensaje de confirmación a un recordatorio elegible
-- WHEN el pipeline legacy procesa el mensaje
-- THEN el sistema MUST reconocerlo como respuesta a recordatorio
-
-#### Scenario: Idempotencia por ledger de mensajes
-
-- GIVEN un mensaje de respuesta a recordatorio ya procesado con su id de proveedor
-- WHEN el proveedor vuelve a entregar el mismo mensaje
-- THEN el sistema MUST reconocer el duplicado en el ledger de mensajes
-- AND el sistema MUST NOT repetir la transición ni duplicar el acuse
+#### Scenario: shared store keeps provider-message idempotency
+- GIVEN an Eve escalation synthetic message already persisted for its provider
+  message id
+- WHEN the same message is processed again
+- THEN no duplicate message row MUST be created
+- AND the existing escalation MUST be reused

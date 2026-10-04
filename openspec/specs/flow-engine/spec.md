@@ -27,12 +27,14 @@ The system MUST support declarative flow definitions that specify states, transi
 - AND the action result MUST determine the next transition
 
 ### Requirement: Flow State Persistence
-The system MUST persist flow state per conversation to enable multi-turn interactions.
+
+The system MUST persist flow state per conversation to enable multi-turn
+interactions, using the caller's conversation store.
 
 #### Scenario: State persisted after each message
 - GIVEN an active flow in a conversation
 - WHEN a message is processed
-- THEN the flow state MUST be updated in `whatsapp_conversations.flow_state`
+- THEN the flow state MUST be updated in the caller's conversation store
 - AND the state MUST include the current state name
 - AND the state MUST include collected entities
 
@@ -74,15 +76,10 @@ The system MUST transition between states based on defined rules, not LLM decisi
 - AND the system MUST prompt for the missing entity
 
 ### Requirement: Action Execution
-The system MUST execute actions deterministically when a state requires it, and MUST support an onboarding action alongside the existing booking actions within the same closed action contract.
 
-(Previously: The system executed only the existing booking actions such as `getFreeSlots` and `bookAppointment`, with no onboarding action in the contract.)
-
-#### Scenario: Onboarding action through the same engine contract
-- GIVEN a flow state with the onboarding action
-- WHEN all required entities are present
-- THEN the system MUST execute the onboarding action through the same engine contract
-- AND the action result MUST determine the next transition
+The system MUST execute actions deterministically when a state requires it,
+supporting the booking actions (`getFreeSlots`, `bookAppointment`) and the
+name-resolution actions (`resolveService`, `resolveProvider`).
 
 #### Scenario: Existing booking actions unchanged
 - GIVEN a flow state with `action: 'getFreeSlots'` or `action: 'bookAppointment'`
@@ -90,40 +87,34 @@ The system MUST execute actions deterministically when a state requires it, and 
 - THEN the system MUST call the existing booking action with the entities
 - AND the existing booking flow behavior MUST remain unchanged
 
+#### Scenario: Name-resolution actions execute
+- GIVEN a flow state with `action: 'resolveService'` or `action: 'resolveProvider'`
+- WHEN the required name entity is present
+- THEN the system MUST resolve the name to its catalog id
+- AND the action result MUST determine the next transition
+
 ### Requirement: Intent Routing
-The system MUST route messages to the appropriate handler based on classified intent.
+
+The system MUST route messages to the appropriate handler based on classified
+intent, without requiring a feature flag.
 
 #### Scenario: Intent routes to Flow Engine
-- GIVEN a message classified as `book_appointment`
-- WHEN the Flow Engine is enabled
+- GIVEN a message classified as `book_appointment` or `check_availability`
+- WHEN the web chat handler dispatches it
 - THEN the message MUST be processed by the Flow Engine
-- AND the appropriate flow MUST be selected
+- AND the `book_appointment` flow MUST be selected
 
 #### Scenario: Intent routes to Knowledge Handler
 - GIVEN a message classified as `inquiry`
-- WHEN the Flow Engine is enabled
-- THEN the message MUST be processed by the Knowledge Handler
+- WHEN the web chat handler dispatches it
+- THEN the message MUST be processed by the knowledge handler
 - AND the Flow Engine MUST NOT be invoked
 
 #### Scenario: Intent routes to Escalation Handler
-- GIVEN a message classified as `support`
-- WHEN the Flow Engine is enabled
-- THEN the message MUST be processed by the Escalation Handler
+- GIVEN a message classified as `support` or `handoff`
+- WHEN the web chat handler dispatches it
+- THEN the message MUST be handled as a human handoff
 - AND no flow state MUST be created
-
-### Requirement: Feature Flag Control
-The system MUST support a feature flag to enable/disable the Flow Engine.
-
-#### Scenario: Flow Engine enabled
-- GIVEN `WHATSAPP_FLOW_ENGINE_ENABLED=true`
-- WHEN a message is processed
-- THEN the Flow Engine path MUST be used
-
-#### Scenario: Flow Engine disabled
-- GIVEN `WHATSAPP_FLOW_ENGINE_ENABLED=false` or not set
-- WHEN a message is processed
-- THEN the legacy path MUST be used
-- AND backward compatibility MUST be maintained
 
 ### Requirement: Flow Registry
 The system MUST maintain a registry of available flows, including the onboarding flow, so that a flow is accessible by name and the orchestrator can instantiate it.
@@ -190,36 +181,6 @@ The system MUST handle errors gracefully without losing conversation context.
 - THEN the system MUST throw a descriptive error
 - AND the error MUST include the current state and attempted transition
 
-### Requirement: Precedencia de la sesión de flujo activa
-Cuando existe una sesión de flow engine activa y no expirada para una
-conversación, esa sesión MUST tener prioridad sobre el manejo de respuestas a
-recordatorio. El sistema MUST NOT ejecutar el reconocimiento ni la transición de
-respuesta a recordatorio mientras la sesión esté activa y MUST continuar el flujo
-en curso. Una sesión completa o expirada MUST NOT bloquear el manejo de
-respuestas a recordatorio.
-
-#### Scenario: Sesión activa tiene prioridad
-
-- GIVEN una conversación con una sesión de flow engine activa y no expirada
-- AND una cita elegible con recordatorio reciente para ese teléfono
-- WHEN el paciente envía "1"
-- THEN el sistema MUST ceder el mensaje a la sesión de flow engine
-- AND el sistema MUST NOT aplicar ninguna transición de estado por respuesta a recordatorio
-
-#### Scenario: Reserva en curso no interrumpida
-
-- GIVEN una reserva en curso con una sesión de flow engine activa
-- WHEN llega un mensaje que coincide con una confirmación de recordatorio
-- THEN el flujo de reserva MUST continuar
-- AND el sistema MUST NOT aplicar ninguna transición de estado por respuesta a recordatorio
-
-#### Scenario: Sesión completa o expirada no bloquea
-
-- GIVEN una conversación cuya sesión de flow engine está completa o expirada
-- AND una cita elegible con recordatorio reciente
-- WHEN el paciente responde "1"
-- THEN el sistema MAY aplicar el manejo de respuesta a recordatorio
-
 ### Requirement: Reconocimiento del flujo de onboarding en el control de tema
 
 El control de flujo MUST reconocer el nombre del flujo de onboarding para poder
@@ -238,6 +199,24 @@ reconocimiento MUST NOT alterar el comportamiento existente del flujo de reserva
 - GIVEN una conversación con una sesión de reserva activa y no expirada
 - WHEN llega un mensaje
 - THEN el comportamiento existente del flujo de reserva MUST permanecer sin cambios
+
+### Requirement: Web Chat Deterministic Runtime
+
+The Flow Engine MUST remain the deterministic conversation runtime for web chat,
+persisting state in `web_chat_sessions` and executing booking actions through the
+existing booking services.
+
+#### Scenario: web chat booking uses the engine
+- GIVEN a web chat booking conversation
+- WHEN the request is dispatched
+- THEN the Flow Engine MUST drive the state transitions
+- AND the flow state MUST persist in `web_chat_sessions`
+
+#### Scenario: engine has no WhatsApp dependency
+- GIVEN the Stage 7 tree
+- WHEN `src/lib/flows/` is inspected
+- THEN the engine, registry, types, and flow control MUST remain
+- AND no engine module MUST import a deleted WhatsApp module
 
 ## Data Model
 

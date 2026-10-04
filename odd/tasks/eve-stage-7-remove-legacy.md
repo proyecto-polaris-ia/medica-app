@@ -44,7 +44,11 @@ Persistencia: este archivo + espejo Engram odd/eve-stage-7-remove-legacy/tasks
   - Nota: runbook estaba en inglés; ahora en español de México (convención del repo)
   - Staleness preexistente fuera de scope, no tocado: booking-agent.ts planeado en architecture.md §2; JSON FlowState ilustrativo en flow-engine.md
 - [ ] Verificación final: suite completa + tsc --noEmit + build (gentle-ai-verify)
-- [ ] Revisión nativa (gentle_review inspect → ciclo) y cierre
+- [x] Revisión nativa → bloqueo terminal → Judgment Day — native review no pudo iniciar: lens_context_budget_exceeded incluso con el commit más chico (7 archivos); decisión del usuario (2026-11): deshabilitar RDD en el clon (gentle-ai review mode disable --scope clone) + revisión ordinaria = Judgment Day
+  - JD: jueces A y B ciegos sobre árbol congelado 6c66eeae (HEAD 043733b, diff 49 archivos +1473/−5581); juez B verificó helpers/tipos byte-a-byte, contrato webhook↔tests, deps y docs
+  - Severo: JD-A-001 (MAJOR) detección estructurada de respuestas a recordatorios sin ejecutor → aceptado por el usuario como follow-up #114
+  - Informativos: webhook.accepted registra success aunque Eve responda 4xx/5xx (JD-A-003≡JD-B-001, follow-up candidato); contradicción docs reminder-reply (JD-A-002, cubierta por #114); comentario obsoleto inbound-decision.ts:8 (JD-B-002); residuo flag en route.test.ts:89/96 (JD-B-003); churn lockfile npm-11 (JD-B-004); persistWhatsAppStatusEvents muerto + forwardToEve sin timeout (base-only)
+  - Verificación final única: árbol bit-idéntico al verificado (PASS 8/8: tsc 0, 1339 tests, build OK) → JUDGMENT: APPROVED (excepción: JD-A-001 aceptada por decisión humana, follow-up #114)
 
 ## Evidencia de commits
 
