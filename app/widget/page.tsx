@@ -155,7 +155,7 @@ export default function WidgetPage() {
       if (data.booked && phone) {
         setCaptchaToken(null);
         if (turnstileWidgetId.current && window.turnstile) {
-          (window.turnstile as any).reset?.(turnstileWidgetId.current);
+          window.turnstile.reset?.(turnstileWidgetId.current);
         }
       }
     } catch (err) {

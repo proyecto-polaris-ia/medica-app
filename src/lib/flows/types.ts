@@ -20,17 +20,21 @@ export type ExtractedEntities = {
   [key: string]: string | number | undefined;
 };
 
+// Candidato de horario ofrecido al usuario durante el flujo de agendado.
+// Lo produce web-inbound-service a partir de los slots disponibles y se
+// serializa como ISO strings para persistir en el estado del flujo.
+export type SlotCandidate = {
+  startAt: string;
+  endAt: string;
+  serviceId?: string;
+  providerId?: string;
+};
+
 // Estado actual del flujo
 export type FlowState = {
   name: string;
   entities: ExtractedEntities;
-  candidates?: Array<{
-    startAt: string;
-    endAt: string;
-    serviceId?: string;
-    providerId?: string;
-  }>;
-  attempts?: number;
+  candidates?: SlotCandidate[];
   metadata?: Record<string, unknown>;
   lastActivity?: string; // ISO timestamp de la última actividad
   flowName?: string; // Nombre del flujo activo (ej: 'book_appointment')
