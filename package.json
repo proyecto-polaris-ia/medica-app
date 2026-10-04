@@ -11,6 +11,8 @@
     "start": "next start",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
+    "sanity": "node ../sanity-kit/src/cli.ts run",
+    "sanity:fast": "node ../sanity-kit/src/cli.ts run --fast",
     "whatsapp:simulate": "node scripts/whatsapp-simulate-inbound.mjs"
   },
   "dependencies": {
@@ -38,7 +40,9 @@
     "@types/react": "19.0.0",
     "@types/react-dom": "19.0.0",
     "@vitejs/plugin-react": "^4.7.0",
+    "@vitest/coverage-v8": "^2.1.9",
     "jsdom": "^29.1.1",
+    "knip": "^6.39.0",
     "postcss": "^8.5.26",
     "tailwindcss": "^4.3.3",
     "typescript": "5.6.3",
