@@ -5,9 +5,9 @@
  * onboarding y en qué estado. No hace I/O ni conoce WhatsApp/Supabase.
  *
  * Reglas (D5): `enabled` y `hasFutureScheduledAppointment` y
- * (`!historyExists` **o** `missingEmail`). En Fase 1 solo arranca la recolección
- * de historia (`'ask_allergies'`); el arranque solo-contacto (`'ask_email'`)
- * llega en Fase 2.
+ * (`!historyExists` **o** `missingEmail`). Sin historia arranca la recolección
+ * (`'ask_allergies'`); con historia y sin email arranca el solo-contacto
+ * (`'ask_email'`, Fase 2).
  */
 
 export type OnboardingEligibilityInput = {
@@ -32,6 +32,6 @@ export function resolveOnboardingStartState(input: {
   missingEmail: boolean;
 }): OnboardingStartState | null {
   if (!input.historyExists) return 'ask_allergies';
-  // Fase 2: `if (input.missingEmail) return 'ask_email';`
+  if (input.missingEmail) return 'ask_email';
   return null;
 }

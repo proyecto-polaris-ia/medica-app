@@ -12,6 +12,8 @@ const INTERACTIVE_STATES = [
   'ask_smoking',
   'ask_alcohol',
   'show_summary',
+  'ask_email',
+  'show_contact_summary',
 ];
 
 describe('onboardingFlow', () => {
@@ -20,7 +22,7 @@ describe('onboardingFlow', () => {
     expect(onboardingFlow.initialState).toBe('ask_allergies');
   });
 
-  it('declara exactamente los estados de la Fase 1 (sin estados de Fase 2)', () => {
+  it('declara exactamente los estados de la Fase 1 y de la Fase 2', () => {
     expect(Object.keys(onboardingFlow.states).sort()).toEqual(
       [
         'ask_alcohol',
@@ -28,18 +30,18 @@ describe('onboardingFlow', () => {
         'ask_allergies_detail',
         'ask_conditions',
         'ask_conditions_detail',
+        'ask_email',
         'ask_medications',
         'ask_medications_detail',
         'ask_pregnancy',
         'ask_smoking',
         'complete',
+        'save_contact',
         'save_history',
+        'show_contact_summary',
         'show_summary',
       ].sort()
     );
-    expect(onboardingFlow.states.ask_email).toBeUndefined();
-    expect(onboardingFlow.states.show_contact_summary).toBeUndefined();
-    expect(onboardingFlow.states.save_contact).toBeUndefined();
   });
 
   it('exige onboardingAnswer y usa la acción determinista en cada paso interactivo', () => {
@@ -54,6 +56,12 @@ describe('onboardingFlow', () => {
   it('save_history ejecuta la escritura única y no exige required', () => {
     const def = onboardingFlow.states.save_history;
     expect(def.action).toBe('saveOnboardingHistory');
+    expect(def.required ?? []).toEqual([]);
+  });
+
+  it('save_contact ejecuta la escritura del contacto y no exige required', () => {
+    const def = onboardingFlow.states.save_contact;
+    expect(def.action).toBe('saveOnboardingContact');
     expect(def.required ?? []).toEqual([]);
   });
 
@@ -105,6 +113,18 @@ describe('onboardingFlow', () => {
     });
     expect(onboardingFlow.states.save_history.transitions).toEqual({
       complete: 'complete',
+      needs_contact: 'ask_email',
+    });
+    expect(onboardingFlow.states.ask_email.transitions).toEqual({
+      next: 'show_contact_summary',
+      retry: 'ask_email',
+    });
+    expect(onboardingFlow.states.show_contact_summary.transitions).toEqual({
+      confirm: 'save_contact',
+      restart: 'ask_email',
+    });
+    expect(onboardingFlow.states.save_contact.transitions).toEqual({
+      complete: 'complete',
     });
   });
 
@@ -127,6 +147,13 @@ describe('onboardingFlow', () => {
     expect(onboardingFlow.states.ask_alcohol.prompt).toBe(
       '¿Consumes alcohol? Responde: *nunca*, *ocasionalmente* o *frecuentemente*.'
     );
+    expect(onboardingFlow.states.ask_email.prompt).toBe(
+      'Para enviarte la confirmación, ¿me compartes tu correo electrónico?'
+    );
+    expect(onboardingFlow.states.show_contact_summary.prompt).toContain(
+      '{onboardingContactSummary}'
+    );
+    expect(onboardingFlow.states.save_contact.prompt).toBe('Listo.');
     expect(onboardingFlow.states.complete.prompt).toContain('Ya dejé tus datos preparados');
   });
 });

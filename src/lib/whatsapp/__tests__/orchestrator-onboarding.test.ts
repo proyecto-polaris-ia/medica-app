@@ -15,6 +15,9 @@ vi.mock('@/lib/admin/medical-history', () => ({
   upsertMedicalHistory: vi.fn(),
   getMedicalHistory: vi.fn(),
 }));
+vi.mock('@/lib/admin/patients', () => ({
+  updatePatientEmail: vi.fn(),
+}));
 vi.mock('@/lib/observability/whatsapp-ai', () => ({
   recordWhatsAppAiEvent: vi.fn(),
 }));
@@ -29,6 +32,7 @@ vi.mock('@/lib/booking/booking', () => ({ bookAppointment: vi.fn() }));
 vi.mock('@/lib/booking/patient-resolution', () => ({ resolvePatient: vi.fn() }));
 
 import { upsertMedicalHistory } from '@/lib/admin/medical-history';
+import { updatePatientEmail } from '@/lib/admin/patients';
 import { loadOnboardingStartContext } from '../onboarding-context';
 import { isOnboardingEnabled } from '../onboarding-flag';
 import { orchestrate } from '../orchestrator';
@@ -57,6 +61,7 @@ type DraftOverrides = Partial<{
   alcohol: 'never' | 'occasional' | 'frequent' | null;
   email: string | null;
   phone: string;
+  missingEmail: boolean;
 }>;
 
 function makeDraft(overrides: DraftOverrides = {}) {
@@ -66,7 +71,7 @@ function makeDraft(overrides: DraftOverrides = {}) {
       phone: overrides.phone ?? PHONE,
       patientName: 'Ana López',
       sex: 'female' as const,
-      missingEmail: false,
+      missingEmail: overrides.missingEmail ?? false,
     },
     allergies: null,
     medications: null,
@@ -176,6 +181,26 @@ describe('orchestrate — arranque del onboarding', () => {
 
     expect(loadOnboardingStartContext).not.toHaveBeenCalled();
     expect(result.needsHuman).toBe(true);
+  });
+
+  it('con historia y sin email arranca en ask_email y nunca ejecuta saveOnboardingHistory', async () => {
+    vi.mocked(isOnboardingEnabled).mockReturnValue(true);
+    vi.mocked(loadOnboardingStartContext).mockResolvedValue({
+      ...ELIGIBLE_CONTEXT,
+      historyExists: true,
+      source: 'patient_autoreport',
+      email: null,
+      missingEmail: true,
+    });
+
+    const result = await orchestrate(makeContext({ body: 'hola' }));
+
+    expect(result.flowState?.name).toBe('ask_email');
+    expect(result.flowState?.flowName).toBe('onboarding');
+    expect(draftOf(result)?.context.missingEmail).toBe(true);
+    expect(result.responseText).toContain('correo electrónico');
+    expect(upsertMedicalHistory).not.toHaveBeenCalled();
+    expect(updatePatientEmail).not.toHaveBeenCalled();
   });
 });
 
@@ -366,6 +391,207 @@ describe('orchestrate — escritura de la historia', () => {
     expect(upsertMedicalHistory).not.toHaveBeenCalled();
     expect(result.needsHuman).toBe(true);
     expect(result.clearFlowState).toBe(true);
+  });
+});
+
+describe('orchestrate — datos generales (Fase 2)', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    vi.mocked(isOnboardingEnabled).mockReturnValue(true);
+  });
+
+  it('con missingEmail la escritura de historia transiciona a ask_email', async () => {
+    vi.mocked(upsertMedicalHistory).mockResolvedValue({} as never);
+    const state = onboardingState('show_summary', {
+      allergies: ['penicilina'],
+      medications: [],
+      conditions: ['hipertensión'],
+      pregnancyStatus: 'no',
+      smoking: 'never',
+      alcohol: 'occasional',
+      email: null,
+      missingEmail: true,
+    });
+
+    const result = await orchestrate(makeContext({ body: 'sí', flowState: state }));
+
+    expect(upsertMedicalHistory).toHaveBeenCalledTimes(1);
+    expect(result.flowState?.name).toBe('ask_email');
+    expect(result.responseText).toContain('correo electrónico');
+    expect(updatePatientEmail).not.toHaveBeenCalled();
+  });
+
+  it('guarda el email normalizado y muestra el resumen de contacto', async () => {
+    const result = await orchestrate(
+      makeContext({
+        body: '  ANA@EXAMPLE.COM ',
+        flowState: onboardingState('ask_email', { missingEmail: true }),
+      })
+    );
+
+    expect(result.flowState?.name).toBe('show_contact_summary');
+    expect(draftOf(result)?.email).toBe('ana@example.com');
+    expect(result.responseText).toContain('ana@example.com');
+    expect(updatePatientEmail).not.toHaveBeenCalled();
+    expect(upsertMedicalHistory).not.toHaveBeenCalled();
+  });
+
+  it('re-pregunta el email ante un valor inválido sin avanzar', async () => {
+    const result = await orchestrate(
+      makeContext({
+        body: 'no-es-un-correo',
+        flowState: onboardingState('ask_email', { missingEmail: true }),
+      })
+    );
+
+    expect(result.flowState?.name).toBe('ask_email');
+    expect(draftOf(result)?.email).toBeNull();
+    expect(result.responseText).toContain('correo electrónico');
+    expect(updatePatientEmail).not.toHaveBeenCalled();
+  });
+
+  it('solo la confirmación explícita del resumen de contacto guarda el email', async () => {
+    vi.mocked(updatePatientEmail).mockResolvedValue({} as never);
+    const state = onboardingState('show_contact_summary', {
+      email: 'ana@example.com',
+      missingEmail: true,
+    });
+
+    const result = await orchestrate(makeContext({ body: 'sí', flowState: state }));
+
+    expect(updatePatientEmail).toHaveBeenCalledTimes(1);
+    expect(updatePatientEmail).toHaveBeenCalledWith(PATIENT_ID, 'ana@example.com');
+    expect(upsertMedicalHistory).not.toHaveBeenCalled();
+    expect(result.flowState?.name).toBe('complete');
+  });
+
+  it('rechazar el resumen de contacto vuelve a ask_email sin escribir', async () => {
+    const state = onboardingState('show_contact_summary', {
+      email: 'ana@example.com',
+      missingEmail: true,
+    });
+
+    const result = await orchestrate(makeContext({ body: 'no', flowState: state }));
+
+    expect(updatePatientEmail).not.toHaveBeenCalled();
+    expect(result.flowState?.name).toBe('ask_email');
+    expect(draftOf(result)?.email).toBeNull();
+  });
+
+  it('no escribe el contacto si el teléfono del contexto difiere del canal y escala', async () => {
+    const state = onboardingState('show_contact_summary', {
+      email: 'ana@example.com',
+      missingEmail: true,
+      phone: '+529998887777',
+    });
+
+    const result = await orchestrate(makeContext({ body: 'sí', flowState: state }));
+
+    expect(updatePatientEmail).not.toHaveBeenCalled();
+    expect(result.needsHuman).toBe(true);
+    expect(result.clearFlowState).toBe(true);
+    expect(result.flowState).toBeUndefined();
+  });
+
+  it('si la escritura del contacto falla escala sin reintentar', async () => {
+    vi.mocked(updatePatientEmail).mockRejectedValue(new Error('db down'));
+    const state = onboardingState('show_contact_summary', {
+      email: 'ana@example.com',
+      missingEmail: true,
+    });
+
+    const result = await orchestrate(makeContext({ body: 'sí', flowState: state }));
+
+    expect(updatePatientEmail).toHaveBeenCalledTimes(1);
+    expect(result.needsHuman).toBe(true);
+    expect(result.clearFlowState).toBe(true);
+  });
+
+  it('el flujo completo escribe la historia una vez y el email una vez', async () => {
+    vi.mocked(upsertMedicalHistory).mockResolvedValue({} as never);
+    vi.mocked(updatePatientEmail).mockResolvedValue({} as never);
+
+    const summaryState = onboardingState('show_summary', {
+      allergies: ['penicilina'],
+      medications: [],
+      conditions: ['hipertensión'],
+      pregnancyStatus: 'no',
+      smoking: 'never',
+      alcohol: 'occasional',
+      email: null,
+      missingEmail: true,
+    });
+
+    const afterConfirm = await orchestrate(
+      makeContext({ body: 'sí', flowState: summaryState })
+    );
+    expect(afterConfirm.flowState?.name).toBe('ask_email');
+    expect(upsertMedicalHistory).toHaveBeenCalledTimes(1);
+    expect(updatePatientEmail).not.toHaveBeenCalled();
+
+    const afterEmail = await orchestrate(
+      makeContext({ body: 'ANA@Example.com', flowState: afterConfirm.flowState })
+    );
+    expect(afterEmail.flowState?.name).toBe('show_contact_summary');
+    expect(draftOf(afterEmail)?.email).toBe('ana@example.com');
+
+    const afterContactConfirm = await orchestrate(
+      makeContext({ body: 'sí', flowState: afterEmail.flowState })
+    );
+    expect(afterContactConfirm.flowState?.name).toBe('complete');
+    expect(updatePatientEmail).toHaveBeenCalledTimes(1);
+    expect(updatePatientEmail).toHaveBeenCalledWith(PATIENT_ID, 'ana@example.com');
+    expect(upsertMedicalHistory).toHaveBeenCalledTimes(1);
+  });
+
+  it('un conflicto de correo (23505) escala sin escribir la historia', async () => {
+    const { ConflictError } = await import('@/lib/admin/errors');
+    vi.mocked(updatePatientEmail).mockRejectedValue(
+      new ConflictError('Contact already registered', 'contact_conflict')
+    );
+    const state = onboardingState('show_contact_summary', {
+      email: 'ana@example.com',
+      missingEmail: true,
+    });
+
+    const result = await orchestrate(makeContext({ body: 'sí', flowState: state }));
+
+    expect(updatePatientEmail).toHaveBeenCalledTimes(1);
+    expect(upsertMedicalHistory).not.toHaveBeenCalled();
+    expect(result.needsHuman).toBe(true);
+    expect(result.clearFlowState).toBe(true);
+  });
+
+  it('el flujo solo-contacto completa sin ejecutar saveOnboardingHistory', async () => {
+    vi.mocked(updatePatientEmail).mockResolvedValue({} as never);
+
+    const afterEmail = await orchestrate(
+      makeContext({
+        body: 'ana@example.com',
+        flowState: onboardingState('ask_email', { missingEmail: true }),
+      })
+    );
+    expect(afterEmail.flowState?.name).toBe('show_contact_summary');
+
+    const afterConfirm = await orchestrate(
+      makeContext({ body: 'sí', flowState: afterEmail.flowState })
+    );
+    expect(afterConfirm.flowState?.name).toBe('complete');
+    expect(updatePatientEmail).toHaveBeenCalledTimes(1);
+    expect(upsertMedicalHistory).not.toHaveBeenCalled();
+  });
+
+  it('la expiración del paso de email no escribe', async () => {
+    vi.mocked(isOnboardingEnabled).mockReturnValue(false);
+    const expired: FlowState = {
+      ...onboardingState('ask_email', { missingEmail: true }),
+      lastActivity: new Date(Date.now() - 31 * 60 * 1000).toISOString(),
+    };
+
+    await orchestrate(makeContext({ body: 'ana@example.com', flowState: expired }));
+
+    expect(updatePatientEmail).not.toHaveBeenCalled();
+    expect(upsertMedicalHistory).not.toHaveBeenCalled();
   });
 });
 

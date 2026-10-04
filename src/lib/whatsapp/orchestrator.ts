@@ -61,6 +61,7 @@ import {
   type OnboardingStartContext,
 } from '@/lib/whatsapp/onboarding-context';
 import { upsertMedicalHistory } from '@/lib/admin/medical-history';
+import { updatePatientEmail } from '@/lib/admin/patients';
 import type { MedicalHistoryInput } from '@/lib/admin/types';
 
 // Constantes de configuración
@@ -252,8 +253,10 @@ async function handleNewMessage(context: OrchestratorContext): Promise<Orchestra
  * Disparador determinista del onboarding (design.md D5).
  *
  * La guarda del feature flag es la primera línea (default off). Solo intents
- * conversacionales (`ONBOARDING_TRIGGER_INTENTS`). El paciente debe existir, no
- * tener historia y tener una cita futura elegible. No crea paciente: un
+ * conversacionales (`ONBOARDING_TRIGGER_INTENTS`). El paciente debe existir,
+ * tener una cita futura elegible y (`!historyExists` o `missingEmail`). Con
+ * historia y sin email el flujo arranca en `'ask_email'` (solo contacto) y
+ * `saveOnboardingHistory` queda inalcanzable (D8). No crea paciente: un
  * teléfono desconocido sigue su ruta normal.
  */
 async function maybeStartOnboarding(
@@ -870,11 +873,43 @@ async function executeFlowAction(
 
       return {
         success: true,
-        // Fase 1: la historia es el único paso de escritura; el contacto llega
-        // en Fase 2 con `needs_contact`.
-        transition: 'complete',
+        // Fase 2: si falta el email, el flujo continúa con el contacto.
+        transition: draft.context.missingEmail ? 'needs_contact' : 'complete',
         metadata: { onboarding: { ...draft, confirmed: true } },
       };
+    }
+
+    case 'saveOnboardingContact': {
+      const draft = readOnboardingDraft(result.nextState.metadata);
+      if (!draft) {
+        return { success: false, error: 'No encontré los datos del onboarding.' };
+      }
+
+      // Identidad: solo el teléfono confiable del propio paciente escribe.
+      if (draft.context.phone !== event.fromPhone) {
+        return {
+          success: false,
+          error: 'No pude verificar tu identidad para guardar tus datos.',
+          escalate: true,
+        };
+      }
+
+      if (!draft.email) {
+        return { success: false, error: 'No encontré tu correo electrónico.' };
+      }
+
+      try {
+        await updatePatientEmail(draft.context.patientId, draft.email);
+      } catch {
+        return {
+          success: false,
+          error:
+            'No pude guardar tu correo. Una persona del consultorio te dará seguimiento.',
+          escalate: true,
+        };
+      }
+
+      return { success: true, transition: 'complete' };
     }
 
     default:
@@ -943,6 +978,11 @@ async function generateFlowResponse(
       '{onboardingSummary}',
       draft ? buildOnboardingSummary(draft) : ''
     );
+  }
+
+  if (prompt.includes('{onboardingContactSummary}')) {
+    const draft = readOnboardingDraft(metadata);
+    prompt = prompt.replace('{onboardingContactSummary}', draft?.email ?? '');
   }
 
   return prompt;

@@ -7,6 +7,7 @@ import {
   listPatients,
   searchPatients,
   updatePatient,
+  updatePatientEmail,
 } from '../patients';
 import { ValidationError } from '../validate';
 
@@ -325,6 +326,95 @@ describe('patients service', () => {
 
       await expect(searchPatients('ana')).rejects.toThrow('down');
     });
+  });
+});
+
+describe('updatePatientEmail', () => {
+  beforeEach(() => vi.resetAllMocks());
+
+  function buildQuery(overrides: Record<string, unknown> = {}) {
+    return {
+      update: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      select: vi.fn().mockReturnThis(),
+      single: vi.fn().mockResolvedValue({ data: null, error: null }),
+      ...overrides,
+    };
+  }
+
+  it('actualiza y devuelve el paciente con solo el email normalizado', async () => {
+    const row = {
+      id: PATIENT_ID,
+      full_name: 'María',
+      phone_e164: '+5215512345678',
+      email: 'nueva@example.com',
+      notes: null,
+      created_at: 'a',
+      updated_at: 'b',
+    };
+    const query = buildQuery({
+      single: vi.fn().mockResolvedValue({ data: row, error: null }),
+    });
+    (getSupabaseAdmin as ReturnType<typeof vi.fn>).mockReturnValue({
+      from: vi.fn().mockReturnValue(query),
+    });
+
+    const patient = await updatePatientEmail(PATIENT_ID, '  NUEVA@Example.COM ');
+
+    expect(query.update).toHaveBeenCalledWith({ email: 'nueva@example.com' });
+    expect(query.update).toHaveBeenCalledTimes(1);
+    expect(query.eq).toHaveBeenCalledWith('id', PATIENT_ID);
+    expect(query.select).toHaveBeenCalled();
+    expect(patient).toMatchObject({ id: PATIENT_ID, email: 'nueva@example.com' });
+  });
+
+  it('rechaza un id inválido sin consultar la base', async () => {
+    const from = vi.fn();
+    (getSupabaseAdmin as ReturnType<typeof vi.fn>).mockReturnValue({ from });
+
+    await expect(updatePatientEmail('bad-id', 'ana@example.com')).rejects.toThrow(
+      ValidationError
+    );
+    expect(from).not.toHaveBeenCalled();
+  });
+
+  it('rechaza un email inválido sin consultar la base', async () => {
+    const from = vi.fn();
+    (getSupabaseAdmin as ReturnType<typeof vi.fn>).mockReturnValue({ from });
+
+    await expect(
+      updatePatientEmail(PATIENT_ID, 'no-es-un-correo')
+    ).rejects.toMatchObject({ field: 'email' });
+    expect(from).not.toHaveBeenCalled();
+  });
+
+  it('rechaza un email ausente o vacío', async () => {
+    const from = vi.fn();
+    (getSupabaseAdmin as ReturnType<typeof vi.fn>).mockReturnValue({ from });
+
+    await expect(updatePatientEmail(PATIENT_ID, '')).rejects.toMatchObject({
+      field: 'email',
+    });
+    expect(from).not.toHaveBeenCalled();
+  });
+
+  it('traduce el conflicto de unicidad (23505) a ConflictError', async () => {
+    const query = buildQuery({
+      single: vi
+        .fn()
+        .mockResolvedValue({ data: null, error: { code: '23505', message: 'duplicate' } }),
+    });
+    (getSupabaseAdmin as ReturnType<typeof vi.fn>).mockReturnValue({
+      from: vi.fn().mockReturnValue(query),
+    });
+
+    const { ConflictError } = await import('../errors');
+    await expect(
+      updatePatientEmail(PATIENT_ID, 'ana@example.com')
+    ).rejects.toBeInstanceOf(ConflictError);
+    await expect(
+      updatePatientEmail(PATIENT_ID, 'ana@example.com')
+    ).rejects.toMatchObject({ code: 'contact_conflict' });
   });
 });
 

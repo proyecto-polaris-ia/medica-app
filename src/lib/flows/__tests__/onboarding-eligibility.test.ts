@@ -62,10 +62,13 @@ describe('resolveOnboardingStartState', () => {
     ).toBe('ask_allergies');
   });
 
-  it('devuelve null con historia existente (Fase 1 no inicia solo-contacto)', () => {
+  it('devuelve ask_email cuando hay historia y falta el email (Fase 2)', () => {
     expect(
       resolveOnboardingStartState({ historyExists: true, missingEmail: true })
-    ).toBeNull();
+    ).toBe('ask_email');
+  });
+
+  it('devuelve null con historia existente y email presente', () => {
     expect(
       resolveOnboardingStartState({ historyExists: true, missingEmail: false })
     ).toBeNull();

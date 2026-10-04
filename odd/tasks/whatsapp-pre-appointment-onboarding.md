@@ -33,15 +33,24 @@ Persistence mode: openspec (config.yaml, artifact_store hybrid)
 - [ ] design.md (rutas concretas, decisiones)
 - [ ] tasks.md (forecast, verificación de decisión antes de apply)
 
+### Revisión RDD por fase
+- [x] Fase 1: lineage review-4c62be58c351c2de — medium, lente review-reliability, 31 archivos/2869 líneas — **approved**, autoridad quemada (revisión del snapshot code-only del squash 010f84d). 5 hallazgos informativos (R3-clearanswer-contract, R3-escalation-port-unhandled, R3-missing-draft-error-loop, R3-source-unvalidated-cast, R3-summary-restart-data-loss) → registrar como follow-ups.
+- [ ] Fase 2: revisión del delta antes de PR 2.
+- [ ] Fase 3: revisión del delta antes de PR 3.
+
 ### Apply
 - [ ] Fase 1: flow onboarding historia clínica básica (paciente nuevo sin medical_history + cita futura) — alergias, medicamentos, condiciones, embarazo, hábitos; resumen + confirmación; escritura atómica; escalación a humano ante urgencia.
 - [ ] Fase 2: completado de datos generales (email, contacto faltante) en el mismo flow.
 - [ ] Fase 3: nudge en recordatorio de cita + badge onboarding pendiente/completo en panel (extender MedicalHistoryBadge.tsx).
 
 ### Verify / Archive / Entrega
-- [ ] Verify: suite, tsc, build — PASS o PASS WITH WARNINGS.
-- [ ] Archive: materializar spec en openspec/specs/, mover change a archive/.
-- [ ] Revisión RDD por fase + PRs apilados.
+- [x] Verify: PASS WITH WARNINGS — 154 archivos/1447 tests, tsc 0, build OK; warnings: sin script lint (ambiental), migraciones revisadas estructuralmente (sin stack local), HSM onboarding_pendiente pendiente en Meta.
+- [x] Archive: specs materializadas (whatsapp-onboarding 8 req/18 esc; patient-onboarding-status 4 req/11 esc) + merge de MODIFIED en flow-engine, whatsapp-inbound-automation, clinical-record (escenarios de booking restaurados); change en archive/2026-10-03-whatsapp-pre-appointment-onboarding/.
+- [x] Revisión RDD por fase: 3 lineages approved con autoridad quemada (review-4c62be58c351c2de, review-f102564e27a9dbcb, review-c949f9c249ac566c).
+- [x] PRs apilados: #111 (fase 1→main), #112 (fase 2→rama 1), #113 (fase 3→rama 2, Closes #90). Merge en orden 111→112→113.
+
+## Estado final
+Ciclo SDD completo y cerrado. Pendientes operativos: aprobar plantilla HSM onboarding_pendiente en Meta; aplicar migraciones 20261003155627 y 20261003174659 en Supabase y probar downs; backlog informativo de los 3 reviews (13 hallazgos no bloqueantes); sin script lint (brecha ambiental preexistente).
 
 ## Guardrails del issue (innegociables)
 - No diagnóstico; registrar literal, sin interpretar ni clasificar.
@@ -56,6 +65,10 @@ Persistence mode: openspec (config.yaml, artifact_store hybrid)
 - bad47c8 docs(openspec): design D1–D12 (design)
 - 97f1d54 docs(openspec): tasks, 68 tareas (tasks)
 - 5531485 feat(clinical): provenance column source (Apply Fase 1, work unit A/D1) — migración 20261003155627 + down, types, medical-history, tests 10/10, tsc limpio
+- 709471e feat(flows): flujo onboarding + registry + advance symmetry (work unit B/D2 D3 D6) — 80 tests flows
+- c188f13 docs(odd): evidencia de commits
+- 7780ad3 feat(whatsapp): disparador, handlers, urgencia+escalación (work unit C/D4 D5 D7) — 170 tests flows+whatsapp, tsc limpio
+- 0c2e7ff test(follow-up): fix preexistente ruta migración 0020→0021 (desbloquea V.1); suite completa 1388 verde
 
 ## Notas de contexto (memoria)
 - Subagentes sdd-{phase} no existen; usar gentle-ai-explore/worker/verify.

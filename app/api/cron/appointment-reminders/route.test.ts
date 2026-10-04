@@ -5,12 +5,22 @@ import {
   sendAppointmentReminder,
   type AppointmentReminderCandidate,
 } from '@/lib/citas/send-appointment-reminder';
+import { sendOnboardingNudge } from '@/lib/citas/send-onboarding-nudge';
+import { isOnboardingNudgeEnabled } from '@/lib/whatsapp/onboarding-flag';
 import { GET, POST } from './route';
 
 vi.mock('@/lib/citas/send-appointment-reminder', () => ({
   selectAppointmentReminderCandidates: vi.fn(),
   sendAppointmentReminder: vi.fn(),
   appointmentReminderPeriod: vi.fn(),
+}));
+
+vi.mock('@/lib/citas/send-onboarding-nudge', () => ({
+  sendOnboardingNudge: vi.fn(),
+}));
+
+vi.mock('@/lib/whatsapp/onboarding-flag', () => ({
+  isOnboardingNudgeEnabled: vi.fn(),
 }));
 
 const APPOINTMENT_ID = '990e8400-e29b-41d4-a716-446655440000';
@@ -61,6 +71,14 @@ function helper() {
     select: vi.mocked(selectAppointmentReminderCandidates),
     send: vi.mocked(sendAppointmentReminder),
     period: vi.mocked(appointmentReminderPeriod),
+  };
+}
+
+/** Mock del módulo de nudge: el hook sólo orquesta, no envía. */
+function nudgeHelper() {
+  return {
+    send: vi.mocked(sendOnboardingNudge),
+    enabled: vi.mocked(isOnboardingNudgeEnabled),
   };
 }
 
@@ -263,6 +281,74 @@ describe('POST /api/cron/appointment-reminders', () => {
           sameDay: { sent: 0, skipped: 0, total: 0 },
         },
       });
+    });
+  });
+
+  describe('onboarding nudge hook', () => {
+    it('llama al nudge sólo para los candidatos cuyo recordatorio devolvió sent === true', async () => {
+      setEnv({ CRON_SECRET, APPOINTMENT_REMINDERS_ENABLED: 'true' });
+      nudgeHelper().enabled.mockReturnValue(true);
+      whenHelperReturns({
+        h24: [candidate(), candidate({ appointmentId: OTHER_APPOINTMENT_ID })],
+      });
+      helper().send.mockImplementation(async (input) =>
+        input.appointmentId === OTHER_APPOINTMENT_ID
+          ? { reminderKey: 'ok', sent: true, skipped: false }
+          : { reminderKey: 'dedup', sent: false, skipped: true }
+      );
+      nudgeHelper().send.mockResolvedValue({ reminderKey: 'nudge', sent: true, skipped: false });
+
+      await POST(request('POST'));
+
+      expect(nudgeHelper().send).toHaveBeenCalledTimes(1);
+      expect(nudgeHelper().send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          patientId: PATIENT_ID,
+          patientPhoneE164: '+5215512345678',
+          appointmentId: OTHER_APPOINTMENT_ID,
+          startAt: '2026-10-06T16:00:00.000Z',
+        })
+      );
+    });
+
+    it('no llama al nudge cuando el recordatorio no se envió', async () => {
+      setEnv({ CRON_SECRET, APPOINTMENT_REMINDERS_ENABLED: 'true' });
+      nudgeHelper().enabled.mockReturnValue(true);
+      whenHelperReturns({ h24: [candidate()] });
+      helper().send.mockResolvedValue({ reminderKey: 'dedup', sent: false, skipped: true });
+
+      await POST(request('POST'));
+
+      expect(nudgeHelper().send).not.toHaveBeenCalled();
+    });
+
+    it('con WHATSAPP_ONBOARDING_NUDGE_ENABLED apagado no llama al nudge aunque el recordatorio salga', async () => {
+      setEnv({ CRON_SECRET, APPOINTMENT_REMINDERS_ENABLED: 'true' });
+      nudgeHelper().enabled.mockReturnValue(false);
+      whenHelperReturns({ h24: [candidate()] });
+      helper().send.mockResolvedValue({ reminderKey: 'ok', sent: true, skipped: false });
+
+      const res = await POST(request('POST'));
+      const body = await res.json();
+
+      expect(nudgeHelper().send).not.toHaveBeenCalled();
+      expect(body.sent).toBe(1);
+    });
+
+    it('un fallo del nudge nunca afecta el resultado del recordatorio', async () => {
+      setEnv({ CRON_SECRET, APPOINTMENT_REMINDERS_ENABLED: 'true' });
+      nudgeHelper().enabled.mockReturnValue(true);
+      whenHelperReturns({ h24: [candidate()] });
+      helper().send.mockResolvedValue({ reminderKey: 'ok', sent: true, skipped: false });
+      nudgeHelper().send.mockRejectedValue(new Error('nudge exploded'));
+
+      const res = await POST(request('POST'));
+      const body = await res.json();
+
+      expect(res.status).toBe(200);
+      expect(body.sent).toBe(1);
+      expect(body.skipped).toBe(0);
+      expect(body.cadencias.h24).toEqual({ sent: 1, skipped: 0, total: 1 });
     });
   });
 
