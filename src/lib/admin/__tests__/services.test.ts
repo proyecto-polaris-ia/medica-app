@@ -1,7 +1,9 @@
-import { beforeAll, beforeEach, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, expect, it } from 'vitest';
 import {
+  acquireDbSuiteLock,
   applyLocalDbEnv,
   localDbEnabled,
+  releaseDbSuiteLock,
   truncateAllTables,
 } from '@/test-utils/local-db';
 import {
@@ -112,8 +114,13 @@ d('deleteService rejects a service referenced by an appointment (FK)', async () 
   await expect(deleteService(created.id)).rejects.toThrow();
 });
 
-beforeAll(() => {
+beforeAll(async () => {
   applyLocalDbEnv();
+  await acquireDbSuiteLock();
+});
+
+afterAll(async () => {
+  await releaseDbSuiteLock();
 });
 
 beforeEach(async () => {

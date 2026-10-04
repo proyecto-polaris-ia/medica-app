@@ -36,7 +36,10 @@ export async function getProvider(id: string): Promise<Provider> {
     .from('providers')
     .select(SELECT_COLUMNS)
     .eq('id', parsedId)
-    .single();
+    // maybeSingle: con 0 filas devuelve data=null sin error, para poder
+    // señalar NotFoundError (un .single() fallaría con PGRST116 antes del
+    // manejo de no encontrado).
+    .maybeSingle();
 
   if (error) {
     throw new Error(error.message);
@@ -83,7 +86,10 @@ export async function updateProvider(
     .update(payload)
     .eq('id', parsedId)
     .select(SELECT_COLUMNS)
-    .single();
+    // maybeSingle: con 0 filas devuelve data=null sin error, para poder
+    // señalar NotFoundError (un .single() fallaría con PGRST116 antes del
+    // manejo de no encontrado).
+    .maybeSingle();
 
   if (error) {
     throw new Error(error.message);

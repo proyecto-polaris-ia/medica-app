@@ -1,4 +1,4 @@
-import { Pool } from 'pg';
+import { Client, Pool } from 'pg';
 
 /**
  * Infraestructura para pruebas de datos contra Supabase local (CLI).
@@ -70,5 +70,34 @@ export async function truncateAllTables(): Promise<void> {
     }
   } finally {
     client.release();
+  }
+}
+
+const SUITE_LOCK_KEY = 728101;
+let lockClient: Client | null = null;
+
+/**
+ * Serializa las suites de datos entre archivos: vitest ejecuta los archivos en
+ * paralelo y todas truncan el esquema `public` en cada test; sin este advisory
+ * lock de sesión, una suite borra datos que otra acaba de insertar. Se libera
+ * al cerrar la conexión (incluso si el worker muere).
+ *
+ * Uso: `beforeAll(async () => { applyLocalDbEnv(); await acquireDbSuiteLock(); });`
+ * y `afterAll(() => releaseDbSuiteLock());`
+ */
+export async function acquireDbSuiteLock(): Promise<void> {
+  lockClient = new Client({
+    connectionString:
+      process.env.SUPABASE_DB_URL ?? LOCAL_DEFAULTS.SUPABASE_DB_URL,
+  });
+  await lockClient.connect();
+  await lockClient.query('SELECT pg_advisory_lock($1::bigint)', [SUITE_LOCK_KEY]);
+}
+
+export async function releaseDbSuiteLock(): Promise<void> {
+  if (lockClient) {
+    await lockClient.query('SELECT pg_advisory_unlock($1::bigint)', [SUITE_LOCK_KEY]);
+    await lockClient.end();
+    lockClient = null;
   }
 }
