@@ -311,6 +311,32 @@ d('treatment-plans data layer', () => {
       expect(error).toBeNull();
       expect(items).toEqual([]);
     });
+
+    it('aborts creation without persisting rows when item validation fails', async () => {
+      const { patient, provider } = await seedPatientAndProvider();
+
+      // `tooth: '99'` es FDI inválido: el error se lanza validando en memoria,
+      // ANTES del insert de ítems (issue #123: aquí quedaba un plan huérfano
+      // en draft porque el .map corría después del insert del plan y fuera
+      // del try/catch del cleanup).
+      await expect(
+        createTreatmentPlan(patient.id, {
+          providerId: provider.id,
+          name: 'Plan X',
+          items: [
+            { description: 'Resina', tooth: '99', quantity: 1, unitPrice: 500 },
+          ],
+        })
+      ).rejects.toThrow(ValidationError);
+
+      // Invariante de atomicidad: si la creación falla, nada persiste.
+      expect(await listTreatmentPlans(patient.id)).toEqual([]);
+      const { data: items, error } = await getSupabaseAdmin()
+        .from('treatment_plan_items')
+        .select('id');
+      expect(error).toBeNull();
+      expect(items).toEqual([]);
+    });
   });
 
   describe('updateTreatmentPlan', () => {
