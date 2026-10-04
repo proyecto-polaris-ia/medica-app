@@ -198,8 +198,13 @@ export async function createAppointment(
       .select(SELECT_COLUMNS)
       .single();
 
-    if (error || !data) {
-      throw new Error(error?.message ?? 'Failed to create appointment');
+    if (error) {
+      // Rethrow del error original de PostgREST: conserva `code` para que el
+      // catch de abajo traduzca 23P01 (solapamiento) a ConflictError.
+      throw error;
+    }
+    if (!data) {
+      throw new Error('Failed to create appointment');
     }
 
     return mapRow(data);
@@ -243,10 +248,15 @@ export async function updateAppointment(
       .update({ ...payload, ...stamp })
       .eq('id', parsedId)
       .select(SELECT_COLUMNS)
-      .single();
+      // maybeSingle: con 0 filas devuelve data=null sin error, para poder
+      // señalar NotFoundError (un .single() fallaría con PGRST116 antes del
+      // manejo de no encontrado).
+      .maybeSingle();
 
     if (error) {
-      throw new Error(error.message);
+      // Rethrow del error original de PostgREST: conserva `code` para que el
+      // catch de abajo traduzca 23P01 (solapamiento) a ConflictError.
+      throw error;
     }
     if (!data) {
       throw new NotFoundError('Appointment');
