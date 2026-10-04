@@ -10,6 +10,7 @@
     "build": "next build",
     "start": "next start",
     "test": "vitest run",
+    "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "sanity": "node ../sanity-kit/src/cli.ts run",
     "sanity:fast": "node ../sanity-kit/src/cli.ts run --fast",
@@ -31,6 +32,7 @@
     "zod": "^4.5.4"
   },
   "devDependencies": {
+    "@eslint/eslintrc": "^3.3.7",
     "@tailwindcss/postcss": "^4.3.3",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.3",
@@ -40,6 +42,8 @@
     "@types/react-dom": "19.0.0",
     "@vitejs/plugin-react": "^4.7.0",
     "@vitest/coverage-v8": "^2.1.9",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "^15.5.24",
     "jsdom": "^29.1.1",
     "knip": "^6.39.0",
     "postcss": "^8.5.26",

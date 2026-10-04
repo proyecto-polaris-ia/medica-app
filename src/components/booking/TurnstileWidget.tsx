@@ -42,7 +42,7 @@ export function TurnstileWidget({
     const container = containerRef.current;
     if (!container) return;
 
-    let cancelled = false;
+    const cancelled = false;
     const widgetId = widgetIdRef.current;
 
     // Refs must stay stable across re-renders; the callbacks are captured via
