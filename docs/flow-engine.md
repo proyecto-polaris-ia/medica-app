@@ -1,7 +1,10 @@
 # Flow Engine — Guía de Referencia
 
-> Documento de referencia para el componente Flow Engine del agente de WhatsApp.
-> Última actualización: 2026-09-05
+> Documento de referencia del Flow Engine: motor determinístico de flujos
+> conversacionales y runtime del **web chat**
+> (`app/api/web-chat/message` → `src/lib/web-chat/web-inbound-service.ts`).
+> Dejó de participar en el pipeline de WhatsApp en la Etapa 7 (issue #37);
+> WhatsApp lo atiende el agente Eve.
 
 ## ¿Qué es el Flow Engine?
 
@@ -26,7 +29,7 @@ Agente: "¿Con qué doctor?" ← Ya lo había dicho antes
 **Con Flow Engine:**
 ```
 Usuario: "Quiero agendar una cita"
-Orchestrator: clasifica intent → book_appointment
+Web chat: clasifica intent → book_appointment
 Flow Engine: estado = collect_date → pide fecha
 Usuario: "El 15 de septiembre"
 Flow Engine: estado = collect_service → pide servicio
@@ -41,7 +44,7 @@ Flow Engine: estado = check_availability → ejecuta acción
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    WhatsApp Orchestrator                     │
+│        Web chat inbound (web-inbound-service.ts)            │
 │  (Routing basado en intent: flows vs handlers directos)     │
 └─────────────────────────────────────────────────────────────┘
                               │
@@ -68,7 +71,7 @@ Flow Engine: estado = check_availability → ejecuta acción
 | **Flow Engine** | `src/lib/flows/flow-engine.ts` | Motor determinístico |
 | **Flow Definitions** | `src/lib/flows/definitions/*.flow.ts` | Configuración de flujos |
 | **Types** | `src/lib/flows/types.ts` | Tipos TypeScript |
-| **Orchestrator** | `src/lib/whatsapp/orchestrator.ts` | Routing y ejecución |
+| **Web chat inbound** | `src/lib/web-chat/web-inbound-service.ts` | Routing y ejecución de acciones |
 
 ## Flujos disponibles
 
@@ -107,41 +110,31 @@ Flujo para agendar citas.
 
 ## Cómo funciona
 
-### 1. Mensaje llega al webhook
+### 1. Mensaje llega al endpoint de web chat
 
 ```typescript
-// app/api/whatsapp/webhook/route.ts
-POST /api/whatsapp/webhook
-  → processWhatsAppWebhookPayload()
-  → processWhatsAppInboundEvent()
+// app/api/web-chat/message/route.ts
+POST /api/web-chat/message
+  → processWebChatMessage({ sessionId, message, phone?, fullName? })
 ```
 
-### 2. Feature flag decide el path
+### 2. Se clasifica el intent
 
 ```typescript
-// src/lib/whatsapp/inbound-service.ts
-if (isFlowEngineEnabled()) {
-  return await processWithFlowEngine(...);
-}
-return await processWithLegacy(...);
-```
+// src/lib/web-chat/web-inbound-service.ts
+const classification = classifyIntentSimple(message);
 
-### 3. Orchestrator clasifica intent
-
-```typescript
-// src/lib/whatsapp/orchestrator.ts
-const { intent, entities } = await classifyIntent(message);
-
-switch (intent) {
+switch (classification.intent) {
   case 'book_appointment':
-    return await handleBookingFlow(classification, context);
+  case 'check_availability':
+    return await handleBookingFlow(request, session);
   case 'inquiry':
-    return await handleKnowledgeQuery(classification, context);
+    return { reply: await handleKnowledgeQuery(message) };
   // ...
 }
 ```
 
-### 4. Flow Engine ejecuta el flujo
+### 3. Flow Engine ejecuta el flujo
 
 ```typescript
 // src/lib/flows/flow-engine.ts
@@ -156,22 +149,22 @@ const result = flowEngine.execute(flow, currentState, entities);
 // }
 ```
 
-### 5. Estado se persiste
+### 4. Estado se persiste
 
 ```typescript
-// src/lib/whatsapp/store.ts
-await store.updateConversationFlowState({
-  conversationId,
-  flowState: result.nextState
+// src/lib/web-chat/store.ts
+await updateWebChatSession(request.sessionId, {
+  flow_state: response.flowState,
+  last_intent: response.flowState.flowName,
+  last_activity: new Date().toISOString(),
 });
 ```
 
-### 6. Respuesta se envía
+### 5. Respuesta se entrega al widget
 
 ```typescript
-// src/lib/whatsapp/orchestrator.ts
-const responseText = await generateFlowResponse(result, context);
-await sendWhatsAppTextMessage({ to: phone, body: responseText });
+// src/lib/web-chat/web-inbound-service.ts
+await insertWebChatMessage(request.sessionId, 'assistant', response.reply);
 ```
 
 ## Definir un nuevo flujo
@@ -236,10 +229,10 @@ export const flowRegistry: Record<string, FlowDefinition> = {
 };
 ```
 
-### 3. Agregar routing en orchestrator
+### 3. Agregar routing en el web chat
 
 ```typescript
-// src/lib/whatsapp/orchestrator.ts
+// src/lib/web-chat/web-inbound-service.ts
 case 'reschedule_request':
   return await handleRescheduleFlow(classification, context);
 ```
@@ -257,38 +250,20 @@ describe('reschedule_appointment flow', () => {
 });
 ```
 
-## Feature flag
+## Sin feature flag
 
-```bash
-# .env.local o Vercel
-WHATSAPP_FLOW_ENGINE_ENABLED=true
-```
-
-| Valor | Comportamiento |
-|-------|----------------|
-| `true` | Usa Flow Engine |
-| `false` | Usa path legacy |
-| no definido | Usa path legacy |
-
-### Rollback inmediato
-
-```bash
-# Cambiar flag en Vercel
-vercel env add WHATSAPP_FLOW_ENGINE_ENABLED production
-# Ingresar: false
-
-# Redeploy
-vercel --prod
-```
-
-El path legacy se activa instantáneamente.
+El engine no tiene interruptor de activación en runtime: los consumidores (web
+chat) lo invocan directamente. La variable `WHATSAPP_FLOW_ENGINE_ENABLED` se
+eliminó en la Etapa 7 junto con el path legacy de WhatsApp, así que ya no hay
+rollback por flag: el rollback es de código (`git revert` + redeploy, ver
+`docs/eve-runbook.md`).
 
 ## Persistencia
 
 ### Estructura del estado
 
 ```typescript
-// whatsapp_conversations.flow_state (jsonb)
+// web_chat_sessions.flow_state (jsonb)
 {
   "name": "check_availability",
   "entities": {
@@ -313,7 +288,8 @@ El path legacy se activa instantáneamente.
 
 | Migración | Descripción |
 |-----------|-------------|
-| `0010_conversation_flow_state.sql` | Agrega columna `flow_state` a `whatsapp_conversations` |
+| `0010_conversation_flow_state.sql` | Agrega la columna `flow_state` a `whatsapp_conversations` (histórica) |
+| `0012_web_chat.sql` | Crea `web_chat_sessions` con `flow_state` (jsonb) y `web_chat_messages` |
 
 ## Testing
 
@@ -326,33 +302,20 @@ npm test src/lib/flows/__tests__/
 ### Tests de integración
 
 ```bash
-npm test src/lib/whatsapp/__tests__/
-```
-
-### Simular conversación
-
-```bash
-# Script de simulación
-node scripts/whatsapp-simulate-conversation.mjs
+npm test app/api/web-chat/
 ```
 
 ## Monitoreo
 
-### Logs
+El engine no emite eventos de observabilidad propios: es código puro que
+transforma estado. Para revisar conversaciones en curso hay que mirar el store
+del consumidor:
 
-```typescript
-// Observabilidad integrada
-recordWhatsAppAiEvent({
-  type: 'flow_engine.state_transition',
-  outcome: 'success',
-  diagnostics: {
-    flowName: 'book_appointment',
-    fromState: 'collect_date',
-    toState: 'collect_service',
-    entities: { localDate: '2026-09-15' }
-  }
-});
-```
+- `web_chat_sessions.flow_state` — estado actual, entidades y candidatos.
+- `web_chat_sessions.last_intent` — último intent clasificado.
+
+Para el canal WhatsApp (atendido por Eve) el monitoreo vive en el WhatsApp
+Command Center y en el runbook: `docs/eve-runbook.md`.
 
 ### Métricas clave
 
@@ -366,25 +329,14 @@ recordWhatsAppAiEvent({
 ### El flujo no avanza
 
 1. Verificar que las entidades requeridas están presentes
-2. Revisar logs de `flow_engine.state_transition`
+2. Revisar `web_chat_sessions.flow_state` (estado, entidades y `pendingAction`)
 3. Verificar que el estado actual tiene transiciones definidas
 
 ### El estado no se persiste
 
-1. Verificar que `whatsapp_conversations.flow_state` existe
-2. Revisar que `updateConversationFlowState` se está llamando
+1. Verificar que `web_chat_sessions.flow_state` existe
+2. Revisar que `updateWebChatSession` se está llamando
 3. Verificar permisos de RLS en Supabase
-
-### Rollback de emergencia
-
-```bash
-# Desactivar Flow Engine
-vercel env add WHATSAPP_FLOW_ENGINE_ENABLED production
-# Ingresar: false
-
-# Redeploy inmediato
-vercel --prod --yes
-```
 
 ## Referencias
 
@@ -395,17 +347,22 @@ vercel --prod --yes
 
 ## FAQ
 
-**¿Puedo tener ambos paths activos?**
-Sí, el feature flag permite activar/desactivar por entorno o incluso por usuario.
+**¿Hay un feature flag para activar el Flow Engine?**
+No. `WHATSAPP_FLOW_ENGINE_ENABLED` se eliminó en la Etapa 7; el engine se invoca
+directamente desde sus consumidores (web chat).
 
 **¿Qué pasa con las conversaciones en curso?**
-Si se desactiva el Flow Engine, las conversaciones con `flow_state` activo quedan en ese estado. El path legacy no las continuará, pero el usuario puede iniciar una nueva conversación.
+El estado (`flow_state`) se guarda por sesión, así que la conversación continúa
+desde el último estado. Si pasaron más de 30 minutos sin actividad, la sesión se
+considera expirada y arranca de nuevo.
 
 **¿Cómo agrego un nuevo flujo?**
 Ver sección "Definir un nuevo flujo" arriba.
 
 **¿El Flow Engine funciona para consultas de knowledge?**
-No. Las consultas de knowledge (`inquiry`) van directamente al LLM. El Flow Engine es solo para flujos multi-paso como booking.
+No. Las consultas de knowledge (`inquiry`) van directamente al LLM. El Flow
+Engine es solo para flujos multi-paso como booking.
 
 **¿Puedo usar el Flow Engine para otros canales?**
-Sí, el Flow Engine es agnóstico al canal. Solo necesita adaptadores para entrada/salida.
+Sí, el engine es agnóstico al canal: solo necesita adaptadores para entrada/salida.
+Hoy solo lo usa el web chat; WhatsApp lo atiende el agente Eve.

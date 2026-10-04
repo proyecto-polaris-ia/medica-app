@@ -3,9 +3,8 @@
  * decisión 8, spec R11).
  *
  * `WHATSAPP_REMINDER_REPLY_ENABLED` habilita el gancho de respuestas a
- * recordatorio en el pipeline de WhatsApp. Sigue la misma convención que
- * `src/lib/whatsapp/eve-flag.ts`: `true`, `1` o `yes` (case-insensitive)
- * encienden; cualquier otra cosa (y una variable ausente) la apaga, por lo que
+ * recordatorio en el pipeline de WhatsApp. Convención estándar del repo:
+ * `true`, `1` o `yes` (case-insensitive) encienden; cualquier otra cosa (y una variable ausente) la apaga, por lo que
  * el default es **off** y apagado el pipeline se comporta igual que hoy.
  *
  * Este módulo es la única lectura de la variable de entorno: los consumidores

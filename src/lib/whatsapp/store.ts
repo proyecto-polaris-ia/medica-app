@@ -1,5 +1,5 @@
 import { getSupabaseAdmin } from '@/lib/supabase/server';
-import type { WhatsAppInboundAgentDecision } from '@/lib/ai/whatsapp-inbound-agent';
+import type { WhatsAppInboundAgentDecision } from './inbound-decision';
 import type { NormalizedWhatsAppInboundEvent, NormalizedWhatsAppStatusEvent, WhatsAppDeliveryStatus } from './normalize';
 import type { FlowState } from '@/lib/flows/types';
 

@@ -5,7 +5,7 @@
  * Solo identifica el intent y extrae entidades básicas, sin decidir el flujo.
  */
 
-import type { WhatsAppInboundIntent } from '@/lib/ai/whatsapp-inbound-agent';
+import type { WhatsAppInboundIntent } from '@/lib/whatsapp/inbound-decision';
 
 export type ClassificationResult = {
   intent: WhatsAppInboundIntent;

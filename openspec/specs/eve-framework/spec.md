@@ -77,15 +77,6 @@ A test file MUST assert: (a) agent config exports valid model, (b) `sessionTimeo
 - WHEN smoke test runs
 - THEN test fails with clear assertion error
 
-### Requirement: Non-Interference with Legacy Agent
-
-Stage 1 MUST NOT modify `src/lib/whatsapp/`, `src/lib/flows/`, `src/lib/ai/`, or `app/api/whatsapp/`.
-
-#### Scenario: Legacy directories untouched
-- GIVEN the git diff for Stage 1
-- WHEN inspected
-- THEN no files in those directories are modified
-
 ### Requirement: Build and Type Safety
 
 The project MUST pass `npx tsc --noEmit` and `npm run test` with no errors.
@@ -315,15 +306,6 @@ The WhatsApp channel MUST always construct its adapter (so the webhook route sta
 - THEN the adapter resolves access token, app secret, phone number id, and verify token from the environment
 - AND with partial credentials the adapter is constructed with placeholder values instead of throwing
 
-### Requirement: WhatsApp Channel Non-Interference
-
-Stage 5 MUST NOT modify `app/api/whatsapp/webhook/route.ts` or any file under `src/lib/whatsapp/`.
-
-#### Scenario: Legacy webhook and WhatsApp code untouched
-- GIVEN the Stage 5 diff
-- WHEN inspected
-- THEN no file under `app/api/whatsapp/` or `src/lib/whatsapp/` is modified
-
 ### Requirement: Chat SDK Dependency Pinning
 
 The project MUST depend on `@chat-adapter/whatsapp`, `@chat-adapter/state-memory`, and their shared `chat` package, pinned to the `4.34.0` line that Eve 0.52.2 compiles internally.
@@ -333,44 +315,59 @@ The project MUST depend on `@chat-adapter/whatsapp`, `@chat-adapter/state-memory
 - WHEN inspected
 - THEN the `@chat-adapter/*` packages are pinned to `4.34.0`
 
-### Requirement: WhatsApp Agent Routing Feature Flag
-
-`app/api/whatsapp/webhook/route.ts` MUST route verified inbound messages to the Eve agent when `WHATSAPP_EVE_ENABLED` is truthy (`true`, `1`, or `yes`, case-insensitive) and to the legacy agent otherwise, without weakening signature verification.
-
-#### Scenario: flag enables Eve, absence routes legacy
-- GIVEN a verified message POST
-- WHEN the flag is truthy
-- THEN the route forwards to `/eve/v1/whatsapp`
-- AND when the flag is unset or `false` the route processes through the legacy path
-
-#### Scenario: invalid signature rejected before routing
-- GIVEN a message POST with an invalid signature
-- WHEN the route receives it
-- THEN neither agent is invoked and an error status is returned
-
-### Requirement: Legacy Fallback on Eve Forward Failure
-
-When routing to Eve, the route MUST fall back to the legacy processing path if the forward request throws, so no inbound message is dropped.
-
-#### Scenario: forward failure falls back to legacy
-- GIVEN a flagged message and an Eve forward that throws
-- WHEN the route handles the message
-- THEN the message is processed through the legacy path
-
 ### Requirement: WhatsApp Routing Observability
 
-The route MUST emit a structured log record naming the active agent (`eve` or `legacy`) plus the correlation id and, when available, the inbound message id.
+The route MUST emit a structured log record for every verified message naming the
+forwarding target (`eve`) and the forward outcome, plus the correlation id and,
+when available, the inbound message id.
 
-#### Scenario: route decision is logged
-- GIVEN a message POST is handled
-- WHEN the active agent is selected
-- THEN a structured log record includes the agent name and correlation id
+#### Scenario: forwarding decision is logged
+- GIVEN a verified message POST is handled
+- WHEN the route forwards to Eve
+- THEN a structured log record includes the forwarding target `eve`, the
+  correlation id, and, when available, the inbound message id
+
+#### Scenario: forward outcome is logged
+- GIVEN a verified message POST
+- WHEN the Eve forward completes or fails
+- THEN a structured log record includes the outcome and the correlation id
 
 ### Requirement: Eve Deployment Runbook
 
-`docs/eve-runbook.md` MUST document the feature-flag enable/disable commands, the rollback procedure, monitoring surfaces, and common issues.
+`docs/eve-runbook.md` MUST document that the webhook forwards unconditionally to
+Eve, the rollback procedure (`git revert` plus redeploy), the operator removal of
+`WHATSAPP_EVE_ENABLED` (`vercel env rm`), the unchanged Meta webhook URL,
+monitoring surfaces, and common issues.
 
 #### Scenario: runbook covers rollback and monitoring
 - GIVEN `docs/eve-runbook.md`
 - WHEN inspected
-- THEN it includes enable/disable commands, rollback referencing `WHATSAPP_EVE_ENABLED`, monitoring guidance, and issue resolutions
+- THEN it includes the Eve-only forwarding model, rollback via `git revert` and
+  redeploy, the `vercel env rm WHATSAPP_EVE_ENABLED` operator step, the unchanged
+  Meta URL, monitoring guidance, and issue resolutions
+- AND it MUST NOT instruct enabling or disabling a routing flag in code
+
+### Requirement: Unconditional Eve Webhook Forwarding
+
+`app/api/whatsapp/webhook/route.ts` MUST verify the Meta signature and then
+always `POST` the raw body to `/eve/v1/whatsapp`. It MUST NOT contain a legacy
+branch, a fallback, or a `WHATSAPP_EVE_ENABLED` read. The Meta webhook URL MUST
+remain unchanged.
+
+#### Scenario: verified message is forwarded to Eve
+- GIVEN a valid `x-hub-signature-256` and JSON body
+- WHEN the route handles the POST
+- THEN it MUST forward the raw body to `/eve/v1/whatsapp`
+- AND it MUST NOT invoke any legacy processing path
+
+#### Scenario: invalid signature rejected before forwarding
+- GIVEN an invalid signature
+- WHEN the route receives the POST
+- THEN it MUST reject the request without forwarding to Eve
+
+#### Scenario: forward failure is surfaced, not swallowed
+- GIVEN a verified message
+- AND the forward request to Eve fails
+- WHEN the route handles the message
+- THEN it MUST return an error status
+- AND it MUST NOT fall back to a legacy agent

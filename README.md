@@ -4,8 +4,8 @@ Sistema de agenda y atención por WhatsApp para un consultorio dental.
 
 ## Qué es
 
-Permite que un paciente escriba por WhatsApp y reciba respuesta inmediata de un
-agente que:
+Permite que un paciente escriba por WhatsApp y reciba respuesta inmediata del
+agente **Eve** (framework Vercel Eve), que:
 
 1. Responde **conocimiento estático** (preguntas frecuentes aprobadas).
 2. Consulta **disponibilidad dinámica** de la agenda (días, horas, citas,
@@ -13,14 +13,26 @@ agente que:
 3. Escala a un humano cuando no puede responder con seguridad (dolor, urgencia,
    receta, costo, etc.).
 
+El webhook `app/api/whatsapp/webhook/route.ts` solo verifica la firma de Meta y
+reenvía cada mensaje a `/eve/v1/whatsapp`; el agente vive en `agent/`. El **web
+chat** del sitio (`app/api/web-chat/message`) es un canal aparte y sigue usando
+el Flow Engine determinístico (`src/lib/flows/`).
+
 ## Stack
 
-- **Vercel** (Next.js App Router) — webhook de WhatsApp + API + agente.
+- **Vercel** (Next.js App Router) — webhook de WhatsApp + API + agente Eve.
 - **Supabase** (Postgres) — fuente de verdad: agenda, pacientes, servicios,
   proveedores, conocimiento, conversaciones.
 - **Meta WhatsApp Cloud API** — canal de entrada/salida.
 - **LLM configurable** — interpreta intención y redacta; nunca decide
   disponibilidad ni escribe en BD por sí solo.
+
+## Configuración
+
+La lista de variables de entorno vive en [`.env.local.example`](.env.local.example)
+y en [`architecture.md`](architecture.md) (sección 9). El detalle operativo del
+agente Eve (monitoreo y rollback) está en
+[`docs/eve-runbook.md`](docs/eve-runbook.md).
 
 ## Lectura obligatoria
 
