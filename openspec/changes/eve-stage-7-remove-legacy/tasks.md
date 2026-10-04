@@ -48,11 +48,11 @@ Verification: `npx tsc --noEmit && npm run test`.
 
 ## 6. Webhook Eve-only rewrite + flag removal + env/spec cleanup
 
-- [ ] 6.1 Finalize `app/api/whatsapp/webhook/route.ts`: signature verify → parse → typing indicator → always `POST` to `/eve/v1/whatsapp`; no fallback; error status on forward failure.
-- [ ] 6.2 Rewrite `app/api/whatsapp/webhook/route.test.ts` to the always-forward contract (signature-before-forward, forward-failure surfacing, no legacy invocation, `GET` verification unchanged).
-- [ ] 6.3 Delete `src/lib/whatsapp/eve-flag.ts` and `src/lib/whatsapp/__tests__/eve-flag.test.ts`.
-- [ ] 6.4 Remove `WHATSAPP_EVE_ENABLED` and `WHATSAPP_FLOW_ENGINE_ENABLED` from `.env.local.example`; keep `WHATSAPP_AGENT_LLM_API_KEY|MODEL|BASE_URL`; evaluate removing `WHATSAPP_AGENT_LLM_API_STYLE`.
-- [ ] 6.5 Remove the flag references from the specs merged by this change (the deltas) and any remaining code comment.
+- [x] 6.1 Finalize `app/api/whatsapp/webhook/route.ts`: signature verify → parse → typing indicator → always `POST` to `/eve/v1/whatsapp`; no fallback; error status on forward failure.
+- [x] 6.2 Rewrite `app/api/whatsapp/webhook/route.test.ts` to the always-forward contract (signature-before-forward, forward-failure surfacing, no legacy invocation, `GET` verification unchanged).
+- [x] 6.3 Delete `src/lib/whatsapp/eve-flag.ts` and `src/lib/whatsapp/__tests__/eve-flag.test.ts`.
+- [x] 6.4 Remove `WHATSAPP_EVE_ENABLED` and `WHATSAPP_FLOW_ENGINE_ENABLED` from `.env.local.example`; keep `WHATSAPP_AGENT_LLM_API_KEY|MODEL|BASE_URL`; evaluate removing `WHATSAPP_AGENT_LLM_API_STYLE`.
+- [x] 6.5 Remove the flag references from the specs merged by this change (the deltas) and any remaining code comment.
 
 Verification: `npx tsc --noEmit && npm run test`.
 

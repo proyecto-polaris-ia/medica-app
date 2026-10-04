@@ -32,13 +32,35 @@ export async function POST(request: NextRequest) {
   const messageId = extractMessageId(payload);
   await showTypingIndicator(messageId, context);
 
-  // Eve is the only WhatsApp path: forward unconditionally, no legacy fallback.
+  // Eve is the only WhatsApp path: forward every verified message, no legacy fallback.
   const eveResponse = await forwardToEve(request, rawBody);
-  if (eveResponse) return eveResponse;
+  if (eveResponse) {
+    recordForwardOutcome(context, 'success', messageId);
+    return eveResponse;
+  }
 
-  console.error('[Eve] forwarding failed', { correlationId: context.correlationId });
-  recordWhatsAppAiEvent({ context, type: 'webhook.failed', outcome: 'failure', diagnostics: { reason: 'eve_forward_failed' } });
+  console.error('[Eve] forwarding failed', { correlationId: context.correlationId, messageId });
+  recordForwardOutcome(context, 'failure', messageId);
   return NextResponse.json({ error: 'WhatsApp webhook processing failed' }, { status: 502 });
+}
+
+/**
+ * Structured routing observability for every verified message: names the Eve
+ * forwarding target and the forward outcome, plus the correlation id and, when
+ * available, the inbound message id.
+ */
+function recordForwardOutcome(
+  context: WhatsAppAiCorrelationContext,
+  outcome: 'success' | 'failure',
+  messageId: string | undefined,
+) {
+  recordWhatsAppAiEvent({
+    context,
+    type: outcome === 'success' ? 'webhook.accepted' : 'webhook.failed',
+    outcome,
+    identifiers: { forwardingTarget: 'eve', ...(messageId ? { inboundMessageId: messageId } : {}) },
+    ...(outcome === 'failure' ? { diagnostics: { reason: 'eve_forward_failed' } } : {}),
+  });
 }
 
 async function forwardToEve(request: NextRequest, rawBody: string): Promise<NextResponse | null> {

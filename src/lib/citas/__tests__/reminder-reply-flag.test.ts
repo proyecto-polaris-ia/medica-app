@@ -5,8 +5,8 @@ const ENV_KEY = 'WHATSAPP_REMINDER_REPLY_ENABLED';
 
 /**
  * Fase 3.1 — Control por feature flag (design.md decisión 8, spec R11).
- * Espejo de `eve-flag.test.ts`: default **off**, `true|1|yes` (case-insensitive)
- * encienden. `WHATSAPP_REMINDER_REPLY_ENABLED` apagado = comportamiento actual.
+ * Convención estándar del repo: default **off**, `true|1|yes`
+ * (case-insensitive) encienden. `WHATSAPP_REMINDER_REPLY_ENABLED` apagado = comportamiento actual.
  */
 describe('isReminderReplyEnabled', () => {
   beforeEach(() => {
