@@ -37,3 +37,13 @@ herramienta dedicada de Eve (decisión del usuario, sesión actual).
 ## Evidencia de commits
 
 - `c733d97` feat(eve): expose deterministic reminder-reply handling as agent tool (código + tests + spec delta).
+- `ee8e1bc` docs(openspec): add verify-report for eve-reminder-reply-tool.
+- `8ce334d` chore(openspec): mark eve-reminder-reply-tool phases complete.
+
+## Cierre
+
+- PR: https://github.com/proyecto-polaris-ia/medica-app/pull/124 (type:feature, Closes #114).
+- Comentario de decisión en el issue: https://github.com/proyecto-polaris-ia/medica-app/issues/114#issuecomment-5984341944.
+- `test:local`: 8 fallas deterministas pre-existentes en `main` (patient-files, storage 42P10 en commit base `ac224f6`) + timeouts de hooks por contención; ajenas a esta rama.
+- Pendiente post-merge: archivar el change OpenSpec a `openspec/changes/archive/`.
+- Archivado local: change movido a `openspec/changes/archive/2026-12-eve-reminder-reply-tool/` (state.yaml removido por convención) y delta materializado en `openspec/specs/appointment-reminder-reply/spec.md` (12 → 13 requisitos). Merge de PR #124 verificado: CI en verde incl. `test-local-db` (las fallas locales de patient-files eran ambientales del storage local).

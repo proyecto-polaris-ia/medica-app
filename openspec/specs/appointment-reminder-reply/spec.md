@@ -294,48 +294,97 @@ de origen, de modo que no revierta un estado ya terminal.
 
 El manejo de respuestas a recordatorio MUST estar controlado por el feature flag
 `WHATSAPP_REMINDER_REPLY_ENABLED`, cuyo valor por defecto MUST ser apagado
-(`false`). Con el flag apagado, el comportamiento del pipeline MUST ser idéntico
-al actual y MUST NOT procesarse ninguna respuesta a recordatorio.
+(`false`). El punto de enforcement del flag MUST ser la herramienta Eve
+`handle-reminder-reply`. Con el flag apagado, el tool MUST NOT procesar ninguna
+respuesta a recordatorio, MUST NOT modificar ninguna cita y MUST reportar que no
+hay manejo para que Eve continúe conversacionalmente.
 
-#### Scenario: Flag apagado conserva el comportamiento actual
+#### Scenario: Flag apagado deshabilita el manejo en Eve
 
 - GIVEN `WHATSAPP_REMINDER_REPLY_ENABLED` ausente o con valor `false`
-- WHEN llega una confirmación a un recordatorio elegible
-- THEN el sistema MUST NOT procesarla como respuesta a recordatorio
-- AND el comportamiento del pipeline MUST permanecer igual al actual
+- WHEN Eve invoca `handle-reminder-reply` para una respuesta elegible
+- THEN el tool MUST retornar sin procesar la respuesta (`handled: false`)
+- AND el sistema MUST NOT modificar ninguna cita
+- AND Eve MUST continuar la conversación sin acuse de recordatorio
 
 #### Scenario: Flag encendido habilita el manejo
 
 - GIVEN `WHATSAPP_REMINDER_REPLY_ENABLED=true`
-- WHEN llega una confirmación a un recordatorio elegible
-- THEN el sistema MUST procesarla como respuesta a recordatorio
+- WHEN Eve invoca `handle-reminder-reply` para una respuesta elegible
+- THEN el tool MUST procesarla como respuesta a recordatorio
 
-### Requirement: Precedencia de la sesión de flow engine activa
+### Requirement: Precedencia de la respuesta a recordatorio en Eve
 
-Conforme a la regla de precedencia de `flow-engine`, cuando existe una sesión de
-flow engine activa y no expirada para la conversación, el manejo de respuestas a
-recordatorio MUST NOT ejecutarse, MUST NOT modificar ninguna cita y MUST ceder el
-mensaje al flujo en curso. Una sesión completa o expirada MUST NOT bloquear el
-manejo de respuestas a recordatorio.
+Cuando un mensaje entrante pueda ser respuesta a un recordatorio (afirmación o
+cancelación breve como "1", "sí", "confirmo", "no puedo", "cancelo"), Eve MUST
+invocar `handle-reminder-reply` antes de responder con cualquier otra
+herramienta o con una respuesta conversacional. Cuando el tool reporte que
+manejó el mensaje (`handled: true`), Eve MUST transmitir el `responseText`
+retornado tal cual y MUST NOT aplicar otras herramientas de escritura a ese
+mismo mensaje. Cuando el tool reporte que no hay manejo (`handled: false`), Eve
+MAY continuar con el resto de la conversación.
 
-#### Scenario: Sesión activa impide la transición de recordatorio
+#### Scenario: Respuesta breve a recordatorio tiene precedencia
 
-- GIVEN una conversación con una sesión de flow engine activa y no expirada
-- AND una cita elegible con recordatorio reciente para ese teléfono
-- WHEN el paciente envía "1"
-- THEN el sistema MUST NOT aplicar la transición de recordatorio
-- AND el sistema MUST NOT modificar la cita elegible
+- GIVEN una cita elegible con recordatorio enviado hace menos de 36 horas
+- WHEN el paciente responde "1" desde el teléfono de la cita
+- THEN Eve MUST invocar `handle-reminder-reply` antes de cualquier otra acción
+- AND Eve MUST transmitir el `responseText` retornado tal cual
 
-#### Scenario: La reserva en curso no se interrumpe
+#### Scenario: Mensaje no relacionado no dispara el manejo
 
-- GIVEN una reserva en curso con una sesión de flow engine activa
-- WHEN llega un mensaje que coincide con una confirmación de recordatorio
-- THEN el flujo de reserva MUST continuar
-- AND el sistema MUST NOT confirmar ninguna cita existente por esa respuesta
+- GIVEN el paciente pregunta algo ajeno a la cita (por ejemplo, precios o
+  horarios generales)
+- WHEN Eve evalúa el mensaje
+- THEN Eve MUST NOT forzar el uso de `handle-reminder-reply`
+- AND Eve MAY responder con las herramientas correspondientes
 
-#### Scenario: Sesión expirada no bloquea el manejo
+#### Scenario: Manejo ejecutado excluye otras escrituras del mismo mensaje
 
-- GIVEN una conversación cuya sesión de flow engine está completa o expirada
-- AND una cita elegible con recordatorio reciente
-- WHEN el paciente responde "1"
-- THEN el sistema MAY aplicar el manejo de respuesta a recordatorio
+- GIVEN `handle-reminder-reply` retornó `handled: true` con `outcome:
+  confirmation`
+- WHEN Eve responde al paciente
+- THEN Eve MUST NOT invocar `book-appointment` ni `reschedule-appointment`
+  derivadas de ese mismo mensaje
+- AND el acuse MUST corresponder al `responseText` del tool
+
+### Requirement: Herramienta Eve de respuesta a recordatorio
+
+Eve MUST exponer la herramienta `handle-reminder-reply` que, dado el teléfono
+confiable del remitente y el texto del mensaje, ejecute la detección
+determinista de respuestas a recordatorio (`classifyReminderReply` +
+`handleReminderReply`) y retorne `{ success, handled, outcome, responseText,
+needsHuman }`. El tool MUST usar el teléfono confiable del canal (`ctx`) y MUST
+NOT aceptar un teléfono declarado por el paciente como identidad. El tool MUST
+NOT enviar WhatsApps por sí mismo: la respuesta y el envío los maneja Eve. Los
+errores de I/O MUST retornarse como `success: false` sin lanzar excepciones al
+agente.
+
+#### Scenario: Confirmación elegible retorna manejo con acuse
+
+- GIVEN una cita en estado `requested` o `pending` con recordatorio reciente
+- WHEN Eve invoca `handle-reminder-reply` y el paciente respondió "sí"
+- THEN el tool MUST retornar `handled: true` con `outcome: confirmation`
+- AND `responseText` MUST contener la fecha y hora reales de la cita
+
+#### Scenario: Ambigüedad clínica escala sin tocar el estado
+
+- GIVEN una respuesta elegible que mezcla la confirmación con una señal clínica
+  ("sí, pero me duele")
+- WHEN Eve invoca `handle-reminder-reply`
+- THEN el tool MUST retornar `outcome: ambiguous` con `needsHuman: true`
+- AND el sistema MUST NOT modificar el estado de la cita
+
+#### Scenario: Teléfono no confiable es rechazado
+
+- GIVEN un contexto sin `trustedContactSource: whatsapp` y `trustedPatientPhone`
+- WHEN Eve invoca `handle-reminder-reply`
+- THEN el tool MUST retornar `success: false` sin ejecutar detección ni
+  modificar citas
+
+#### Scenario: Error de infraestructura se surfacea sin romper la sesión
+
+- GIVEN una falla de Supabase al consultar recordatorios
+- WHEN Eve invoca `handle-reminder-reply`
+- THEN el tool MUST retornar `success: false` con un mensaje de error
+- AND Eve MUST ofrecer escalación a humano en lugar de confirmar la cita
