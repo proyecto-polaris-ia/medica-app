@@ -7,8 +7,7 @@ export default {
   project: "medica-app",
   checks: {
     types: true,
-    // No eslint config in this project yet — enable once eslint is set up.
-    lint: false,
+    lint: true,
     deadCode: true,
     audit: true,
     secrets: true,

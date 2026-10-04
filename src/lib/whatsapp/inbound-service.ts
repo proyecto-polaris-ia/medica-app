@@ -499,7 +499,7 @@ async function processWithLegacy(
   const decision = event.messageType === 'text' && event.body ? await (options.agent ?? decideWhatsAppInboundMessage)({ messageText: event.body, contact: { id: persisted.contactId, phone: event.fromPhone, profileName: event.profileName }, conversation: { id: persisted.conversationId, bookingContext: conversation.bookingContext, lastIntent: conversation.lastIntent, recentMessages }, bookingCatalog }, { provider: options.agentProvider, knowledgeEntries: options.knowledgeEntries, observabilityContext: options.observabilityContext }) : unsupportedDecision(event);
 
   let finalDecision = decision;
-  let action: WhatsAppInboundEventResult['action'] = decision.decision;
+  const action: WhatsAppInboundEventResult['action'] = decision.decision;
   let booked = false;
 
   if (decision.decision === 'tool_action' && decision.toolAction) {
