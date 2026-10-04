@@ -1,153 +1,252 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import {
+  acquireDbSuiteLock,
+  applyLocalDbEnv,
+  localDbEnabled,
+  releaseDbSuiteLock,
+  truncateAllTables,
+} from '@/test-utils/local-db';
 import { getSupabaseAdmin } from '@/lib/supabase/server';
+import { createPatient } from '../patients';
+import { createProvider } from '../providers';
+import { createPayment, reversePayment } from '../payments';
 import {
   getPatientReceivableSummary,
   listAccountsReceivable,
 } from '../accounts-receivable';
+import { ValidationError } from '../validate';
+import type { TreatmentPlanStatus } from '../types';
 
-vi.mock('@/lib/supabase/server', () => ({
-  getSupabaseAdmin: vi.fn(),
-}));
+/**
+ * Suite contra Supabase local (ver openspec/changes/supabase-local-testing).
+ * Corre solo con `npm run test:local` (SUPABASE_LOCAL=1 + supabase start);
+ * con `npm run test` regular se omite.
+ */
+const d = localDbEnabled ? describe : describe.skip;
 
-const PATIENT_ID = '550e8400-e29b-41d4-a716-446655440000';
-const OTHER_PATIENT_ID = '550e8400-e29b-41d4-a716-446655440001';
-const PLAN_ID = '660e8400-e29b-41d4-a716-446655440000';
-const SECOND_PLAN_ID = '660e8400-e29b-41d4-a716-446655440001';
 const NOW = new Date('2026-09-30T12:00:00.000Z');
 
-type QueryResult = { data: Record<string, unknown>[]; error: { message?: string } | null };
+// Las suites de datos se serializan con un advisory lock (ver
+// src/test-utils/local-db.ts) porque vitest corre los archivos en paralelo
+// y todas truncan el esquema `public`.
 
-function buildQuery() {
-  const query: {
-    select: ReturnType<typeof vi.fn>;
-    eq: ReturnType<typeof vi.fn>;
-    in: ReturnType<typeof vi.fn>;
-    is: ReturnType<typeof vi.fn>;
-    order: ReturnType<typeof vi.fn>;
-    _result: QueryResult;
-  } = {
-    select: vi.fn().mockReturnThis(),
-    eq: vi.fn().mockReturnThis(),
-    in: vi.fn().mockReturnThis(),
-    is: vi.fn().mockReturnThis(),
-    order: vi.fn(),
-    _result: { data: [], error: null },
-  };
-  query.order.mockImplementation(() => Promise.resolve(query._result));
-  return query;
-}
+d('accounts receivable data layer', () => {
+  beforeAll(async () => {
+    applyLocalDbEnv();
+    await acquireDbSuiteLock();
+  });
 
-type Query = ReturnType<typeof buildQuery>;
+  afterAll(async () => {
+    await releaseDbSuiteLock();
+  });
 
-function mockClientByTable(queues: Record<string, Query[]>) {
-  const from = vi.fn((table: string) => {
-    const query = queues[table]?.shift();
-    if (!query) {
-      throw new Error(`Unexpected table query: ${table}`);
+  beforeEach(async () => {
+    await truncateAllTables();
+  });
+
+  const iso = (value: string) => new Date(value).toISOString();
+
+  /** Fixtures deterministas vía funciones de dominio (patient/provider/payment). */
+  async function seedPatient(
+    fullName = 'María López',
+    phoneE164 = '+5215512345678'
+  ) {
+    return createPatient({ fullName, phoneE164 });
+  }
+
+  async function seedProvider(name = 'Dra. Ana') {
+    return createProvider({ name });
+  }
+
+  /**
+   * Inserción directa de planes con valores explícitos. Las funciones de
+   * dominio no permiten fijar `total_amount`, `accepted_at` ni `created_at`
+   * (el monto sale de los ítems y las fechas del reloj real), y estos tests
+   * dependen de esos tres valores para ser deterministas. `patient_id` y
+   * `provider_id` sí vienen de las funciones de dominio.
+   */
+  async function insertPlan(input: {
+    patientId: string;
+    providerId: string;
+    name?: string;
+    status?: TreatmentPlanStatus;
+    totalAmount: number;
+    acceptedAt?: string | null;
+    createdAt?: string;
+  }): Promise<string> {
+    const { data, error } = await getSupabaseAdmin()
+      .from('treatment_plans')
+      .insert({
+        patient_id: input.patientId,
+        provider_id: input.providerId,
+        name: input.name ?? 'Ortodoncia',
+        status: input.status ?? 'accepted',
+        total_amount: input.totalAmount,
+        accepted_at: input.acceptedAt ?? null,
+        created_at: input.createdAt ?? new Date().toISOString(),
+      })
+      .select('id')
+      .single();
+    if (error || !data) {
+      throw new Error(error?.message ?? 'Failed to insert treatment plan');
     }
-    return query;
-  });
-  (getSupabaseAdmin as ReturnType<typeof vi.fn>).mockReturnValue({ from });
-  return { from };
-}
+    return data.id as string;
+  }
 
-function planRow(overrides: Record<string, unknown> = {}) {
-  return {
-    id: PLAN_ID,
-    patient_id: PATIENT_ID,
-    name: 'Ortodoncia',
-    status: 'accepted',
-    total_amount: 1000,
-    accepted_at: '2026-08-30T12:00:00.000Z',
-    created_at: '2026-08-01T12:00:00.000Z',
-    ...overrides,
-  };
-}
+  async function addPayment(input: {
+    patientId: string;
+    treatmentPlanId?: string | null;
+    amount: number;
+    paidAt: string;
+    method?: 'cash' | 'card' | 'transfer' | 'other';
+  }) {
+    return createPayment(
+      input.patientId,
+      {
+        treatmentPlanId: input.treatmentPlanId ?? null,
+        amount: input.amount,
+        method: input.method ?? 'cash',
+        paidAt: input.paidAt,
+      },
+      null
+    );
+  }
 
-function paymentRow(overrides: Record<string, unknown> = {}) {
-  return {
-    id: '770e8400-e29b-41d4-a716-446655440000',
-    patient_id: PATIENT_ID,
-    treatment_plan_id: PLAN_ID,
-    amount: 250,
-    paid_at: '2026-09-20T10:00:00.000Z',
-    voided_at: null,
-    ...overrides,
-  };
-}
-
-function patientRow(overrides: Record<string, unknown> = {}) {
-  return {
-    id: PATIENT_ID,
-    full_name: 'María López',
-    phone_e164: '+5215512345678',
-    ...overrides,
-  };
-}
-
-function setupSummaryQueries(plans: Record<string, unknown>[], payments: Record<string, unknown>[]) {
-  const plansQuery = buildQuery();
-  plansQuery._result = { data: plans, error: null };
-  const paymentsQuery = buildQuery();
-  paymentsQuery._result = { data: payments, error: null };
-  mockClientByTable({ treatment_plans: [plansQuery], payments: [paymentsQuery] });
-  return { plansQuery, paymentsQuery };
-}
-
-describe('accounts receivable data layer', () => {
-  beforeEach(() => {
-    vi.resetAllMocks();
-  });
+  async function readPaymentRow(
+    paymentId: string
+  ): Promise<Record<string, unknown>> {
+    const { data, error } = await getSupabaseAdmin()
+      .from('payments')
+      .select('id, voided_at')
+      .eq('id', paymentId)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    if (!data) throw new Error(`Payment row ${paymentId} not found`);
+    return data as Record<string, unknown>;
+  }
 
   it('keeps the full global balance when a patient has eligible plans without payments', async () => {
-    setupSummaryQueries([planRow({ total_amount: 1500 })], []);
+    const patient = await seedPatient();
+    const provider = await seedProvider();
+    await insertPlan({
+      patientId: patient.id,
+      providerId: provider.id,
+      totalAmount: 1500,
+      acceptedAt: '2026-08-30T12:00:00Z',
+      createdAt: '2026-08-01T12:00:00Z',
+    });
 
-    const summary = await getPatientReceivableSummary(PATIENT_ID, { now: NOW });
+    const summary = await getPatientReceivableSummary(patient.id, { now: NOW });
 
     expect(summary.totalEligibleAmount).toBe(1500);
     expect(summary.paidAmount).toBe(0);
     expect(summary.balance).toBe(1500);
     expect(summary.creditAmount).toBe(0);
+    expect(summary.lastPaymentAt).toBeNull();
+    expect(summary.planBalances).toHaveLength(1);
   });
 
   it('reduces the global balance with linked and unallocated active payments', async () => {
-    setupSummaryQueries(
-      [planRow({ total_amount: 1500 })],
-      [paymentRow({ amount: 300 }), paymentRow({ treatment_plan_id: null, amount: 200 })]
-    );
+    const patient = await seedPatient();
+    const provider = await seedProvider();
+    const plan = await insertPlan({
+      patientId: patient.id,
+      providerId: provider.id,
+      totalAmount: 1500,
+      acceptedAt: '2026-08-30T12:00:00Z',
+      createdAt: '2026-08-01T12:00:00Z',
+    });
+    await addPayment({
+      patientId: patient.id,
+      treatmentPlanId: plan,
+      amount: 300,
+      paidAt: '2026-09-20T10:00:00Z',
+    });
+    await addPayment({
+      patientId: patient.id,
+      amount: 200,
+      paidAt: '2026-09-21T10:00:00Z',
+      method: 'transfer',
+    });
 
-    const summary = await getPatientReceivableSummary(PATIENT_ID, { now: NOW });
+    const summary = await getPatientReceivableSummary(patient.id, { now: NOW });
 
     expect(summary.paidAmount).toBe(500);
     expect(summary.unallocatedPaidAmount).toBe(200);
     expect(summary.balance).toBe(1000);
     expect(summary.planBalances[0].paidAmount).toBe(300);
     expect(summary.planBalances[0].balance).toBe(1200);
+    // `lastPaymentAt` es el pago activo más reciente.
+    expect(iso(summary.lastPaymentAt as string)).toBe('2026-09-21T10:00:00.000Z');
   });
 
   it('excludes reversed payments from derived balances', async () => {
-    const { paymentsQuery } = setupSummaryQueries(
-      [planRow({ total_amount: 1500 })],
-      [paymentRow({ amount: 500, voided_at: '2026-09-21T10:00:00.000Z' })]
-    );
+    const patient = await seedPatient();
+    const provider = await seedProvider();
+    const plan = await insertPlan({
+      patientId: patient.id,
+      providerId: provider.id,
+      totalAmount: 1500,
+      acceptedAt: '2026-08-30T12:00:00Z',
+      createdAt: '2026-08-01T12:00:00Z',
+    });
+    const payment = await addPayment({
+      patientId: patient.id,
+      treatmentPlanId: plan,
+      amount: 500,
+      paidAt: '2026-09-20T10:00:00Z',
+    });
+    await reversePayment(payment.id, { reason: 'Captura duplicada' }, null);
 
-    const summary = await getPatientReceivableSummary(PATIENT_ID, { now: NOW });
+    const summary = await getPatientReceivableSummary(patient.id, { now: NOW });
 
-    expect(paymentsQuery.is).toHaveBeenCalledWith('voided_at', null);
+    expect(summary.paidAmount).toBe(0);
     expect(summary.balance).toBe(1500);
+    expect(summary.planBalances[0].paidAmount).toBe(0);
+    // La fila sigue existiendo, solo queda excluida por `voided_at`.
+    const row = await readPaymentRow(payment.id);
+    expect(row.voided_at).toBeTruthy();
   });
 
   it('includes only eligible plan statuses and excludes draft, presented, and cancelled plans', async () => {
-    setupSummaryQueries(
-      [
-        planRow({ id: 'accepted-plan', status: 'accepted', total_amount: 100 }),
-        planRow({ id: 'progress-plan', status: 'in_progress', total_amount: 200 }),
-        planRow({ id: 'completed-plan', status: 'completed', total_amount: 300 }),
-      ],
-      []
-    );
+    const patient = await seedPatient();
+    const provider = await seedProvider();
+    // Excluidos: llevan un monto imposible de confundir (999 cada uno).
+    for (const [index, status] of (
+      ['draft', 'presented', 'cancelled'] as TreatmentPlanStatus[]
+    ).entries()) {
+      await insertPlan({
+        patientId: patient.id,
+        providerId: provider.id,
+        status,
+        totalAmount: 999,
+        createdAt: `2026-08-0${index + 1}T12:00:00Z`,
+      });
+    }
+    // Elegibles, con `created_at` descendente para ordenar la salida.
+    await insertPlan({
+      patientId: patient.id,
+      providerId: provider.id,
+      status: 'completed',
+      totalAmount: 300,
+      createdAt: '2026-09-01T12:00:00Z',
+    });
+    await insertPlan({
+      patientId: patient.id,
+      providerId: provider.id,
+      status: 'in_progress',
+      totalAmount: 200,
+      createdAt: '2026-09-02T12:00:00Z',
+    });
+    await insertPlan({
+      patientId: patient.id,
+      providerId: provider.id,
+      status: 'accepted',
+      totalAmount: 100,
+      createdAt: '2026-09-03T12:00:00Z',
+    });
 
-    const summary = await getPatientReceivableSummary(PATIENT_ID, { now: NOW });
+    const summary = await getPatientReceivableSummary(patient.id, { now: NOW });
 
     expect(summary.totalEligibleAmount).toBe(600);
     expect(summary.planBalances.map((plan) => plan.status)).toEqual([
@@ -155,27 +254,53 @@ describe('accounts receivable data layer', () => {
       'in_progress',
       'completed',
     ]);
+    expect(summary.planBalances.map((plan) => plan.totalAmount)).toEqual([
+      100, 200, 300,
+    ]);
   });
 
   it('does not apply unallocated payments to individual plan balances', async () => {
-    setupSummaryQueries(
-      [planRow({ total_amount: 1000 })],
-      [paymentRow({ treatment_plan_id: null, amount: 250 })]
-    );
+    const patient = await seedPatient();
+    const provider = await seedProvider();
+    await insertPlan({
+      patientId: patient.id,
+      providerId: provider.id,
+      totalAmount: 1000,
+      acceptedAt: '2026-08-30T12:00:00Z',
+      createdAt: '2026-08-01T12:00:00Z',
+    });
+    await addPayment({
+      patientId: patient.id,
+      amount: 250,
+      paidAt: '2026-09-20T10:00:00Z',
+    });
 
-    const summary = await getPatientReceivableSummary(PATIENT_ID, { now: NOW });
+    const summary = await getPatientReceivableSummary(patient.id, { now: NOW });
 
     expect(summary.balance).toBe(750);
+    expect(summary.unallocatedPaidAmount).toBe(250);
     expect(summary.planBalances[0].balance).toBe(1000);
+    expect(summary.planBalances[0].paidAmount).toBe(0);
   });
 
   it('shows global and plan credits when active payments exceed eligible totals', async () => {
-    setupSummaryQueries(
-      [planRow({ total_amount: 1000 })],
-      [paymentRow({ amount: 1200 })]
-    );
+    const patient = await seedPatient();
+    const provider = await seedProvider();
+    const plan = await insertPlan({
+      patientId: patient.id,
+      providerId: provider.id,
+      totalAmount: 1000,
+      acceptedAt: '2026-08-30T12:00:00Z',
+      createdAt: '2026-08-01T12:00:00Z',
+    });
+    await addPayment({
+      patientId: patient.id,
+      treatmentPlanId: plan,
+      amount: 1200,
+      paidAt: '2026-09-20T10:00:00Z',
+    });
 
-    const summary = await getPatientReceivableSummary(PATIENT_ID, { now: NOW });
+    const summary = await getPatientReceivableSummary(patient.id, { now: NOW });
 
     expect(summary.balance).toBe(-200);
     expect(summary.creditAmount).toBe(200);
@@ -183,46 +308,90 @@ describe('accounts receivable data layer', () => {
   });
 
   it('preserves cent precision and exact zero balances', async () => {
-    setupSummaryQueries(
-      [
-        planRow({ id: PLAN_ID, total_amount: 301.5 }),
-        planRow({ id: SECOND_PLAN_ID, total_amount: 500 }),
-      ],
-      [
-        paymentRow({ treatment_plan_id: PLAN_ID, amount: 100.25 }),
-        paymentRow({ treatment_plan_id: PLAN_ID, amount: 50.1 }),
-        paymentRow({ treatment_plan_id: SECOND_PLAN_ID, amount: 300 }),
-        paymentRow({ treatment_plan_id: SECOND_PLAN_ID, amount: 200 }),
-      ]
+    const patient = await seedPatient();
+    const provider = await seedProvider();
+    const firstPlan = await insertPlan({
+      patientId: patient.id,
+      providerId: provider.id,
+      totalAmount: 301.5,
+      acceptedAt: '2026-08-30T12:00:00Z',
+      createdAt: '2026-08-01T12:00:00Z',
+    });
+    const secondPlan = await insertPlan({
+      patientId: patient.id,
+      providerId: provider.id,
+      totalAmount: 500,
+      acceptedAt: '2026-08-30T12:00:00Z',
+      createdAt: '2026-08-02T12:00:00Z',
+    });
+    await addPayment({
+      patientId: patient.id,
+      treatmentPlanId: firstPlan,
+      amount: 100.25,
+      paidAt: '2026-09-20T10:00:00Z',
+    });
+    await addPayment({
+      patientId: patient.id,
+      treatmentPlanId: firstPlan,
+      amount: 50.1,
+      paidAt: '2026-09-21T10:00:00Z',
+    });
+    await addPayment({
+      patientId: patient.id,
+      treatmentPlanId: secondPlan,
+      amount: 300,
+      paidAt: '2026-09-22T10:00:00Z',
+    });
+    await addPayment({
+      patientId: patient.id,
+      treatmentPlanId: secondPlan,
+      amount: 200,
+      paidAt: '2026-09-23T10:00:00Z',
+    });
+
+    const summary = await getPatientReceivableSummary(patient.id, { now: NOW });
+
+    expect(
+      summary.planBalances.find((plan) => plan.treatmentPlanId === firstPlan)
+        ?.balance
+    ).toBe(151.15);
+    const secondBalance = summary.planBalances.find(
+      (plan) => plan.treatmentPlanId === secondPlan
     );
-
-    const summary = await getPatientReceivableSummary(PATIENT_ID, { now: NOW });
-
-    expect(summary.planBalances.find((plan) => plan.treatmentPlanId === PLAN_ID)?.balance).toBe(151.15);
-    expect(summary.planBalances.find((plan) => plan.treatmentPlanId === SECOND_PLAN_ID)?.balance).toBe(0);
+    expect(secondBalance?.balance).toBe(0);
+    expect(secondBalance?.isPastDue).toBe(false);
+    // 801.50 total elegible - 650.35 pagado.
+    expect(summary.balance).toBe(151.15);
   });
 
   it('marks past due plans from accepted_at and falls back to created_at when accepted_at is missing', async () => {
-    setupSummaryQueries(
-      [
-        planRow({ id: PLAN_ID, accepted_at: '2026-08-30T12:00:00.000Z' }),
-        planRow({
-          id: SECOND_PLAN_ID,
-          accepted_at: null,
-          created_at: '2026-08-16T12:00:00.000Z',
-        }),
-      ],
-      []
-    );
+    const patient = await seedPatient();
+    const provider = await seedProvider();
+    const acceptedPlan = await insertPlan({
+      patientId: patient.id,
+      providerId: provider.id,
+      totalAmount: 1000,
+      acceptedAt: '2026-08-30T12:00:00Z',
+      createdAt: '2026-09-01T12:00:00Z',
+    });
+    const createdPlan = await insertPlan({
+      patientId: patient.id,
+      providerId: provider.id,
+      totalAmount: 500,
+      acceptedAt: null,
+      createdAt: '2026-08-16T12:00:00Z',
+    });
 
-    const summary = await getPatientReceivableSummary(PATIENT_ID, { now: NOW });
+    const summary = await getPatientReceivableSummary(patient.id, { now: NOW });
 
     expect(summary.planBalances[0]).toMatchObject({
+      treatmentPlanId: acceptedPlan,
       baseDateSource: 'accepted_at',
       daysPastDue: 31,
       isPastDue: true,
     });
     expect(summary.planBalances[1]).toMatchObject({
+      treatmentPlanId: createdPlan,
       baseDateSource: 'created_at',
       daysPastDue: 45,
       isPastDue: true,
@@ -230,12 +399,23 @@ describe('accounts receivable data layer', () => {
   });
 
   it('uses configurable thresholds and never marks paid plans as past due', async () => {
-    setupSummaryQueries(
-      [planRow({ total_amount: 500, accepted_at: '2026-09-10T12:00:00.000Z' })],
-      [paymentRow({ amount: 500 })]
-    );
+    const patient = await seedPatient();
+    const provider = await seedProvider();
+    const plan = await insertPlan({
+      patientId: patient.id,
+      providerId: provider.id,
+      totalAmount: 500,
+      acceptedAt: '2026-09-10T12:00:00Z',
+      createdAt: '2026-09-10T12:00:00Z',
+    });
+    await addPayment({
+      patientId: patient.id,
+      treatmentPlanId: plan,
+      amount: 500,
+      paidAt: '2026-09-20T10:00:00Z',
+    });
 
-    const paidSummary = await getPatientReceivableSummary(PATIENT_ID, {
+    const paidSummary = await getPatientReceivableSummary(patient.id, {
       now: NOW,
       thresholdDays: 15,
     });
@@ -248,39 +428,70 @@ describe('accounts receivable data layer', () => {
   });
 
   it('lists only patients with positive balances and highlights past due plans', async () => {
-    const plansQuery = buildQuery();
-    plansQuery._result = {
-      data: [
-        planRow({ patient_id: PATIENT_ID, total_amount: 1000, accepted_at: '2026-08-30T12:00:00.000Z' }),
-        planRow({ id: SECOND_PLAN_ID, patient_id: OTHER_PATIENT_ID, total_amount: 500 }),
-      ],
-      error: null,
-    };
-    const paymentsQuery = buildQuery();
-    paymentsQuery._result = {
-      data: [paymentRow({ patient_id: OTHER_PATIENT_ID, treatment_plan_id: SECOND_PLAN_ID, amount: 600 })],
-      error: null,
-    };
-    const patientsQuery = buildQuery();
-    patientsQuery._result = {
-      data: [patientRow(), patientRow({ id: OTHER_PATIENT_ID, full_name: 'Paciente con crédito' })],
-      error: null,
-    };
-    mockClientByTable({
-      treatment_plans: [plansQuery],
-      payments: [paymentsQuery],
-      patients: [patientsQuery],
+    const patient = await seedPatient('María López', '+5215512345678');
+    const creditPatient = await seedPatient(
+      'Paciente con crédito',
+      '+5215599999999'
+    );
+    const higherBalancePatient = await seedPatient(
+      'Carmen Ruiz',
+      '+5215588888888'
+    );
+    const provider = await seedProvider();
+
+    const pastDuePlan = await insertPlan({
+      patientId: patient.id,
+      providerId: provider.id,
+      totalAmount: 1000,
+      acceptedAt: '2026-08-30T12:00:00Z',
+      createdAt: '2026-08-01T12:00:00Z',
+    });
+    const creditPlan = await insertPlan({
+      patientId: creditPatient.id,
+      providerId: provider.id,
+      totalAmount: 500,
+      acceptedAt: '2026-08-30T12:00:00Z',
+      createdAt: '2026-08-02T12:00:00Z',
+    });
+    await addPayment({
+      patientId: creditPatient.id,
+      treatmentPlanId: creditPlan,
+      amount: 600,
+      paidAt: '2026-09-20T10:00:00Z',
+    });
+    await insertPlan({
+      patientId: higherBalancePatient.id,
+      providerId: provider.id,
+      totalAmount: 2000,
+      acceptedAt: '2026-09-01T12:00:00Z',
+      createdAt: '2026-08-03T12:00:00Z',
     });
 
     const rows = await listAccountsReceivable({ now: NOW });
 
-    expect(rows).toHaveLength(1);
-    expect(rows[0]).toMatchObject({
-      patientId: PATIENT_ID,
+    // Orden por balance descendente; el paciente con crédito queda fuera.
+    expect(rows.map((row) => row.patientId)).toEqual([
+      higherBalancePatient.id,
+      patient.id,
+    ]);
+    const row = rows.find((item) => item.patientId === patient.id);
+    expect(row).toMatchObject({
+      patientId: patient.id,
       patientName: 'María López',
+      patientPhoneE164: '+5215512345678',
       balance: 1000,
     });
-    expect(rows[0].pastDuePlans).toHaveLength(1);
-    expect(rows[0].pastDuePlans[0].isPastDue).toBe(true);
+    expect(row?.pastDuePlans).toHaveLength(1);
+    expect(row?.pastDuePlans[0]).toMatchObject({
+      treatmentPlanId: pastDuePlan,
+      isPastDue: true,
+    });
+    expect(rows.find((item) => item.patientId === creditPatient.id)).toBeUndefined();
+  });
+
+  it('throws ValidationError for an invalid patient id', async () => {
+    await expect(
+      getPatientReceivableSummary('bad-id', { now: NOW })
+    ).rejects.toThrow(ValidationError);
   });
 });

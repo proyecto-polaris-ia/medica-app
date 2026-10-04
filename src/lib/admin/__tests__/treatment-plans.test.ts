@@ -1,5 +1,14 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import {
+  acquireDbSuiteLock,
+  applyLocalDbEnv,
+  localDbEnabled,
+  releaseDbSuiteLock,
+  truncateAllTables,
+} from '@/test-utils/local-db';
 import { getSupabaseAdmin } from '@/lib/supabase/server';
+import { createPatient } from '../patients';
+import { createProvider } from '../providers';
 import {
   listTreatmentPlans,
   getTreatmentPlan,
@@ -14,121 +23,156 @@ import {
 } from '../treatment-plans';
 import { NotFoundError, ConflictError } from '../errors';
 import { ValidationError } from '../validate';
+import type { TreatmentPlan, TreatmentPlanStatus } from '../types';
 
-vi.mock('@/lib/supabase/server', () => ({
-  getSupabaseAdmin: vi.fn(),
-}));
+/**
+ * Suite contra Supabase local (ver openspec/changes/supabase-local-testing).
+ * Corre solo con `npm run test:local` (SUPABASE_LOCAL=1 + supabase start);
+ * con `npm run test` regular se omite.
+ */
+const d = localDbEnabled ? describe : describe.skip;
 
-const PATIENT_ID = '550e8400-e29b-41d4-a716-446655440000';
-const PLAN_ID = '660e8400-e29b-41d4-a716-446655440000';
-const PROVIDER_ID = '770e8400-e29b-41d4-a716-446655440000';
-const CLINICAL_VISIT_ID = '880e8400-e29b-41d4-a716-446655440000';
-const SERVICE_ID = '990e8400-e29b-41d4-a716-446655440000';
-const ITEM_ID = 'aa0e8400-e29b-41d4-a716-446655440000';
+// UUID válido sin fila asociada (los errores PGRST116 / 0 filas son reales).
+const MISSING_ID = '00000000-0000-4000-8000-00000000dead';
 
-function buildQuery() {
-  const mockSelect = vi.fn();
-  const mockInsert = vi.fn();
-  const mockUpdate = vi.fn();
-  const mockDelete = vi.fn();
-  const mockEq = vi.fn();
-  const mockOrder = vi.fn();
-  const mockSingle = vi.fn();
+// Las suites de datos se serializan con un advisory lock (ver
+// src/test-utils/local-db.ts) porque vitest corre los archivos en paralelo
+// y todas truncan el esquema `public`.
 
-  const query = {
-    select: mockSelect.mockReturnThis(),
-    insert: mockInsert.mockReturnThis(),
-    update: mockUpdate.mockReturnThis(),
-    delete: mockDelete.mockReturnThis(),
-    eq: mockEq.mockReturnThis(),
-    order: mockOrder.mockReturnThis(),
-    single: mockSingle,
-    _mocks: {
-      mockSelect,
-      mockInsert,
-      mockUpdate,
-      mockDelete,
-      mockEq,
-      mockOrder,
-      mockSingle,
-    },
-  };
-  return query;
-}
-
-function planRow(overrides: Record<string, unknown> = {}) {
-  return {
-    id: PLAN_ID,
-    patient_id: PATIENT_ID,
-    provider_id: PROVIDER_ID,
-    clinical_visit_id: null,
-    name: 'Plan A',
-    status: 'draft',
-    total_amount: 0,
-    accepted_at: null,
-    notes: null,
-    created_at: '2026-09-01T10:00:00Z',
-    updated_at: '2026-09-01T10:00:00Z',
-    ...overrides,
-  };
-}
-
-function itemRow(overrides: Record<string, unknown> = {}) {
-  return {
-    id: ITEM_ID,
-    treatment_plan_id: PLAN_ID,
-    description: 'Restauración',
-    service_id: null,
-    tooth: '11',
-    quantity: 1,
-    unit_price: 100.5,
-    status: 'pending',
-    created_at: '2026-09-01T10:00:00Z',
-    updated_at: '2026-09-01T10:00:00Z',
-    ...overrides,
-  };
-}
-
-function mockClient(query: ReturnType<typeof buildQuery>) {
-  (getSupabaseAdmin as ReturnType<typeof vi.fn>).mockReturnValue({
-    from: vi.fn().mockReturnValue(query),
+d('treatment-plans data layer', () => {
+  beforeAll(async () => {
+    applyLocalDbEnv();
+    await acquireDbSuiteLock();
   });
-}
 
-describe('treatment-plans data layer', () => {
-  beforeEach(() => {
-    vi.resetAllMocks();
+  afterAll(async () => {
+    await releaseDbSuiteLock();
   });
+
+  beforeEach(async () => {
+    await truncateAllTables();
+  });
+
+  /** Fixtures deterministas vía funciones de dominio. */
+  async function seedPatientAndProvider() {
+    const patient = await createPatient({
+      fullName: 'Juan Pérez',
+      phoneE164: '+5215512345678',
+    });
+    const provider = await createProvider({ name: 'Dra. Ana' });
+    return { patient, provider };
+  }
+
+  async function seedDraftPlan(name = 'Plan A') {
+    const { patient, provider } = await seedPatientAndProvider();
+    const plan = await createTreatmentPlan(patient.id, {
+      providerId: provider.id,
+      name,
+    });
+    return { patient, provider, plan };
+  }
+
+  /**
+   * Camino de transiciones válido para llegar a cada estado; los planes se
+   * siembran con las funciones de dominio (no hay inserción directa de estado).
+   */
+  const TRANSITION_PATH: Record<TreatmentPlanStatus, TreatmentPlanStatus[]> = {
+    draft: [],
+    presented: ['presented'],
+    accepted: ['presented', 'accepted'],
+    in_progress: ['presented', 'accepted', 'in_progress'],
+    completed: ['presented', 'accepted', 'in_progress', 'completed'],
+    cancelled: ['cancelled'],
+  };
+
+  async function seedPlanInStatus(status: TreatmentPlanStatus) {
+    const { patient, provider, plan } = await seedDraftPlan();
+    let current: TreatmentPlan = plan;
+    for (const next of TRANSITION_PATH[status]) {
+      current = await updateTreatmentPlan(plan.id, { status: next });
+    }
+    expect(current.status).toBe(status);
+    return { patient, provider, plan: current };
+  }
+
+  /** Lectura cruda: las columnas del mapper no cubren `accepted_at` en todos los casos. */
+  async function readPlanRow(
+    planId: string
+  ): Promise<Record<string, unknown> | null> {
+    const { data, error } = await getSupabaseAdmin()
+      .from('treatment_plans')
+      .select('*')
+      .eq('id', planId)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    return (data as Record<string, unknown> | null) ?? null;
+  }
+
+  async function readItemRow(
+    itemId: string
+  ): Promise<Record<string, unknown> | null> {
+    const { data, error } = await getSupabaseAdmin()
+      .from('treatment_plan_items')
+      .select('*')
+      .eq('id', itemId)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    return (data as Record<string, unknown> | null) ?? null;
+  }
+
+  async function listItemRows(
+    planId: string
+  ): Promise<Record<string, unknown>[]> {
+    const { data, error } = await getSupabaseAdmin()
+      .from('treatment_plan_items')
+      .select('id, status, unit_price')
+      .eq('treatment_plan_id', planId);
+    if (error) throw new Error(error.message);
+    return (data ?? []) as Record<string, unknown>[];
+  }
 
   describe('listTreatmentPlans', () => {
     it('returns mapped plans sorted by created_at descending', async () => {
-      const query = buildQuery();
-      query._mocks.mockOrder.mockResolvedValue({
-        data: [
-          planRow({ id: 'plan-2', created_at: '2026-09-03T10:00:00Z' }),
-          planRow({ id: 'plan-1', created_at: '2026-09-02T10:00:00Z' }),
-        ],
-        error: null,
+      const { patient, provider } = await seedPatientAndProvider();
+      // Creación secuencial: el orden depende de `created_at` real.
+      const first = await createTreatmentPlan(patient.id, {
+        providerId: provider.id,
+        name: 'Primer plan',
       });
-      mockClient(query);
-
-      const plans = await listTreatmentPlans(PATIENT_ID);
-
-      expect(plans.map((p) => p.id)).toEqual(['plan-2', 'plan-1']);
-      expect(query._mocks.mockEq).toHaveBeenCalledWith('patient_id', PATIENT_ID);
-      expect(query._mocks.mockOrder).toHaveBeenCalledWith('created_at', {
-        ascending: false,
+      const second = await createTreatmentPlan(patient.id, {
+        providerId: provider.id,
+        name: 'Segundo plan',
       });
+
+      const plans = await listTreatmentPlans(patient.id);
+
+      expect(plans.map((p) => p.id)).toEqual([second.id, first.id]);
+      expect(plans[0]).toMatchObject({
+        id: second.id,
+        patientId: patient.id,
+        providerId: provider.id,
+        clinicalVisitId: null,
+        name: 'Segundo plan',
+        status: 'draft',
+        totalAmount: 0,
+        acceptedAt: null,
+        notes: null,
+      });
+      expect(plans[0].createdAt).toBeTruthy();
     });
 
-    it('returns an empty array when no plans exist', async () => {
-      const query = buildQuery();
-      query._mocks.mockOrder.mockResolvedValue({ data: [], error: null });
-      mockClient(query);
+    it('filters by patient and returns an empty array when the patient has no plans', async () => {
+      const { patient, provider } = await seedPatientAndProvider();
+      await createTreatmentPlan(patient.id, {
+        providerId: provider.id,
+        name: 'Plan A',
+      });
+      const other = await createPatient({
+        fullName: 'Ana López',
+        phoneE164: '+5215598765432',
+      });
 
-      const plans = await listTreatmentPlans(PATIENT_ID);
-
-      expect(plans).toEqual([]);
+      expect(await listTreatmentPlans(other.id)).toEqual([]);
     });
 
     it('throws ValidationError for an invalid patient id', async () => {
@@ -137,41 +181,45 @@ describe('treatment-plans data layer', () => {
   });
 
   describe('getTreatmentPlan', () => {
-    it('returns a plan with its items', async () => {
-      const query = buildQuery();
-      query._mocks.mockSingle.mockResolvedValue({
-        data: planRow(),
-        error: null,
+    it('returns a plan with its items ordered by creation', async () => {
+      const { patient, provider, plan } = await seedDraftPlan();
+      const firstItem = await createTreatmentPlanItem(plan.id, {
+        description: 'Restauración',
+        unitPrice: 100.5,
+        quantity: 2,
+        tooth: '11',
       });
-      query._mocks.mockOrder.mockResolvedValue({
-        data: [itemRow()],
-        error: null,
+      const secondItem = await createTreatmentPlanItem(plan.id, {
+        description: 'Limpieza',
+        unitPrice: 50,
       });
-      mockClient(query);
 
-      const plan = await getTreatmentPlan(PLAN_ID);
+      const fetched = await getTreatmentPlan(plan.id);
 
-      expect(plan.id).toBe(PLAN_ID);
-      expect(plan.status).toBe('draft');
-      expect(plan.items).toHaveLength(1);
-      expect(plan.items[0].description).toBe('Restauración');
-      expect(plan.items[0].unitPrice).toBe(100.5);
-      expect(query._mocks.mockEq).toHaveBeenCalledWith('id', PLAN_ID);
-      expect(query._mocks.mockEq).toHaveBeenCalledWith(
-        'treatment_plan_id',
-        PLAN_ID
-      );
+      expect(fetched).toMatchObject({
+        id: plan.id,
+        patientId: patient.id,
+        providerId: provider.id,
+        status: 'draft',
+        acceptedAt: null,
+        notes: null,
+      });
+      expect(fetched.items.map((item) => item.id)).toEqual([
+        firstItem.id,
+        secondItem.id,
+      ]);
+      expect(fetched.items[0]).toMatchObject({
+        description: 'Restauración',
+        tooth: '11',
+        quantity: 2,
+        unitPrice: 100.5,
+        status: 'pending',
+      });
+      expect(fetched.totalAmount).toBe(251);
     });
 
     it('throws NotFoundError when the plan does not exist', async () => {
-      const query = buildQuery();
-      query._mocks.mockSingle.mockResolvedValue({
-        data: null,
-        error: { code: 'PGRST116', message: 'No rows found' },
-      });
-      mockClient(query);
-
-      await expect(getTreatmentPlan(PLAN_ID)).rejects.toBeInstanceOf(
+      await expect(getTreatmentPlan(MISSING_ID)).rejects.toBeInstanceOf(
         NotFoundError
       );
     });
@@ -182,262 +230,230 @@ describe('treatment-plans data layer', () => {
   });
 
   describe('createTreatmentPlan', () => {
-    it('inserts a draft plan with total 0 and returns it with items', async () => {
-      const query = buildQuery();
-      query._mocks.mockSingle.mockResolvedValue({
-        data: planRow({ total_amount: 301.5 }),
-        error: null,
-      });
-      query._mocks.mockOrder.mockResolvedValue({
-        data: [itemRow({ quantity: 3, unit_price: 100.5 })],
-        error: null,
-      });
-      mockClient(query);
+    it('inserts a draft plan with total 0 and returns it with items and recomputed total', async () => {
+      const { patient, provider } = await seedPatientAndProvider();
 
-      const plan = await createTreatmentPlan(PATIENT_ID, {
-        providerId: PROVIDER_ID,
+      const plan = await createTreatmentPlan(patient.id, {
+        providerId: provider.id,
         name: 'Plan A',
         items: [{ description: 'Restauración', unitPrice: 100.5, quantity: 3 }],
       });
 
-      expect(query._mocks.mockInsert).toHaveBeenCalledWith(
-        expect.objectContaining({
-          patient_id: PATIENT_ID,
-          provider_id: PROVIDER_ID,
-          name: 'Plan A',
-          status: 'draft',
-          total_amount: 0,
-        })
-      );
-      expect(query._mocks.mockInsert).toHaveBeenCalledWith(
-        expect.arrayContaining([
-          expect.objectContaining({
-            treatment_plan_id: PLAN_ID,
-            description: 'Restauración',
-            quantity: 3,
-            unit_price: 100.5,
-            status: 'pending',
-          }),
-        ])
-      );
-      expect(plan.totalAmount).toBe(301.5);
+      expect(plan).toMatchObject({
+        patientId: patient.id,
+        providerId: provider.id,
+        name: 'Plan A',
+        status: 'draft',
+        totalAmount: 301.5,
+        acceptedAt: null,
+        notes: null,
+      });
       expect(plan.items).toHaveLength(1);
+      expect(plan.items[0]).toMatchObject({
+        treatmentPlanId: plan.id,
+        description: 'Restauración',
+        quantity: 3,
+        unitPrice: 100.5,
+        status: 'pending',
+      });
+      // El plan nace en draft con total 0 y `recomputeTotal` lo deja consistente.
+      const row = await readPlanRow(plan.id);
+      expect(row?.status).toBe('draft');
+      expect(Number(row?.total_amount)).toBe(301.5);
     });
 
     it('creates a plan without items and keeps total at 0', async () => {
-      const query = buildQuery();
-      query._mocks.mockSingle.mockResolvedValue({
-        data: planRow(),
-        error: null,
-      });
-      query._mocks.mockOrder.mockResolvedValue({ data: [], error: null });
-      mockClient(query);
+      const { patient, provider } = await seedPatientAndProvider();
 
-      const plan = await createTreatmentPlan(PATIENT_ID, {
-        providerId: PROVIDER_ID,
+      const plan = await createTreatmentPlan(patient.id, {
+        providerId: provider.id,
         name: 'Plan vacío',
       });
 
       expect(plan.totalAmount).toBe(0);
       expect(plan.items).toEqual([]);
-      expect(query._mocks.mockInsert).toHaveBeenCalledTimes(1);
+      const row = await readPlanRow(plan.id);
+      expect(Number(row?.total_amount)).toBe(0);
+      expect(await listItemRows(plan.id)).toEqual([]);
     });
 
     it('throws ValidationError when required fields are missing', async () => {
-      mockClient(buildQuery());
+      const { patient, provider } = await seedPatientAndProvider();
 
       await expect(
-        createTreatmentPlan(PATIENT_ID, {
-          providerId: PROVIDER_ID,
+        createTreatmentPlan(patient.id, {
+          providerId: provider.id,
           name: '',
         })
       ).rejects.toThrow(ValidationError);
+      // Nada se persistió: el plan no llegó a insertarse.
+      expect(await listTreatmentPlans(patient.id)).toEqual([]);
     });
 
-    it('deletes the partially-created plan when item insertion fails', async () => {
-      const query = buildQuery();
-      query._mocks.mockSingle.mockResolvedValue({
-        data: planRow(),
-        error: null,
-      });
-      query._mocks.mockInsert
-        .mockReturnValueOnce(query)
-        .mockRejectedValueOnce(new Error('item insert failed'));
-      query._mocks.mockEq.mockResolvedValue({ error: null });
-      mockClient(query);
+    it('deletes the partially-created plan when the item insert fails', async () => {
+      const { patient, provider } = await seedPatientAndProvider();
 
+      // `quantity: 0` viola el CHECK real `treatment_plan_items_quantity_check`;
+      // el mock del query builder nunca ejercitaba la constraint.
       await expect(
-        createTreatmentPlan(PATIENT_ID, {
-          providerId: PROVIDER_ID,
-          name: 'Plan A',
-          items: [{ description: 'Restauración', unitPrice: 100 }],
+        createTreatmentPlan(patient.id, {
+          providerId: provider.id,
+          name: 'Plan con ítem inválido',
+          items: [{ description: 'Restauración', unitPrice: 100, quantity: 0 }],
         })
-      ).rejects.toThrow('item insert failed');
+      ).rejects.toThrow(/treatment_plan_items_quantity_check/);
 
-      expect(query._mocks.mockDelete).toHaveBeenCalled();
+      // Cleanup observable: ni plan ni ítems sobreviven.
+      expect(await listTreatmentPlans(patient.id)).toEqual([]);
+      const { data: items, error } = await getSupabaseAdmin()
+        .from('treatment_plan_items')
+        .select('id');
+      expect(error).toBeNull();
+      expect(items).toEqual([]);
     });
   });
 
   describe('updateTreatmentPlan', () => {
-    function setupTransition(
-      from: string,
-      to: string,
-      acceptedAt: string | null = null,
-      returnedAcceptedAt: string | null = null
-    ) {
-      const query = buildQuery();
-      query._mocks.mockSingle
-        .mockResolvedValueOnce({
-          data: planRow({ status: from, accepted_at: acceptedAt }),
-          error: null,
-        })
-        .mockResolvedValueOnce({
-          data: planRow({
-            status: to,
-            accepted_at: returnedAcceptedAt ?? acceptedAt,
-          }),
-          error: null,
-        });
-      mockClient(query);
-      return query;
-    }
-
     it('allows draft -> presented', async () => {
-      const query = setupTransition('draft', 'presented');
-      const plan = await updateTreatmentPlan(PLAN_ID, { status: 'presented' });
-      expect(plan.status).toBe('presented');
-      expect(query._mocks.mockUpdate).toHaveBeenCalledWith(
-        expect.objectContaining({ status: 'presented' })
-      );
+      const { plan } = await seedPlanInStatus('draft');
+
+      const updated = await updateTreatmentPlan(plan.id, {
+        status: 'presented',
+      });
+
+      expect(updated.status).toBe('presented');
+      expect((await readPlanRow(plan.id))?.status).toBe('presented');
     });
 
     it('allows presented -> accepted and populates accepted_at', async () => {
-      const query = setupTransition('presented', 'accepted', null, '2026-09-02T10:00:00Z');
-      const plan = await updateTreatmentPlan(PLAN_ID, { status: 'accepted' });
-      expect(plan.status).toBe('accepted');
-      expect(query._mocks.mockUpdate).toHaveBeenCalledWith(
-        expect.objectContaining({
-          status: 'accepted',
-          accepted_at: expect.any(String),
-        })
+      const { plan } = await seedPlanInStatus('presented');
+
+      const updated = await updateTreatmentPlan(plan.id, { status: 'accepted' });
+
+      expect(updated.status).toBe('accepted');
+      expect(updated.acceptedAt).toBeTruthy();
+      const row = await readPlanRow(plan.id);
+      expect(row?.status).toBe('accepted');
+      expect(new Date(row?.accepted_at as string).toISOString()).toBe(
+        new Date(updated.acceptedAt as string).toISOString()
       );
     });
 
     it('rejects draft -> accepted', async () => {
-      const query = setupTransition('draft', 'accepted');
+      const { plan } = await seedPlanInStatus('draft');
+
       await expect(
-        updateTreatmentPlan(PLAN_ID, { status: 'accepted' })
+        updateTreatmentPlan(plan.id, { status: 'accepted' })
       ).rejects.toThrow(ValidationError);
-      expect(query._mocks.mockUpdate).not.toHaveBeenCalled();
+      // Sin update en la BD: el estado sigue en draft.
+      const row = await readPlanRow(plan.id);
+      expect(row?.status).toBe('draft');
+      expect(row?.accepted_at).toBeNull();
     });
 
     it('allows presented -> draft (revert)', async () => {
-      const query = setupTransition('presented', 'draft');
-      const plan = await updateTreatmentPlan(PLAN_ID, { status: 'draft' });
-      expect(plan.status).toBe('draft');
+      const { plan } = await seedPlanInStatus('presented');
+
+      const updated = await updateTreatmentPlan(plan.id, { status: 'draft' });
+
+      expect(updated.status).toBe('draft');
+      expect((await readPlanRow(plan.id))?.status).toBe('draft');
     });
 
     it('allows accepted -> in_progress', async () => {
-      const query = setupTransition('accepted', 'in_progress');
-      const plan = await updateTreatmentPlan(PLAN_ID, { status: 'in_progress' });
-      expect(plan.status).toBe('in_progress');
+      const { plan } = await seedPlanInStatus('accepted');
+
+      const updated = await updateTreatmentPlan(plan.id, {
+        status: 'in_progress',
+      });
+
+      expect(updated.status).toBe('in_progress');
+      expect((await readPlanRow(plan.id))?.status).toBe('in_progress');
     });
 
     it('allows in_progress -> completed', async () => {
-      const query = setupTransition('in_progress', 'completed');
-      const plan = await updateTreatmentPlan(PLAN_ID, { status: 'completed' });
-      expect(plan.status).toBe('completed');
+      const { plan } = await seedPlanInStatus('in_progress');
+
+      const updated = await updateTreatmentPlan(plan.id, {
+        status: 'completed',
+      });
+
+      expect(updated.status).toBe('completed');
+      expect((await readPlanRow(plan.id))?.status).toBe('completed');
     });
 
     it('rejects completed -> any transition', async () => {
-      const query = setupTransition('completed', 'cancelled');
+      const { plan } = await seedPlanInStatus('completed');
+
       await expect(
-        updateTreatmentPlan(PLAN_ID, { status: 'cancelled' })
+        updateTreatmentPlan(plan.id, { status: 'cancelled' })
       ).rejects.toThrow(ValidationError);
-      expect(query._mocks.mockUpdate).not.toHaveBeenCalled();
+      expect((await readPlanRow(plan.id))?.status).toBe('completed');
     });
 
     it('rejects cancelled -> any transition', async () => {
-      const query = setupTransition('cancelled', 'draft');
+      const { plan } = await seedPlanInStatus('cancelled');
+
       await expect(
-        updateTreatmentPlan(PLAN_ID, { status: 'draft' })
+        updateTreatmentPlan(plan.id, { status: 'draft' })
       ).rejects.toThrow(ValidationError);
-      expect(query._mocks.mockUpdate).not.toHaveBeenCalled();
+      expect((await readPlanRow(plan.id))?.status).toBe('cancelled');
     });
 
     it('allows any non-completed state -> cancelled and preserves accepted_at', async () => {
-      const acceptedAt = '2026-09-02T10:00:00Z';
-      const query = setupTransition('accepted', 'cancelled', acceptedAt, acceptedAt);
-      const plan = await updateTreatmentPlan(PLAN_ID, { status: 'cancelled' });
-      expect(plan.status).toBe('cancelled');
-      expect(query._mocks.mockUpdate).not.toHaveBeenCalledWith(
-        expect.objectContaining({ accepted_at: null })
-      );
+      const { plan } = await seedPlanInStatus('accepted');
+      const acceptedAt = (await readPlanRow(plan.id))?.accepted_at as string;
+      expect(acceptedAt).toBeTruthy();
+
+      const updated = await updateTreatmentPlan(plan.id, {
+        status: 'cancelled',
+      });
+
+      expect(updated.status).toBe('cancelled');
+      expect(updated.acceptedAt).toBeTruthy();
+      // El instante de aceptación no se reescribe al cancelar.
+      const row = await readPlanRow(plan.id);
+      expect(row?.status).toBe('cancelled');
+      expect(row?.accepted_at).toBe(acceptedAt);
     });
 
     it('throws NotFoundError when the plan does not exist', async () => {
-      const query = buildQuery();
-      query._mocks.mockSingle.mockResolvedValue({
-        data: null,
-        error: { code: 'PGRST116', message: 'No rows found' },
-      });
-      mockClient(query);
-
       await expect(
-        updateTreatmentPlan(PLAN_ID, { name: 'X' })
+        updateTreatmentPlan(MISSING_ID, { name: 'Fantasma' })
       ).rejects.toBeInstanceOf(NotFoundError);
     });
 
     it('rejects an invalid status value', async () => {
-      mockClient(buildQuery());
       await expect(
         // @ts-expect-error — deliberate invalid status for validation test
-        updateTreatmentPlan(PLAN_ID, { status: 'unknown_status' })
+        updateTreatmentPlan(MISSING_ID, { status: 'unknown_status' })
       ).rejects.toThrow(ValidationError);
     });
   });
 
   describe('deleteTreatmentPlan', () => {
     it('deletes a draft plan', async () => {
-      const query = buildQuery();
-      query._mocks.mockSingle.mockResolvedValue({
-        data: planRow({ status: 'draft' }),
-        error: null,
-      });
-      query._mocks.mockEq
-        .mockReturnValueOnce(query)
-        .mockResolvedValue({ error: null });
-      mockClient(query);
+      const { plan } = await seedPlanInStatus('draft');
 
-      await deleteTreatmentPlan(PLAN_ID);
+      await deleteTreatmentPlan(plan.id);
 
-      expect(query._mocks.mockDelete).toHaveBeenCalled();
-      expect(query._mocks.mockEq).toHaveBeenLastCalledWith('id', PLAN_ID);
+      expect(await readPlanRow(plan.id)).toBeNull();
     });
 
     it('throws ConflictError when the plan is not draft', async () => {
-      const query = buildQuery();
-      query._mocks.mockSingle.mockResolvedValue({
-        data: planRow({ status: 'accepted' }),
-        error: null,
-      });
-      mockClient(query);
+      const { patient, plan } = await seedPlanInStatus('accepted');
 
-      await expect(deleteTreatmentPlan(PLAN_ID)).rejects.toBeInstanceOf(
+      await expect(deleteTreatmentPlan(plan.id)).rejects.toBeInstanceOf(
         ConflictError
       );
-      expect(query._mocks.mockDelete).not.toHaveBeenCalled();
+      // El plan sigue vivo: el delete no se ejecutó.
+      expect((await listTreatmentPlans(patient.id)).map((p) => p.id)).toEqual([
+        plan.id,
+      ]);
     });
 
     it('throws NotFoundError when the plan does not exist', async () => {
-      const query = buildQuery();
-      query._mocks.mockSingle.mockResolvedValue({
-        data: null,
-        error: { code: 'PGRST116', message: 'No rows found' },
-      });
-      mockClient(query);
-
-      await expect(deleteTreatmentPlan(PLAN_ID)).rejects.toBeInstanceOf(
+      await expect(deleteTreatmentPlan(MISSING_ID)).rejects.toBeInstanceOf(
         NotFoundError
       );
     });
@@ -445,188 +461,153 @@ describe('treatment-plans data layer', () => {
 
   describe('createTreatmentPlanItem', () => {
     it('creates an item in a draft plan and recomputes the total', async () => {
-      const query = buildQuery();
-      query._mocks.mockSingle
-        .mockResolvedValueOnce({
-          data: planRow({ status: 'draft' }),
-          error: null,
-        })
-        .mockResolvedValueOnce({
-          data: itemRow({ description: 'Limpieza', quantity: 2, unit_price: 100 }),
-          error: null,
-        });
-      query._mocks.mockOrder.mockResolvedValue({
-        data: [itemRow({ description: 'Limpieza', quantity: 2, unit_price: 100 })],
-        error: null,
-      });
-      mockClient(query);
+      const { plan } = await seedPlanInStatus('draft');
 
-      const item = await createTreatmentPlanItem(PLAN_ID, {
+      const item = await createTreatmentPlanItem(plan.id, {
         description: 'Limpieza',
         unitPrice: 100,
         quantity: 2,
       });
 
-      expect(item.description).toBe('Limpieza');
-      expect(item.quantity).toBe(2);
-      expect(query._mocks.mockInsert).toHaveBeenCalledWith(
-        expect.objectContaining({
-          treatment_plan_id: PLAN_ID,
-          unit_price: 100,
-          quantity: 2,
-          status: 'pending',
-        })
-      );
+      expect(item).toMatchObject({
+        treatmentPlanId: plan.id,
+        description: 'Limpieza',
+        quantity: 2,
+        unitPrice: 100,
+        serviceId: null,
+        tooth: null,
+        status: 'pending',
+      });
+      expect(await readItemRow(item.id)).toMatchObject({
+        treatment_plan_id: plan.id,
+        status: 'pending',
+      });
+      expect(Number((await readPlanRow(plan.id))?.total_amount)).toBe(200);
     });
 
     it('throws ConflictError when the plan is not draft', async () => {
-      const query = buildQuery();
-      query._mocks.mockSingle.mockResolvedValue({
-        data: planRow({ status: 'accepted' }),
-        error: null,
-      });
-      mockClient(query);
+      const { plan } = await seedPlanInStatus('accepted');
 
       await expect(
-        createTreatmentPlanItem(PLAN_ID, {
+        createTreatmentPlanItem(plan.id, {
           description: 'X',
           unitPrice: 100,
         })
       ).rejects.toBeInstanceOf(ConflictError);
+      expect(await listItemRows(plan.id)).toEqual([]);
     });
 
     it('throws ValidationError when input is invalid', async () => {
-      const query = buildQuery();
-      query._mocks.mockSingle.mockResolvedValue({
-        data: planRow({ status: 'draft' }),
-        error: null,
-      });
-      mockClient(query);
+      const { plan } = await seedPlanInStatus('draft');
 
       await expect(
-        createTreatmentPlanItem(PLAN_ID, {
+        createTreatmentPlanItem(plan.id, {
           description: '',
           unitPrice: -10,
         })
       ).rejects.toThrow(ValidationError);
+      expect(await listItemRows(plan.id)).toEqual([]);
     });
   });
 
   describe('updateTreatmentPlanItem', () => {
     it('allows updating only the item status in any plan state', async () => {
-      const query = buildQuery();
-      query._mocks.mockSingle.mockResolvedValue({
-        data: itemRow({ status: 'done' }),
-        error: null,
+      const { plan } = await seedPlanInStatus('draft');
+      const item = await createTreatmentPlanItem(plan.id, {
+        description: 'Limpieza',
+        unitPrice: 100,
       });
-      mockClient(query);
+      await updateTreatmentPlan(plan.id, { status: 'presented' });
+      await updateTreatmentPlan(plan.id, { status: 'accepted' });
 
-      const item = await updateTreatmentPlanItem(PLAN_ID, ITEM_ID, {
+      const updated = await updateTreatmentPlanItem(plan.id, item.id, {
         status: 'done',
       });
 
-      expect(item.status).toBe('done');
-      expect(query._mocks.mockUpdate).toHaveBeenCalledWith(
-        expect.objectContaining({ status: 'done' })
-      );
+      expect(updated.status).toBe('done');
+      expect((await readItemRow(item.id))?.status).toBe('done');
     });
 
     it('allows updating monetary fields in a draft plan and recomputes the total', async () => {
-      const query = buildQuery();
-      query._mocks.mockSingle
-        .mockResolvedValueOnce({
-          data: planRow({ status: 'draft' }),
-          error: null,
-        })
-        .mockResolvedValueOnce({
-          data: itemRow({ unit_price: 200 }),
-          error: null,
-        });
-      query._mocks.mockOrder.mockResolvedValue({
-        data: [itemRow({ unit_price: 200 })],
-        error: null,
+      const { plan } = await seedPlanInStatus('draft');
+      const item = await createTreatmentPlanItem(plan.id, {
+        description: 'Limpieza',
+        unitPrice: 100,
       });
-      mockClient(query);
 
-      const item = await updateTreatmentPlanItem(PLAN_ID, ITEM_ID, {
+      const updated = await updateTreatmentPlanItem(plan.id, item.id, {
         unitPrice: 200,
       });
 
-      expect(item.unitPrice).toBe(200);
-      expect(query._mocks.mockUpdate).toHaveBeenCalledWith(
-        expect.objectContaining({ unit_price: 200 })
-      );
+      expect(updated.unitPrice).toBe(200);
+      expect(Number((await readItemRow(item.id))?.unit_price)).toBe(200);
+      expect(Number((await readPlanRow(plan.id))?.total_amount)).toBe(200);
     });
 
     it('throws ConflictError when changing monetary fields in a non-draft plan', async () => {
-      const query = buildQuery();
-      query._mocks.mockSingle.mockResolvedValue({
-        data: planRow({ status: 'accepted' }),
-        error: null,
+      const { plan } = await seedPlanInStatus('draft');
+      const item = await createTreatmentPlanItem(plan.id, {
+        description: 'Limpieza',
+        unitPrice: 100,
       });
-      mockClient(query);
+      await updateTreatmentPlan(plan.id, { status: 'presented' });
+      await updateTreatmentPlan(plan.id, { status: 'accepted' });
 
       await expect(
-        updateTreatmentPlanItem(PLAN_ID, ITEM_ID, { unitPrice: 200 })
+        updateTreatmentPlanItem(plan.id, item.id, { unitPrice: 200 })
       ).rejects.toBeInstanceOf(ConflictError);
-      expect(query._mocks.mockUpdate).not.toHaveBeenCalled();
+      // El ítem conserva su precio original.
+      expect(Number((await readItemRow(item.id))?.unit_price)).toBe(100);
     });
 
     it('throws NotFoundError when the item does not exist', async () => {
-      const query = buildQuery();
-      query._mocks.mockSingle
-        .mockResolvedValueOnce({
-          data: planRow({ status: 'draft' }),
-          error: null,
-        })
-        .mockResolvedValueOnce({
-          data: null,
-          error: { code: 'PGRST116', message: 'No rows found' },
-        });
-      mockClient(query);
+      const { plan } = await seedPlanInStatus('draft');
 
       await expect(
-        updateTreatmentPlanItem(PLAN_ID, ITEM_ID, { unitPrice: 200 })
+        updateTreatmentPlanItem(plan.id, MISSING_ID, { unitPrice: 200 })
       ).rejects.toBeInstanceOf(NotFoundError);
     });
   });
 
   describe('deleteTreatmentPlanItem', () => {
     it('deletes an item in a draft plan and recomputes the total', async () => {
-      const query = buildQuery();
-      query._mocks.mockSingle.mockResolvedValue({
-        data: planRow({ status: 'draft' }),
-        error: null,
+      const { plan } = await seedPlanInStatus('draft');
+      const kept = await createTreatmentPlanItem(plan.id, {
+        description: 'Limpieza',
+        unitPrice: 100,
       });
-      query._mocks.mockOrder.mockResolvedValue({ data: [], error: null });
-      mockClient(query);
+      const removed = await createTreatmentPlanItem(plan.id, {
+        description: 'Resina',
+        unitPrice: 50,
+      });
+      expect(Number((await readPlanRow(plan.id))?.total_amount)).toBe(150);
 
-      await deleteTreatmentPlanItem(PLAN_ID, ITEM_ID);
+      await deleteTreatmentPlanItem(plan.id, removed.id);
 
-      expect(query._mocks.mockDelete).toHaveBeenCalled();
-      expect(query._mocks.mockEq).toHaveBeenCalledWith('id', ITEM_ID);
+      expect(await readItemRow(removed.id)).toBeNull();
+      expect(await readItemRow(kept.id)).not.toBeNull();
+      expect(Number((await readPlanRow(plan.id))?.total_amount)).toBe(100);
     });
 
     it('throws ConflictError when the plan is not draft', async () => {
-      const query = buildQuery();
-      query._mocks.mockSingle.mockResolvedValue({
-        data: planRow({ status: 'accepted' }),
-        error: null,
+      const { plan } = await seedPlanInStatus('draft');
+      const item = await createTreatmentPlanItem(plan.id, {
+        description: 'Limpieza',
+        unitPrice: 100,
       });
-      mockClient(query);
+      await updateTreatmentPlan(plan.id, { status: 'presented' });
+      await updateTreatmentPlan(plan.id, { status: 'accepted' });
 
       await expect(
-        deleteTreatmentPlanItem(PLAN_ID, ITEM_ID)
+        deleteTreatmentPlanItem(plan.id, item.id)
       ).rejects.toBeInstanceOf(ConflictError);
-      expect(query._mocks.mockDelete).not.toHaveBeenCalled();
+      expect(await readItemRow(item.id)).not.toBeNull();
     });
   });
 
   describe('sumLineTotals / money arithmetic', () => {
     it('computes 3 x 100.50 as 301.50 without float drift', () => {
-      expect(
-        sumLineTotals([{ quantity: 3, unitPrice: 100.5 }])
-      ).toBe(301.5);
+      expect(sumLineTotals([{ quantity: 3, unitPrice: 100.5 }])).toBe(301.5);
     });
 
     it('handles multiple lines with typical float values', () => {

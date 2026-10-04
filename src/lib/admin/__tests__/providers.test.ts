@@ -1,5 +1,11 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { getSupabaseAdmin } from '@/lib/supabase/server';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import {
+  acquireDbSuiteLock,
+  applyLocalDbEnv,
+  localDbEnabled,
+  releaseDbSuiteLock,
+  truncateAllTables,
+} from '@/test-utils/local-db';
 import {
   createProvider,
   deleteProvider,
@@ -10,85 +16,68 @@ import {
 import { ValidationError } from '../validate';
 import { NotFoundError } from '../errors';
 
-vi.mock('@/lib/supabase/server', () => ({
-  getSupabaseAdmin: vi.fn(),
-}));
+/**
+ * Suite contra Supabase local (ver openspec/changes/supabase-local-testing).
+ * Corre solo con `npm run test:local` (SUPABASE_LOCAL=1 + supabase start);
+ * con `npm run test` regular se omite.
+ */
+const d = localDbEnabled ? describe : describe.skip;
 
-const PROVIDER_ID = '550e8400-e29b-41d4-a716-446655440000';
+// Las suites de datos se serializan con un advisory lock (ver
+// src/test-utils/local-db.ts) porque vitest corre los archivos en paralelo
+// y todas truncan el esquema `public`.
 
-describe('providers service', () => {
-  const mockSelect = vi.fn();
-  const mockInsert = vi.fn();
-  const mockUpdate = vi.fn();
-  const mockDelete = vi.fn();
-  const mockOrder = vi.fn();
-  const mockEq = vi.fn();
-  const mockSingle = vi.fn();
-
-  function buildQuery() {
-    return {
-      select: mockSelect.mockReturnThis(),
-      insert: mockInsert.mockReturnThis(),
-      update: mockUpdate.mockReturnThis(),
-      delete: mockDelete.mockReturnThis(),
-      order: mockOrder.mockReturnThis(),
-      eq: mockEq.mockReturnThis(),
-      single: mockSingle,
-    };
-  }
-
-  beforeEach(() => {
-    vi.resetAllMocks();
-    (getSupabaseAdmin as ReturnType<typeof vi.fn>).mockReturnValue({
-      from: vi.fn().mockReturnValue(buildQuery()),
-    });
+d('providers service', () => {
+  beforeAll(async () => {
+    applyLocalDbEnv();
+    await acquireDbSuiteLock();
   });
 
-  it('lists mapped providers', async () => {
-    mockOrder.mockResolvedValue({
-      data: [{ id: PROVIDER_ID, name: 'Dra. Ana', color: '#1f77b4', created_at: '2026-09-01T10:00:00Z', updated_at: '2026-09-01T10:00:00Z' }],
-      error: null,
-    });
+  afterAll(async () => {
+    await releaseDbSuiteLock();
+  });
+
+  beforeEach(async () => {
+    await truncateAllTables();
+  });
+
+  it('lists mapped providers ordered by most recent', async () => {
+    const first = await createProvider({ name: 'Dra. Ana' });
+    const second = await createProvider({ name: 'Dr. Beto', color: '#1F77B4' });
 
     const providers = await listProviders();
 
-    expect(providers).toEqual([
-      { id: PROVIDER_ID, name: 'Dra. Ana', color: '#1f77b4', createdAt: '2026-09-01T10:00:00Z', updatedAt: '2026-09-01T10:00:00Z' },
-    ]);
+    expect(providers.map((p) => p.id)).toEqual([second.id, first.id]);
+    expect(providers[0]).toEqual({
+      id: second.id,
+      name: 'Dr. Beto',
+      color: '#1f77b4',
+      createdAt: expect.any(String),
+      updatedAt: expect.any(String),
+    });
   });
 
   it('creates a provider', async () => {
-    mockSingle.mockResolvedValue({
-      data: { id: PROVIDER_ID, name: 'Dra. Ana', color: null, created_at: '2026-09-01T10:00:00Z', updated_at: '2026-09-01T10:00:00Z' },
-      error: null,
-    });
-
     const provider = await createProvider({ name: 'Dra. Ana' });
 
-    expect(mockInsert).toHaveBeenCalledWith({ name: 'Dra. Ana', color: null });
     expect(provider.name).toBe('Dra. Ana');
+    expect(provider.color).toBeNull();
+    // Outcome observable en la BD: el color ausente queda como NULL.
+    await expect(getProvider(provider.id)).resolves.toEqual(provider);
   });
 
   it('creates a provider with a normalized color', async () => {
-    mockSingle.mockResolvedValue({
-      data: { id: PROVIDER_ID, name: 'Dra. Ana', color: '#1f77b4', created_at: '2026-09-01T10:00:00Z', updated_at: '2026-09-01T10:00:00Z' },
-      error: null,
-    });
+    const provider = await createProvider({ name: 'Dra. Ana', color: '#1F77B4' });
 
-    await createProvider({ name: 'Dra. Ana', color: '#1F77B4' });
-
-    expect(mockInsert).toHaveBeenCalledWith({ name: 'Dra. Ana', color: '#1f77b4' });
+    expect(provider.color).toBe('#1f77b4');
+    await expect(getProvider(provider.id)).resolves.toEqual(provider);
   });
 
   it('tolerates an invalid color by storing null', async () => {
-    mockSingle.mockResolvedValue({
-      data: { id: PROVIDER_ID, name: 'Dra. Ana', color: null, created_at: '2026-09-01T10:00:00Z', updated_at: '2026-09-01T10:00:00Z' },
-      error: null,
-    });
+    const provider = await createProvider({ name: 'Dra. Ana', color: 'red' });
 
-    await createProvider({ name: 'Dra. Ana', color: 'red' });
-
-    expect(mockInsert).toHaveBeenCalledWith({ name: 'Dra. Ana', color: null });
+    expect(provider.color).toBeNull();
+    await expect(getProvider(provider.id)).resolves.toEqual(provider);
   });
 
   it('rejects an empty provider name', async () => {
@@ -96,58 +85,56 @@ describe('providers service', () => {
   });
 
   it('updates a provider', async () => {
-    mockSingle.mockResolvedValue({
-      data: { id: PROVIDER_ID, name: 'Dra. Ana López', color: null, created_at: '2026-09-01T10:00:00Z', updated_at: '2026-09-02T10:00:00Z' },
-      error: null,
-    });
+    const created = await createProvider({ name: 'Dra. Ana' });
 
-    const provider = await updateProvider(PROVIDER_ID, { name: 'Dra. Ana López' });
+    const provider = await updateProvider(created.id, { name: 'Dra. Ana López' });
 
-    expect(mockUpdate).toHaveBeenCalledWith({ name: 'Dra. Ana López', color: null });
     expect(provider.name).toBe('Dra. Ana López');
+    await expect(getProvider(created.id)).resolves.toEqual(provider);
   });
 
   it('updates a provider color', async () => {
-    mockSingle.mockResolvedValue({
-      data: { id: PROVIDER_ID, name: 'Dra. Ana', color: '#2ca02c', created_at: '2026-09-01T10:00:00Z', updated_at: '2026-09-02T10:00:00Z' },
-      error: null,
+    const created = await createProvider({ name: 'Dra. Ana' });
+
+    const provider = await updateProvider(created.id, {
+      name: 'Dra. Ana',
+      color: '#2CA02C',
     });
 
-    await updateProvider(PROVIDER_ID, { name: 'Dra. Ana', color: '#2CA02C' });
-
-    expect(mockUpdate).toHaveBeenCalledWith({ name: 'Dra. Ana', color: '#2ca02c' });
+    expect(provider.color).toBe('#2ca02c');
+    await expect(getProvider(created.id)).resolves.toEqual(provider);
   });
 
   it('deletes a provider', async () => {
-    mockEq.mockResolvedValue({ error: null });
+    const created = await createProvider({ name: 'Ortodoncia' });
 
-    await deleteProvider(PROVIDER_ID);
+    await deleteProvider(created.id);
 
-    expect(mockEq).toHaveBeenCalledWith('id', PROVIDER_ID);
+    const providers = await listProviders();
+    expect(providers.find((p) => p.id === created.id)).toBeUndefined();
   });
 
   describe('getProvider', () => {
     it('returns a provider by id', async () => {
-      mockSingle.mockResolvedValue({
-        data: { id: PROVIDER_ID, name: 'Dra. Ana', created_at: '2026-09-01T10:00:00Z', updated_at: '2026-09-01T10:00:00Z' },
-        error: null,
-      });
+      const created = await createProvider({ name: 'Dra. Ana' });
 
-      const provider = await getProvider(PROVIDER_ID);
+      const provider = await getProvider(created.id);
 
-      expect(provider).toEqual({
-        id: PROVIDER_ID,
-        name: 'Dra. Ana',
-        color: null,
-        createdAt: '2026-09-01T10:00:00Z',
-        updatedAt: '2026-09-01T10:00:00Z',
-      });
+      expect(provider).toEqual(created);
     });
 
     it('throws NotFoundError when provider does not exist', async () => {
-      mockSingle.mockResolvedValue({ data: null, error: null });
+      await expect(
+        getProvider('550e8400-e29b-41d4-a716-4466554400ff')
+      ).rejects.toThrow(NotFoundError);
+    });
 
-      await expect(getProvider(PROVIDER_ID)).rejects.toThrow(NotFoundError);
+    it('updateProvider throws NotFoundError when provider does not exist', async () => {
+      await expect(
+        updateProvider('550e8400-e29b-41d4-a716-4466554400ff', {
+          name: 'Fantasma',
+        })
+      ).rejects.toThrow(NotFoundError);
     });
 
     it('throws ValidationError for a malformed id', async () => {

@@ -1,94 +1,128 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { getSupabaseAdmin } from '@/lib/supabase/server';
+import { afterAll, beforeAll, beforeEach, expect, it } from 'vitest';
+import {
+  acquireDbSuiteLock,
+  applyLocalDbEnv,
+  localDbEnabled,
+  releaseDbSuiteLock,
+  truncateAllTables,
+} from '@/test-utils/local-db';
 import {
   createService,
   deleteService,
   listServices,
   updateService,
 } from '../services';
+import { NotFoundError } from '../errors';
 import { ValidationError } from '../validate';
 
-vi.mock('@/lib/supabase/server', () => ({
-  getSupabaseAdmin: vi.fn(),
-}));
+/**
+ * Suite piloto contra Supabase local (ver openspec/changes/supabase-local-testing).
+ * Corre solo con `npm run test:local` (SUPABASE_LOCAL=1 + supabase start);
+ * con `npm run test` regular se omite.
+ */
+const d = localDbEnabled ? it : it.skip;
 
-const SERVICE_ID = '550e8400-e29b-41d4-a716-446655440000';
+d('createService persists and maps a service', async () => {
+  const service = await createService({ name: 'Consulta', durationMinutes: 30 });
 
-describe('services service', () => {
-  const mockSelect = vi.fn();
-  const mockInsert = vi.fn();
-  const mockUpdate = vi.fn();
-  const mockDelete = vi.fn();
-  const mockOrder = vi.fn();
-  const mockEq = vi.fn();
-  const mockSingle = vi.fn();
+  expect(service.id).toBeDefined();
+  expect(service.name).toBe('Consulta');
+  expect(service.durationMinutes).toBe(30);
+  expect(service.createdAt).toBeTruthy();
+  expect(service.updatedAt).toBeTruthy();
+});
 
-  function buildQuery() {
-    return {
-      select: mockSelect.mockReturnThis(),
-      insert: mockInsert.mockReturnThis(),
-      update: mockUpdate.mockReturnThis(),
-      delete: mockDelete.mockReturnThis(),
-      order: mockOrder.mockReturnThis(),
-      eq: mockEq.mockReturnThis(),
-      single: mockSingle,
-    };
-  }
+d('listServices returns services ordered by most recent', async () => {
+  const first = await createService({ name: 'Limpieza', durationMinutes: 45 });
+  const second = await createService({ name: 'Resina', durationMinutes: 60 });
 
-  beforeEach(() => {
-    vi.resetAllMocks();
-    (getSupabaseAdmin as ReturnType<typeof vi.fn>).mockReturnValue({
-      from: vi.fn().mockReturnValue(buildQuery()),
-    });
+  const services = await listServices();
+
+  expect(services.map((s) => s.id)).toEqual([second.id, first.id]);
+  const found = services[0];
+  expect(found.name).toBe('Resina');
+  expect(found.durationMinutes).toBe(60);
+});
+
+d('createService rejects a non-positive duration', async () => {
+  await expect(createService({ name: 'Consulta', durationMinutes: 0 })).rejects.toThrow(
+    ValidationError
+  );
+  await expect(
+    createService({ name: 'Consulta', durationMinutes: -10 })
+  ).rejects.toThrow(ValidationError);
+});
+
+d('updateService updates name and duration', async () => {
+  const created = await createService({ name: 'Consulta', durationMinutes: 30 });
+
+  const updated = await updateService(created.id, {
+    name: 'Limpieza',
+    durationMinutes: 60,
   });
 
-  it('lists mapped services', async () => {
-    mockOrder.mockResolvedValue({
-      data: [{ id: SERVICE_ID, name: 'Consulta', duration_minutes: 30, created_at: '2026-09-01T10:00:00Z', updated_at: '2026-09-01T10:00:00Z' }],
-      error: null,
-    });
+  expect(updated.id).toBe(created.id);
+  expect(updated.name).toBe('Limpieza');
+  expect(updated.durationMinutes).toBe(60);
+});
 
-    const services = await listServices();
+d('updateService throws NotFoundError for a missing service', async () => {
+  await expect(
+    updateService('00000000-0000-4000-8000-00000000dead', {
+      name: 'Fantasma',
+      durationMinutes: 30,
+    })
+  ).rejects.toThrow(NotFoundError);
+});
 
-    expect(services).toEqual([
-      { id: SERVICE_ID, name: 'Consulta', durationMinutes: 30, createdAt: '2026-09-01T10:00:00Z', updatedAt: '2026-09-01T10:00:00Z' },
-    ]);
-  });
+d('deleteService removes the service', async () => {
+  const created = await createService({ name: 'Ortodoncia', durationMinutes: 90 });
 
-  it('creates a service', async () => {
-    mockSingle.mockResolvedValue({
-      data: { id: SERVICE_ID, name: 'Consulta', duration_minutes: 30, created_at: '2026-09-01T10:00:00Z', updated_at: '2026-09-01T10:00:00Z' },
-      error: null,
-    });
+  await deleteService(created.id);
 
-    const service = await createService({ name: 'Consulta', durationMinutes: 30 });
+  const services = await listServices();
+  expect(services.find((s) => s.id === created.id)).toBeUndefined();
+});
 
-    expect(mockInsert).toHaveBeenCalledWith({ name: 'Consulta', duration_minutes: 30 });
-    expect(service.durationMinutes).toBe(30);
-  });
+d('deleteService rejects a service referenced by an appointment (FK)', async () => {
+  const created = await createService({ name: 'Extracción', durationMinutes: 60 });
+  const supabase = (await import('@/lib/supabase/server')).getSupabaseAdmin();
 
-  it('rejects a non-positive duration', async () => {
-    await expect(createService({ name: 'Consulta', durationMinutes: 0 })).rejects.toThrow(ValidationError);
-    await expect(createService({ name: 'Consulta', durationMinutes: -10 })).rejects.toThrow(ValidationError);
-  });
+  const provider = await supabase
+    .from('providers')
+    .insert({ name: 'Dra. Piloto' })
+    .select('id')
+    .single();
+  expect(provider.error).toBeNull();
+  if (!provider.data) throw new Error('provider insert returned no data');
 
-  it('updates a service', async () => {
-    mockSingle.mockResolvedValue({
-      data: { id: SERVICE_ID, name: 'Limpieza', duration_minutes: 60, created_at: '2026-09-01T10:00:00Z', updated_at: '2026-09-02T10:00:00Z' },
-      error: null,
-    });
+  const start = new Date('2026-06-01T15:00:00Z');
+  const inserted = await supabase
+    .from('appointments')
+    .insert({
+      service_id: created.id,
+      provider_id: provider.data.id,
+      start_at: start.toISOString(),
+      end_at: new Date(start.getTime() + 60 * 60 * 1000).toISOString(),
+    })
+    .select('id')
+    .single();
+  expect(inserted.error).toBeNull();
 
-    const service = await updateService(SERVICE_ID, { name: 'Limpieza', durationMinutes: 60 });
+  // La FK real impide borrar un servicio en uso: comportamiento que el mock
+  // del query builder simulaba y podía divergir de producción.
+  await expect(deleteService(created.id)).rejects.toThrow();
+});
 
-    expect(mockUpdate).toHaveBeenCalledWith({ name: 'Limpieza', duration_minutes: 60 });
-    expect(service.durationMinutes).toBe(60);
-  });
+beforeAll(async () => {
+  applyLocalDbEnv();
+  await acquireDbSuiteLock();
+});
 
-  it('deletes a service', async () => {
-    mockEq.mockResolvedValue({ error: null });
+afterAll(async () => {
+  await releaseDbSuiteLock();
+});
 
-    await deleteService(SERVICE_ID);
-
-    expect(mockEq).toHaveBeenCalledWith('id', SERVICE_ID);
-  });
+beforeEach(async () => {
+  await truncateAllTables();
 });

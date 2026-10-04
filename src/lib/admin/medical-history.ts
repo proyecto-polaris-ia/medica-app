@@ -124,11 +124,17 @@ export async function getMedicalHistory(
     .eq('patient_id', parsedId)
     .single();
 
-  if (error?.code === 'PGRST116' || !data) {
+  if (error?.code === 'PGRST116') {
+    // PGRST116: 0 filas con .single() — el paciente no tiene historial.
     return emptyHistory(parsedId);
   }
   if (error) {
+    // Cualquier otro error de BD es real: no se reporta como "sin historial"
+    // (podría ocultar alergias/contraindicaciones conocidas).
     throw new Error((error as { message: string }).message);
+  }
+  if (!data) {
+    return emptyHistory(parsedId);
   }
   return mapRow(data as unknown as Record<string, unknown>);
 }

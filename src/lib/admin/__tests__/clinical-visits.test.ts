@@ -1,5 +1,12 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { getSupabaseAdmin } from '@/lib/supabase/server';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import {
+  acquireDbSuiteLock,
+  applyLocalDbEnv,
+  localDbEnabled,
+  releaseDbSuiteLock,
+  truncateAllTables,
+} from '@/test-utils/local-db';
+import { createPatient } from '../patients';
 import {
   listClinicalVisits,
   getClinicalVisit,
@@ -10,79 +17,52 @@ import {
 import { NotFoundError } from '../errors';
 import { ValidationError } from '../validate';
 
-vi.mock('@/lib/supabase/server', () => ({
-  getSupabaseAdmin: vi.fn(),
-}));
+/**
+ * Suite contra Supabase local (ver openspec/changes/supabase-local-testing).
+ * Corre solo con `npm run test:local` (SUPABASE_LOCAL=1 + supabase start);
+ * con `npm run test` regular se omite.
+ */
+const d = localDbEnabled ? describe : describe.skip;
 
+// UUIDs válidos para casos de validación pura (no tocan la BD).
 const PATIENT_ID = '550e8400-e29b-41d4-a716-446655440000';
-const VISIT_ID = '660e8400-e29b-41d4-a716-446655440000';
+const MISSING_VISIT_ID = '660e8400-e29b-41d4-a716-4466554400ff';
 
-function buildQuery() {
-  const mockSelect = vi.fn();
-  const mockInsert = vi.fn();
-  const mockUpdate = vi.fn();
-  const mockDelete = vi.fn();
-  const mockEq = vi.fn();
-  const mockOrder = vi.fn();
-  const mockSingle = vi.fn();
+// Las suites de datos se serializan con un advisory lock (ver
+// src/test-utils/local-db.ts) porque vitest corre los archivos en paralelo
+// y todas truncan el esquema `public`.
 
-  const query = {
-    select: mockSelect.mockReturnThis(),
-    insert: mockInsert.mockReturnThis(),
-    update: mockUpdate.mockReturnThis(),
-    delete: mockDelete.mockReturnThis(),
-    eq: mockEq.mockReturnThis(),
-    order: mockOrder.mockReturnThis(),
-    single: mockSingle,
-    _mocks: { mockSelect, mockInsert, mockUpdate, mockDelete, mockEq, mockOrder, mockSingle },
-  };
-  return query;
+async function seedPatient() {
+  return createPatient({
+    fullName: 'Juan Pérez',
+    phoneE164: '+5215511111111',
+  });
 }
 
-function visitRow(overrides: Record<string, unknown> = {}) {
-  return {
-    id: VISIT_ID,
-    patient_id: PATIENT_ID,
-    appointment_id: null,
-    provider_id: null,
-    subjective: 'Dolor',
-    objective: 'Caries',
-    assessment: 'Valoración',
-    plan: 'Tratamiento',
-    treatment: 'Obturación',
-    notes: 'Nota',
-    created_at: '2026-09-01T10:00:00Z',
-    updated_at: '2026-09-01T10:00:00Z',
-    ...overrides,
-  };
-}
+d('clinical-visits service', () => {
+  beforeAll(async () => {
+    applyLocalDbEnv();
+    await acquireDbSuiteLock();
+  });
 
-describe('clinical-visits service', () => {
-  beforeEach(() => {
-    vi.resetAllMocks();
+  afterAll(async () => {
+    await releaseDbSuiteLock();
+  });
+
+  beforeEach(async () => {
+    await truncateAllTables();
   });
 
   describe('listClinicalVisits', () => {
     it('returns visits sorted by created_at descending', async () => {
-      const query = buildQuery();
-      query._mocks.mockOrder.mockResolvedValue({
-        data: [
-          visitRow({ id: 'visit-2', created_at: '2026-09-02T10:00:00Z' }),
-          visitRow({ id: 'visit-1', created_at: '2026-09-01T10:00:00Z' }),
-        ],
-        error: null,
-      });
-      (getSupabaseAdmin as ReturnType<typeof vi.fn>).mockReturnValue({
-        from: vi.fn().mockReturnValue(query),
-      });
+      const patient = await seedPatient();
+      const first = await createClinicalVisit(patient.id, { subjective: 'Dolor' });
+      const second = await createClinicalVisit(patient.id, { subjective: 'Control' });
 
-      const visits = await listClinicalVisits(PATIENT_ID);
+      const visits = await listClinicalVisits(patient.id);
 
-      expect(visits.map((v) => v.id)).toEqual(['visit-2', 'visit-1']);
-      expect(query._mocks.mockEq).toHaveBeenCalledWith('patient_id', PATIENT_ID);
-      expect(query._mocks.mockOrder).toHaveBeenCalledWith('created_at', {
-        ascending: false,
-      });
+      expect(visits.map((v) => v.id)).toEqual([second.id, first.id]);
+      expect(visits[0].subjective).toBe('Control');
     });
 
     it('throws ValidationError for an invalid patient id', async () => {
@@ -92,82 +72,47 @@ describe('clinical-visits service', () => {
 
   describe('getClinicalVisit', () => {
     it('returns a mapped visit', async () => {
-      const query = buildQuery();
-      query._mocks.mockSingle.mockResolvedValue({
-        data: visitRow(),
-        error: null,
-      });
-      (getSupabaseAdmin as ReturnType<typeof vi.fn>).mockReturnValue({
-        from: vi.fn().mockReturnValue(query),
-      });
+      const patient = await seedPatient();
+      const created = await createClinicalVisit(patient.id, { subjective: 'Dolor' });
 
-      const visit = await getClinicalVisit(PATIENT_ID, VISIT_ID);
+      const visit = await getClinicalVisit(patient.id, created.id);
 
-      expect(visit.id).toBe(VISIT_ID);
+      expect(visit.id).toBe(created.id);
+      expect(visit.patientId).toBe(patient.id);
       expect(visit.subjective).toBe('Dolor');
     });
 
     it('throws NotFoundError when the visit does not exist', async () => {
-      const query = buildQuery();
-      query._mocks.mockSingle.mockResolvedValue({
-        data: null,
-        error: { code: 'PGRST116', message: 'No rows found' },
-      });
-      (getSupabaseAdmin as ReturnType<typeof vi.fn>).mockReturnValue({
-        from: vi.fn().mockReturnValue(query),
-      });
+      const patient = await seedPatient();
 
-      await expect(getClinicalVisit(PATIENT_ID, VISIT_ID)).rejects.toBeInstanceOf(
-        NotFoundError
-      );
+      await expect(
+        getClinicalVisit(patient.id, MISSING_VISIT_ID)
+      ).rejects.toBeInstanceOf(NotFoundError);
     });
   });
 
   describe('createClinicalVisit', () => {
     it('persists a visit and returns the mapped row', async () => {
-      const query = buildQuery();
-      query._mocks.mockSingle.mockResolvedValue({
-        data: visitRow(),
-        error: null,
-      });
-      (getSupabaseAdmin as ReturnType<typeof vi.fn>).mockReturnValue({
-        from: vi.fn().mockReturnValue(query),
-      });
+      const patient = await seedPatient();
 
-      const visit = await createClinicalVisit(PATIENT_ID, {
-        subjective: 'Dolor',
-      });
+      const visit = await createClinicalVisit(patient.id, { subjective: 'Dolor' });
 
-      expect(query._mocks.mockInsert).toHaveBeenCalledWith(
-        expect.objectContaining({
-          patient_id: PATIENT_ID,
-          subjective: 'Dolor',
-        })
-      );
-      expect(visit.id).toBe(VISIT_ID);
+      expect(visit.patientId).toBe(patient.id);
+      expect(visit.subjective).toBe('Dolor');
+      // Outcome observable en la BD, no solo el mapeo en memoria.
+      await expect(getClinicalVisit(patient.id, visit.id)).resolves.toEqual(visit);
     });
 
     it('throws ValidationError when subjective is empty', async () => {
-      (getSupabaseAdmin as ReturnType<typeof vi.fn>).mockReturnValue({
-        from: vi.fn().mockReturnValue(buildQuery()),
-      });
-
       await expect(
         createClinicalVisit(PATIENT_ID, { subjective: '   ' })
       ).rejects.toThrow(ValidationError);
     });
 
     it('normalizes empty SOAP fields to null', async () => {
-      const query = buildQuery();
-      query._mocks.mockSingle.mockResolvedValue({
-        data: visitRow(),
-        error: null,
-      });
-      (getSupabaseAdmin as ReturnType<typeof vi.fn>).mockReturnValue({
-        from: vi.fn().mockReturnValue(query),
-      });
+      const patient = await seedPatient();
 
-      await createClinicalVisit(PATIENT_ID, {
+      const visit = await createClinicalVisit(patient.id, {
         subjective: 'Dolor',
         objective: '',
         assessment: '  ',
@@ -176,72 +121,48 @@ describe('clinical-visits service', () => {
         notes: '\t\n',
       });
 
-      expect(query._mocks.mockInsert).toHaveBeenCalledWith(
-        expect.objectContaining({
-          objective: null,
-          assessment: null,
-          plan: null,
-          treatment: null,
-          notes: null,
-        })
-      );
+      expect(visit.objective).toBeNull();
+      expect(visit.assessment).toBeNull();
+      expect(visit.plan).toBeNull();
+      expect(visit.treatment).toBeNull();
+      expect(visit.notes).toBeNull();
+      await expect(getClinicalVisit(patient.id, visit.id)).resolves.toEqual(visit);
     });
   });
 
   describe('updateClinicalVisit', () => {
     it('updates allowed fields and returns the mapped row', async () => {
-      const query = buildQuery();
-      query._mocks.mockSingle.mockResolvedValue({
-        data: visitRow({ subjective: 'Dolor persistente' }),
-        error: null,
-      });
-      (getSupabaseAdmin as ReturnType<typeof vi.fn>).mockReturnValue({
-        from: vi.fn().mockReturnValue(query),
-      });
+      const patient = await seedPatient();
+      const created = await createClinicalVisit(patient.id, { subjective: 'Dolor' });
 
-      const visit = await updateClinicalVisit(PATIENT_ID, VISIT_ID, {
+      const visit = await updateClinicalVisit(patient.id, created.id, {
         subjective: 'Dolor persistente',
       });
 
-      expect(query._mocks.mockUpdate).toHaveBeenCalledWith(
-        expect.objectContaining({ subjective: 'Dolor persistente' })
-      );
+      expect(visit.id).toBe(created.id);
       expect(visit.subjective).toBe('Dolor persistente');
+      await expect(getClinicalVisit(patient.id, created.id)).resolves.toEqual(visit);
     });
 
     it('throws NotFoundError when the visit does not exist', async () => {
-      const query = buildQuery();
-      query._mocks.mockSingle.mockResolvedValue({
-        data: null,
-        error: { code: 'PGRST116', message: 'No rows found' },
-      });
-      (getSupabaseAdmin as ReturnType<typeof vi.fn>).mockReturnValue({
-        from: vi.fn().mockReturnValue(query),
-      });
+      const patient = await seedPatient();
 
       await expect(
-        updateClinicalVisit(PATIENT_ID, VISIT_ID, { subjective: 'X' })
+        updateClinicalVisit(patient.id, MISSING_VISIT_ID, { subjective: 'X' })
       ).rejects.toBeInstanceOf(NotFoundError);
     });
   });
 
   describe('deleteClinicalVisit', () => {
     it('deletes the visit', async () => {
-      const query = buildQuery();
-      query._mocks.mockEq
-        .mockReturnValueOnce(query)
-        .mockResolvedValueOnce({ error: null });
-      (getSupabaseAdmin as ReturnType<typeof vi.fn>).mockReturnValue({
-        from: vi.fn().mockReturnValue(query),
-      });
+      const patient = await seedPatient();
+      const created = await createClinicalVisit(patient.id, { subjective: 'Dolor' });
 
-      await deleteClinicalVisit(PATIENT_ID, VISIT_ID);
+      await deleteClinicalVisit(patient.id, created.id);
 
-      expect(query._mocks.mockEq).toHaveBeenCalledWith('id', VISIT_ID);
-      expect(query._mocks.mockEq).toHaveBeenCalledWith(
-        'patient_id',
-        PATIENT_ID
-      );
+      await expect(
+        getClinicalVisit(patient.id, created.id)
+      ).rejects.toBeInstanceOf(NotFoundError);
     });
 
     it('throws ValidationError for an invalid visit id', async () => {

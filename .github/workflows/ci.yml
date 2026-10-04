@@ -27,6 +27,37 @@ jobs:
       - name: Typecheck
         run: npx tsc --noEmit
 
+  test-local-db:
+    # Pruebas de datos contra Supabase local (openspec/changes/supabase-local-testing).
+    # Levanta la base con CLI, aplica migraciones + seed, y corre la suite completa
+    # incluyendo las suites de datos (marcadas skip sin SUPABASE_LOCAL).
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Start Supabase local
+        run: |
+          supabase start
+          supabase db reset
+
+      - name: Test (with local database)
+        run: npm run test:local
+
   build:
     runs-on: ubuntu-latest
     steps:

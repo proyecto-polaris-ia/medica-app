@@ -1,5 +1,15 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import {
+  acquireDbSuiteLock,
+  applyLocalDbEnv,
+  localDbEnabled,
+  releaseDbSuiteLock,
+  truncateAllTables,
+} from '@/test-utils/local-db';
 import { getSupabaseAdmin } from '@/lib/supabase/server';
+import { createPatient } from '../patients';
+import { createProvider } from '../providers';
+import { createService } from '../services';
 import {
   createAppointment,
   deleteAppointment,
@@ -9,227 +19,217 @@ import {
   listUpcomingByProvider,
   updateAppointment,
 } from '../appointments';
-import { ConflictError } from '../errors';
+import { ConflictError, NotFoundError } from '../errors';
 import { ValidationError } from '../validate';
+import type { Appointment } from '../types';
 
-vi.mock('@/lib/supabase/server', () => ({
-  getSupabaseAdmin: vi.fn(),
-}));
+/**
+ * Suite contra Supabase local (ver openspec/changes/supabase-local-testing).
+ * Corre solo con `npm run test:local` (SUPABASE_LOCAL=1 + supabase start);
+ * con `npm run test` regular se omite.
+ */
+const d = localDbEnabled ? describe : describe.skip;
 
-const APPOINTMENT_ID = '550e8400-e29b-41d4-a716-446655440000';
-const PATIENT_ID = '550e8400-e29b-41d4-a716-446655440001';
-const SERVICE_ID = '550e8400-e29b-41d4-a716-446655440002';
-const PROVIDER_ID = '550e8400-e29b-41d4-a716-446655440003';
+// Las suites de datos se serializan con un advisory lock (ver
+// src/test-utils/local-db.ts) porque vitest corre los archivos en paralelo
+// y todas truncan el esquema `public`.
 
-describe('appointments service', () => {
-  const mockSelect = vi.fn();
-  const mockInsert = vi.fn();
-  const mockUpdate = vi.fn();
-  const mockDelete = vi.fn();
-  const mockOrder = vi.fn();
-  const mockEq = vi.fn();
-  const mockGte = vi.fn();
-  const mockGt = vi.fn();
-  const mockLt = vi.fn();
-  const mockLimit = vi.fn();
-  const mockSingle = vi.fn();
-  const mockMaybeSingle = vi.fn();
-
-  // Cadena separada para `appointment_reminders`: evita compartir el terminal
-  // `order` con la consulta de citas (mismo runner, distinta resolución).
-  const reminderSelect = vi.fn();
-  const reminderIn = vi.fn();
-  const reminderOrder = vi.fn();
-
-  function buildQuery() {
-    return {
-      select: mockSelect.mockReturnThis(),
-      insert: mockInsert.mockReturnThis(),
-      update: mockUpdate.mockReturnThis(),
-      delete: mockDelete.mockReturnThis(),
-      order: mockOrder.mockReturnThis(),
-      eq: mockEq.mockReturnThis(),
-      gte: mockGte.mockReturnThis(),
-      gt: mockGt.mockReturnThis(),
-      lt: mockLt.mockReturnThis(),
-      limit: mockLimit.mockReturnThis(),
-      single: mockSingle,
-      maybeSingle: mockMaybeSingle,
-    };
-  }
-
-  function buildReminderQuery() {
-    return {
-      select: reminderSelect.mockReturnThis(),
-      in: reminderIn.mockReturnThis(),
-      order: reminderOrder,
-    };
-  }
-
-  beforeEach(() => {
-    vi.resetAllMocks();
-    reminderOrder.mockResolvedValue({ data: [], error: null });
-    // Lectura previa de `status` en `updateAppointment`; por defecto la cita
-    // existe en `requested` (el update cambiaría el estado).
-    mockMaybeSingle.mockResolvedValue({ data: { status: 'requested' }, error: null });
-    // Se construyen una sola vez para no reconfigurar los mocks compartidos
-    // (`mockOrder`, etc.) después de que cada test fije su valor resuelto.
-    const appointmentsQuery = buildQuery();
-    const remindersQuery = buildReminderQuery();
-    (getSupabaseAdmin as ReturnType<typeof vi.fn>).mockReturnValue({
-      from: vi.fn((table: string) =>
-        table === 'appointment_reminders' ? remindersQuery : appointmentsQuery
-      ),
-    });
+d('appointments service', () => {
+  beforeAll(async () => {
+    applyLocalDbEnv();
+    await acquireDbSuiteLock();
   });
 
-  it('lists mapped appointments', async () => {
-    mockOrder.mockResolvedValue({
-      data: [{
-        id: APPOINTMENT_ID,
-        patient_id: PATIENT_ID,
-        service_id: SERVICE_ID,
-        provider_id: PROVIDER_ID,
-        start_at: '2026-09-10T14:00:00.000Z',
-        end_at: '2026-09-10T14:30:00.000Z',
-        status: 'confirmed',
-        notes: 'Paciente nerviosa',
-        created_at: '2026-09-01T10:00:00Z',
-        updated_at: '2026-09-01T10:00:00Z',
-      }],
-      error: null,
+  afterAll(async () => {
+    await releaseDbSuiteLock();
+  });
+
+  beforeEach(async () => {
+    await truncateAllTables();
+  });
+
+  const iso = (value: string) => new Date(value).toISOString();
+
+  /** Fixtures deterministas vía funciones de dominio (patient/service/provider). */
+  async function seedFixtures() {
+    const patient = await createPatient({
+      fullName: 'Juan Pérez',
+      phoneE164: '+5215512345678',
     });
+    const service = await createService({ name: 'Limpieza', durationMinutes: 30 });
+    const provider = await createProvider({ name: 'Dra. Ana' });
+    return { patient, service, provider };
+  }
 
-    const appointments = await listAppointments();
+  /**
+   * Lectura cruda de la fila: las columnas de transición (`confirmed_at`,
+   * `cancelled_at`, `no_show_at`) no las expone el mapper del dominio.
+   */
+  async function readAppointmentRow(id: string): Promise<Record<string, unknown>> {
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase
+      .from('appointments')
+      .select('*')
+      .eq('id', id)
+      .single();
+    if (error || !data) throw new Error(error?.message ?? 'Appointment row not found');
+    return data as Record<string, unknown>;
+  }
 
-    expect(mockSelect).toHaveBeenCalledWith(expect.stringContaining('notes'));
-    expect(appointments).toEqual([{
-      id: APPOINTMENT_ID,
-      patientId: PATIENT_ID,
-      serviceId: SERVICE_ID,
-      providerId: PROVIDER_ID,
+  /**
+   * No existe función de dominio para recordatorios: se insertan directo en la
+   * tabla, con `created_at` explícito para controlar el orden "más reciente primero".
+   */
+  async function insertReminder(input: {
+    appointmentId: string;
+    key: string;
+    cadence: 'h24' | 'same_day';
+    status: 'scheduled' | 'sent' | 'failed';
+    dryRun: boolean;
+    sentAt: string | null;
+    createdAt: string;
+  }): Promise<void> {
+    const supabase = getSupabaseAdmin();
+    const { error } = await supabase.from('appointment_reminders').insert({
+      appointment_id: input.appointmentId,
+      reminder_key: input.key,
+      cadence: input.cadence,
+      status: input.status,
+      dry_run: input.dryRun,
+      sent_at: input.sentAt,
+      created_at: input.createdAt,
+    });
+    if (error) throw new Error(error.message);
+  }
+
+  it('lists mapped appointments', async () => {
+    const { patient, service, provider } = await seedFixtures();
+    const created = await createAppointment({
+      patientId: patient.id,
+      serviceId: service.id,
+      providerId: provider.id,
       startAt: '2026-09-10T14:00:00.000Z',
       endAt: '2026-09-10T14:30:00.000Z',
       status: 'confirmed',
       notes: 'Paciente nerviosa',
-      createdAt: '2026-09-01T10:00:00Z',
-      updatedAt: '2026-09-01T10:00:00Z',
-      reminders: [],
-    }]);
-  });
-
-  it('groups appointment reminders by appointment_id, newest first', async () => {
-    const SECOND_APPOINTMENT_ID = '550e8400-e29b-41d4-a716-446655440009';
-    mockOrder.mockResolvedValue({
-      data: [
-        {
-          id: APPOINTMENT_ID,
-          patient_id: PATIENT_ID,
-          service_id: SERVICE_ID,
-          provider_id: PROVIDER_ID,
-          start_at: '2026-09-10T14:00:00.000Z',
-          end_at: '2026-09-10T14:30:00.000Z',
-          status: 'confirmed',
-          notes: null,
-          created_at: '2026-09-01T10:00:00Z',
-          updated_at: '2026-09-01T10:00:00Z',
-        },
-        {
-          id: SECOND_APPOINTMENT_ID,
-          patient_id: PATIENT_ID,
-          service_id: SERVICE_ID,
-          provider_id: PROVIDER_ID,
-          start_at: '2026-09-11T14:00:00.000Z',
-          end_at: '2026-09-11T14:30:00.000Z',
-          status: 'requested',
-          notes: null,
-          created_at: '2026-09-01T10:00:00Z',
-          updated_at: '2026-09-01T10:00:00Z',
-        },
-      ],
-      error: null,
-    });
-    reminderOrder.mockResolvedValue({
-      data: [
-        {
-          appointment_id: APPOINTMENT_ID,
-          cadence: 'same_day',
-          status: 'scheduled',
-          dry_run: true,
-          sent_at: null,
-          created_at: '2026-09-02T10:00:00Z',
-        },
-        {
-          appointment_id: APPOINTMENT_ID,
-          cadence: 'h24',
-          status: 'sent',
-          dry_run: false,
-          sent_at: '2026-09-01T15:15:00Z',
-          created_at: '2026-09-01T15:15:00Z',
-        },
-        {
-          appointment_id: SECOND_APPOINTMENT_ID,
-          cadence: 'h24',
-          status: 'failed',
-          dry_run: false,
-          sent_at: null,
-          created_at: '2026-09-01T16:00:00Z',
-        },
-      ],
-      error: null,
     });
 
     const appointments = await listAppointments();
 
-    expect(reminderIn).toHaveBeenCalledWith('appointment_id', [
-      APPOINTMENT_ID,
-      SECOND_APPOINTMENT_ID,
-    ]);
-    expect(reminderOrder).toHaveBeenCalledWith('created_at', { ascending: false });
-    expect(appointments[0].reminders).toEqual([
+    expect(appointments).toHaveLength(1);
+    const appointment = appointments[0];
+    expect(appointment).toMatchObject({
+      id: created.id,
+      patientId: patient.id,
+      serviceId: service.id,
+      providerId: provider.id,
+      status: 'confirmed',
+      notes: 'Paciente nerviosa',
+      reminders: [],
+    });
+    // timestamptz vuelve con offset `+00:00`: se normaliza a ISO.
+    expect(iso(appointment.startAt)).toBe('2026-09-10T14:00:00.000Z');
+    expect(iso(appointment.endAt)).toBe('2026-09-10T14:30:00.000Z');
+    expect(iso(appointment.createdAt)).toBe(iso(created.createdAt));
+    expect(iso(appointment.updatedAt)).toBe(iso(created.updatedAt));
+  });
+
+  it('groups appointment reminders by appointment_id, newest first', async () => {
+    const { patient, service, provider } = await seedFixtures();
+    const first = await createAppointment({
+      patientId: patient.id,
+      serviceId: service.id,
+      providerId: provider.id,
+      startAt: '2026-09-10T14:00:00.000Z',
+      endAt: '2026-09-10T14:30:00.000Z',
+      status: 'confirmed',
+    });
+    const second = await createAppointment({
+      patientId: patient.id,
+      serviceId: service.id,
+      providerId: provider.id,
+      startAt: '2026-09-11T14:00:00.000Z',
+      endAt: '2026-09-11T14:30:00.000Z',
+    });
+
+    await insertReminder({
+      appointmentId: first.id,
+      key: `${first.id}-same_day`,
+      cadence: 'same_day',
+      status: 'scheduled',
+      dryRun: true,
+      sentAt: null,
+      createdAt: '2026-09-02T10:00:00Z',
+    });
+    await insertReminder({
+      appointmentId: first.id,
+      key: `${first.id}-h24`,
+      cadence: 'h24',
+      status: 'sent',
+      dryRun: false,
+      sentAt: '2026-09-01T15:15:00Z',
+      createdAt: '2026-09-01T15:15:00Z',
+    });
+    await insertReminder({
+      appointmentId: second.id,
+      key: `${second.id}-h24`,
+      cadence: 'h24',
+      status: 'failed',
+      dryRun: false,
+      sentAt: null,
+      createdAt: '2026-09-01T16:00:00Z',
+    });
+
+    const appointments = await listAppointments();
+    const byId = new Map(appointments.map((appointment) => [appointment.id, appointment]));
+
+    const normalize = (
+      reminders: Appointment['reminders']
+    ) =>
+      reminders.map((reminder) => ({
+        cadence: reminder.cadence,
+        status: reminder.status,
+        dryRun: reminder.dryRun,
+        sentAt: reminder.sentAt ? iso(reminder.sentAt) : null,
+        createdAt: iso(reminder.createdAt),
+      }));
+
+    expect(normalize(byId.get(first.id)?.reminders ?? [])).toEqual([
       {
         cadence: 'same_day',
         status: 'scheduled',
         sentAt: null,
         dryRun: true,
-        createdAt: '2026-09-02T10:00:00Z',
+        createdAt: '2026-09-02T10:00:00.000Z',
       },
       {
         cadence: 'h24',
         status: 'sent',
-        sentAt: '2026-09-01T15:15:00Z',
+        sentAt: '2026-09-01T15:15:00.000Z',
         dryRun: false,
-        createdAt: '2026-09-01T15:15:00Z',
+        createdAt: '2026-09-01T15:15:00.000Z',
       },
     ]);
-    expect(appointments[1].reminders).toEqual([
+    expect(normalize(byId.get(second.id)?.reminders ?? [])).toEqual([
       {
         cadence: 'h24',
         status: 'failed',
         sentAt: null,
         dryRun: false,
-        createdAt: '2026-09-01T16:00:00Z',
+        createdAt: '2026-09-01T16:00:00.000Z',
       },
     ]);
   });
 
   it('leaves reminders empty when an appointment has none', async () => {
-    mockOrder.mockResolvedValue({
-      data: [
-        {
-          id: APPOINTMENT_ID,
-          patient_id: PATIENT_ID,
-          service_id: SERVICE_ID,
-          provider_id: PROVIDER_ID,
-          start_at: '2026-09-10T14:00:00.000Z',
-          end_at: '2026-09-10T14:30:00.000Z',
-          status: 'confirmed',
-          notes: null,
-          created_at: '2026-09-01T10:00:00Z',
-          updated_at: '2026-09-01T10:00:00Z',
-        },
-      ],
-      error: null,
+    const { patient, service, provider } = await seedFixtures();
+    await createAppointment({
+      patientId: patient.id,
+      serviceId: service.id,
+      providerId: provider.id,
+      startAt: '2026-09-10T14:00:00.000Z',
+      endAt: '2026-09-10T14:30:00.000Z',
+      status: 'confirmed',
     });
 
     const appointments = await listAppointments();
@@ -238,35 +238,23 @@ describe('appointments service', () => {
   });
 
   it('attaches reminders to ranged appointments too', async () => {
-    mockOrder.mockResolvedValue({
-      data: [
-        {
-          id: APPOINTMENT_ID,
-          patient_id: PATIENT_ID,
-          service_id: SERVICE_ID,
-          provider_id: PROVIDER_ID,
-          start_at: '2026-06-10T14:00:00.000Z',
-          end_at: '2026-06-10T14:30:00.000Z',
-          status: 'pending',
-          notes: null,
-          created_at: '2026-06-01T10:00:00Z',
-          updated_at: '2026-06-01T10:00:00Z',
-        },
-      ],
-      error: null,
+    const { patient, service, provider } = await seedFixtures();
+    const created = await createAppointment({
+      patientId: patient.id,
+      serviceId: service.id,
+      providerId: provider.id,
+      startAt: '2026-06-10T14:00:00.000Z',
+      endAt: '2026-06-10T14:30:00.000Z',
+      status: 'pending',
     });
-    reminderOrder.mockResolvedValue({
-      data: [
-        {
-          appointment_id: APPOINTMENT_ID,
-          cadence: 'same_day',
-          status: 'sent',
-          dry_run: false,
-          sent_at: '2026-06-10T14:00:00Z',
-          created_at: '2026-06-10T14:00:00Z',
-        },
-      ],
-      error: null,
+    await insertReminder({
+      appointmentId: created.id,
+      key: `${created.id}-same_day`,
+      cadence: 'same_day',
+      status: 'sent',
+      dryRun: false,
+      sentAt: '2026-06-10T14:00:00Z',
+      createdAt: '2026-06-10T14:00:00Z',
     });
 
     const appointments = await listAppointmentsRange(
@@ -274,119 +262,90 @@ describe('appointments service', () => {
       '2026-07-01T06:00:00.000Z'
     );
 
-    expect(appointments[0].reminders).toEqual([
+    expect(appointments).toHaveLength(1);
+    const reminders = appointments[0].reminders;
+    expect(
+      reminders.map((reminder) => ({
+        cadence: reminder.cadence,
+        status: reminder.status,
+        dryRun: reminder.dryRun,
+        sentAt: reminder.sentAt ? iso(reminder.sentAt) : null,
+        createdAt: iso(reminder.createdAt),
+      }))
+    ).toEqual([
       {
         cadence: 'same_day',
         status: 'sent',
-        sentAt: '2026-06-10T14:00:00Z',
+        sentAt: '2026-06-10T14:00:00.000Z',
         dryRun: false,
-        createdAt: '2026-06-10T14:00:00Z',
+        createdAt: '2026-06-10T14:00:00.000Z',
       },
     ]);
   });
 
   it('creates an appointment', async () => {
-    mockSingle.mockResolvedValue({
-      data: {
-        id: APPOINTMENT_ID,
-        patient_id: PATIENT_ID,
-        service_id: SERVICE_ID,
-        provider_id: PROVIDER_ID,
-        start_at: '2026-09-10T14:00:00.000Z',
-        end_at: '2026-09-10T14:30:00.000Z',
-        status: 'requested',
-        notes: null,
-        created_at: '2026-09-01T10:00:00Z',
-        updated_at: '2026-09-01T10:00:00Z',
-      },
-      error: null,
-    });
+    const { patient, service, provider } = await seedFixtures();
 
     const appointment = await createAppointment({
-      patientId: PATIENT_ID,
-      serviceId: SERVICE_ID,
-      providerId: PROVIDER_ID,
+      patientId: patient.id,
+      serviceId: service.id,
+      providerId: provider.id,
       startAt: '2026-09-10T14:00:00.000Z',
       endAt: '2026-09-10T14:30:00.000Z',
     });
 
-    expect(mockInsert).toHaveBeenCalledWith(expect.objectContaining({
-      patient_id: PATIENT_ID,
-      service_id: SERVICE_ID,
-      provider_id: PROVIDER_ID,
-      status: 'requested',
-      notes: null,
-    }));
     expect(appointment.status).toBe('requested');
+    expect(appointment.notes).toBeNull();
+    // Outcome observable en la BD: la cita quedó persistida con sus FKs.
+    const stored = await listAppointments();
+    expect(stored).toHaveLength(1);
+    expect(stored[0]).toMatchObject({
+      id: appointment.id,
+      patientId: patient.id,
+      serviceId: service.id,
+      providerId: provider.id,
+    });
   });
 
   it('trims and stores notes when creating an appointment', async () => {
-    mockSingle.mockResolvedValue({
-      data: {
-        id: APPOINTMENT_ID,
-        patient_id: PATIENT_ID,
-        service_id: SERVICE_ID,
-        provider_id: PROVIDER_ID,
-        start_at: '2026-09-10T14:00:00.000Z',
-        end_at: '2026-09-10T14:30:00.000Z',
-        status: 'requested',
-        notes: 'Prefiere mañana',
-        created_at: '2026-09-01T10:00:00Z',
-        updated_at: '2026-09-01T10:00:00Z',
-      },
-      error: null,
-    });
+    const { patient, service, provider } = await seedFixtures();
 
-    await createAppointment({
-      patientId: PATIENT_ID,
-      serviceId: SERVICE_ID,
-      providerId: PROVIDER_ID,
+    const appointment = await createAppointment({
+      patientId: patient.id,
+      serviceId: service.id,
+      providerId: provider.id,
       startAt: '2026-09-10T14:00:00.000Z',
       endAt: '2026-09-10T14:30:00.000Z',
       notes: '  Prefiere mañana  ',
     });
 
-    expect(mockInsert).toHaveBeenCalledWith(expect.objectContaining({
-      notes: 'Prefiere mañana',
-    }));
+    expect(appointment.notes).toBe('Prefiere mañana');
+    const row = await readAppointmentRow(appointment.id);
+    expect(row.notes).toBe('Prefiere mañana');
   });
 
   it('stores null for empty notes when creating an appointment', async () => {
-    mockSingle.mockResolvedValue({
-      data: {
-        id: APPOINTMENT_ID,
-        patient_id: PATIENT_ID,
-        service_id: SERVICE_ID,
-        provider_id: PROVIDER_ID,
-        start_at: '2026-09-10T14:00:00.000Z',
-        end_at: '2026-09-10T14:30:00.000Z',
-        status: 'requested',
-        notes: null,
-        created_at: '2026-09-01T10:00:00Z',
-        updated_at: '2026-09-01T10:00:00Z',
-      },
-      error: null,
-    });
+    const { patient, service, provider } = await seedFixtures();
 
-    await createAppointment({
-      patientId: PATIENT_ID,
-      serviceId: SERVICE_ID,
-      providerId: PROVIDER_ID,
+    const appointment = await createAppointment({
+      patientId: patient.id,
+      serviceId: service.id,
+      providerId: provider.id,
       startAt: '2026-09-10T14:00:00.000Z',
       endAt: '2026-09-10T14:30:00.000Z',
       notes: '   ',
     });
 
-    expect(mockInsert).toHaveBeenCalledWith(expect.objectContaining({
-      notes: null,
-    }));
+    expect(appointment.notes).toBeNull();
+    const row = await readAppointmentRow(appointment.id);
+    expect(row.notes).toBeNull();
   });
 
   it('rejects notes longer than 1000 characters', async () => {
     await expect(createAppointment({
-      patientId: PATIENT_ID,
-      serviceId: SERVICE_ID,
-      providerId: PROVIDER_ID,
+      patientId: '550e8400-e29b-41d4-a716-446655440001',
+      serviceId: '550e8400-e29b-41d4-a716-446655440002',
+      providerId: '550e8400-e29b-41d4-a716-446655440003',
       startAt: '2026-09-10T14:00:00.000Z',
       endAt: '2026-09-10T14:30:00.000Z',
       notes: 'a'.repeat(1001),
@@ -394,328 +353,330 @@ describe('appointments service', () => {
   });
 
   it('translates a 23P01 exclusion violation into ConflictError', async () => {
-    mockSingle.mockRejectedValue({ code: '23P01', message: 'overlap' });
-
-    await expect(createAppointment({
-      serviceId: SERVICE_ID,
-      providerId: PROVIDER_ID,
+    const { service, provider } = await seedFixtures();
+    // Primera cita en el slot: la restricción real EXCLUDE impide el solape.
+    await createAppointment({
+      serviceId: service.id,
+      providerId: provider.id,
       startAt: '2026-09-10T14:00:00.000Z',
       endAt: '2026-09-10T14:30:00.000Z',
+    });
+
+    await expect(createAppointment({
+      serviceId: service.id,
+      providerId: provider.id,
+      startAt: '2026-09-10T14:15:00.000Z',
+      endAt: '2026-09-10T14:45:00.000Z',
     })).rejects.toThrow(ConflictError);
   });
 
   it('rejects an end time before start time', async () => {
     await expect(createAppointment({
-      serviceId: SERVICE_ID,
-      providerId: PROVIDER_ID,
+      serviceId: '550e8400-e29b-41d4-a716-446655440002',
+      providerId: '550e8400-e29b-41d4-a716-446655440003',
       startAt: '2026-09-10T14:30:00.000Z',
       endAt: '2026-09-10T14:00:00.000Z',
     })).rejects.toThrow(ValidationError);
   });
 
   it('updates an appointment', async () => {
-    mockSingle.mockResolvedValue({
-      data: {
-        id: APPOINTMENT_ID,
-        patient_id: PATIENT_ID,
-        service_id: SERVICE_ID,
-        provider_id: PROVIDER_ID,
-        start_at: '2026-09-10T15:00:00.000Z',
-        end_at: '2026-09-10T15:30:00.000Z',
-        status: 'confirmed',
-        created_at: '2026-09-01T10:00:00Z',
-        updated_at: '2026-09-02T10:00:00Z',
-      },
-      error: null,
+    const { patient, service, provider } = await seedFixtures();
+    const created = await createAppointment({
+      patientId: patient.id,
+      serviceId: service.id,
+      providerId: provider.id,
+      startAt: '2026-09-10T14:00:00.000Z',
+      endAt: '2026-09-10T14:30:00.000Z',
     });
 
-    const appointment = await updateAppointment(APPOINTMENT_ID, {
-      patientId: PATIENT_ID,
-      serviceId: SERVICE_ID,
-      providerId: PROVIDER_ID,
+    const appointment = await updateAppointment(created.id, {
+      patientId: patient.id,
+      serviceId: service.id,
+      providerId: provider.id,
       startAt: '2026-09-10T15:00:00.000Z',
       endAt: '2026-09-10T15:30:00.000Z',
       status: 'confirmed',
     });
 
-    expect(mockUpdate).toHaveBeenCalledWith(expect.objectContaining({ status: 'confirmed' }));
     expect(appointment.status).toBe('confirmed');
+    const row = await readAppointmentRow(created.id);
+    expect(row.status).toBe('confirmed');
+    expect(iso(row.start_at as string)).toBe('2026-09-10T15:00:00.000Z');
+  });
+
+  it('updateAppointment throws NotFoundError for a missing appointment', async () => {
+    const { service, provider } = await seedFixtures();
+
+    await expect(
+      updateAppointment('00000000-0000-4000-8000-00000000dead', {
+        serviceId: service.id,
+        providerId: provider.id,
+        startAt: '2026-09-10T15:00:00.000Z',
+        endAt: '2026-09-10T15:30:00.000Z',
+        status: 'confirmed',
+      })
+    ).rejects.toThrow(NotFoundError);
   });
 
   it('updateAppointment estampa confirmed_at cuando el status cambia', async () => {
-    mockMaybeSingle.mockResolvedValue({ data: { status: 'requested' }, error: null });
-    mockSingle.mockResolvedValue({
-      data: {
-        id: APPOINTMENT_ID,
-        patient_id: PATIENT_ID,
-        service_id: SERVICE_ID,
-        provider_id: PROVIDER_ID,
-        start_at: '2026-09-10T15:00:00.000Z',
-        end_at: '2026-09-10T15:30:00.000Z',
-        status: 'confirmed',
-        created_at: '2026-09-01T10:00:00Z',
-        updated_at: '2026-09-02T10:00:00Z',
-      },
-      error: null,
+    const { patient, service, provider } = await seedFixtures();
+    const created = await createAppointment({
+      patientId: patient.id,
+      serviceId: service.id,
+      providerId: provider.id,
+      startAt: '2026-09-10T15:00:00.000Z',
+      endAt: '2026-09-10T15:30:00.000Z',
     });
+    expect((await readAppointmentRow(created.id)).confirmed_at).toBeNull();
 
-    await updateAppointment(APPOINTMENT_ID, {
-      patientId: PATIENT_ID,
-      serviceId: SERVICE_ID,
-      providerId: PROVIDER_ID,
+    await updateAppointment(created.id, {
+      patientId: patient.id,
+      serviceId: service.id,
+      providerId: provider.id,
       startAt: '2026-09-10T15:00:00.000Z',
       endAt: '2026-09-10T15:30:00.000Z',
       status: 'confirmed',
     });
 
-    expect(mockMaybeSingle).toHaveBeenCalledTimes(1);
-    expect(mockUpdate).toHaveBeenCalledWith(
-      expect.objectContaining({
-        status: 'confirmed',
-        confirmed_at: expect.stringMatching(
-          /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/
-        ),
-      })
-    );
+    expect((await readAppointmentRow(created.id)).confirmed_at).toBeTruthy();
   });
 
   it('updateAppointment no reescribe el instante si el status no cambia', async () => {
-    mockMaybeSingle.mockResolvedValue({ data: { status: 'confirmed' }, error: null });
-    mockSingle.mockResolvedValue({
-      data: {
-        id: APPOINTMENT_ID,
-        patient_id: PATIENT_ID,
-        service_id: SERVICE_ID,
-        provider_id: PROVIDER_ID,
-        start_at: '2026-09-10T15:00:00.000Z',
-        end_at: '2026-09-10T15:30:00.000Z',
-        status: 'confirmed',
-        created_at: '2026-09-01T10:00:00Z',
-        updated_at: '2026-09-02T10:00:00Z',
-      },
-      error: null,
-    });
-
-    await updateAppointment(APPOINTMENT_ID, {
-      patientId: PATIENT_ID,
-      serviceId: SERVICE_ID,
-      providerId: PROVIDER_ID,
+    const { patient, service, provider } = await seedFixtures();
+    const created = await createAppointment({
+      patientId: patient.id,
+      serviceId: service.id,
+      providerId: provider.id,
       startAt: '2026-09-10T15:00:00.000Z',
       endAt: '2026-09-10T15:30:00.000Z',
       status: 'confirmed',
+      notes: 'original',
+    });
+    const before = (await readAppointmentRow(created.id)).confirmed_at as string;
+    expect(before).toBeTruthy();
+
+    await updateAppointment(created.id, {
+      patientId: patient.id,
+      serviceId: service.id,
+      providerId: provider.id,
+      startAt: '2026-09-10T15:00:00.000Z',
+      endAt: '2026-09-10T15:30:00.000Z',
+      status: 'confirmed',
+      notes: 'actualizado',
     });
 
-    const payload = mockUpdate.mock.calls[0][0] as Record<string, unknown>;
-    expect(payload).not.toHaveProperty('confirmed_at');
-    expect(payload).not.toHaveProperty('cancelled_at');
-    expect(payload).not.toHaveProperty('no_show_at');
+    const after = await readAppointmentRow(created.id);
+    expect(after.confirmed_at).toBe(before);
+    expect(after.notes).toBe('actualizado');
+    expect(after.cancelled_at).toBeNull();
+    expect(after.no_show_at).toBeNull();
   });
 
   it('updateAppointment reestampa el nuevo estado sin tocar el anterior', async () => {
-    mockMaybeSingle.mockResolvedValue({ data: { status: 'cancelled' }, error: null });
-    mockSingle.mockResolvedValue({
-      data: {
-        id: APPOINTMENT_ID,
-        patient_id: PATIENT_ID,
-        service_id: SERVICE_ID,
-        provider_id: PROVIDER_ID,
-        start_at: '2026-09-10T15:00:00.000Z',
-        end_at: '2026-09-10T15:30:00.000Z',
-        status: 'confirmed',
-        created_at: '2026-09-01T10:00:00Z',
-        updated_at: '2026-09-02T10:00:00Z',
-      },
-      error: null,
+    const { patient, service, provider } = await seedFixtures();
+    const created = await createAppointment({
+      patientId: patient.id,
+      serviceId: service.id,
+      providerId: provider.id,
+      startAt: '2026-09-10T15:00:00.000Z',
+      endAt: '2026-09-10T15:30:00.000Z',
+      status: 'cancelled',
     });
+    const cancelledAt = (await readAppointmentRow(created.id)).cancelled_at as string;
+    expect(cancelledAt).toBeTruthy();
 
-    await updateAppointment(APPOINTMENT_ID, {
-      patientId: PATIENT_ID,
-      serviceId: SERVICE_ID,
-      providerId: PROVIDER_ID,
+    await updateAppointment(created.id, {
+      patientId: patient.id,
+      serviceId: service.id,
+      providerId: provider.id,
       startAt: '2026-09-10T15:00:00.000Z',
       endAt: '2026-09-10T15:30:00.000Z',
       status: 'confirmed',
     });
 
-    const payload = mockUpdate.mock.calls[0][0] as Record<string, unknown>;
-    expect(payload.confirmed_at).toEqual(expect.any(String));
-    expect(payload).not.toHaveProperty('cancelled_at');
+    const row = await readAppointmentRow(created.id);
+    expect(row.confirmed_at).toBeTruthy();
+    expect(row.cancelled_at).toBe(cancelledAt);
   });
 
   it('createAppointment estampa el status inicial estampable', async () => {
-    mockSingle.mockResolvedValue({
-      data: {
-        id: APPOINTMENT_ID,
-        patient_id: PATIENT_ID,
-        service_id: SERVICE_ID,
-        provider_id: PROVIDER_ID,
-        start_at: '2026-09-10T15:00:00.000Z',
-        end_at: '2026-09-10T15:30:00.000Z',
-        status: 'confirmed',
-        created_at: '2026-09-01T10:00:00Z',
-        updated_at: '2026-09-01T10:00:00Z',
-      },
-      error: null,
-    });
+    const { patient, service, provider } = await seedFixtures();
 
-    await createAppointment({
-      patientId: PATIENT_ID,
-      serviceId: SERVICE_ID,
-      providerId: PROVIDER_ID,
+    const created = await createAppointment({
+      patientId: patient.id,
+      serviceId: service.id,
+      providerId: provider.id,
       startAt: '2026-09-10T15:00:00.000Z',
       endAt: '2026-09-10T15:30:00.000Z',
       status: 'confirmed',
     });
 
-    expect(mockInsert).toHaveBeenCalledWith(
-      expect.objectContaining({
-        status: 'confirmed',
-        confirmed_at: expect.stringMatching(
-          /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/
-        ),
-      })
-    );
+    expect((await readAppointmentRow(created.id)).confirmed_at).toBeTruthy();
   });
 
   it('createAppointment no agrega columnas de transición para requested', async () => {
-    mockSingle.mockResolvedValue({
-      data: {
-        id: APPOINTMENT_ID,
-        patient_id: PATIENT_ID,
-        service_id: SERVICE_ID,
-        provider_id: PROVIDER_ID,
-        start_at: '2026-09-10T15:00:00.000Z',
-        end_at: '2026-09-10T15:30:00.000Z',
-        status: 'requested',
-        created_at: '2026-09-01T10:00:00Z',
-        updated_at: '2026-09-01T10:00:00Z',
-      },
-      error: null,
-    });
+    const { patient, service, provider } = await seedFixtures();
 
-    await createAppointment({
-      patientId: PATIENT_ID,
-      serviceId: SERVICE_ID,
-      providerId: PROVIDER_ID,
+    const created = await createAppointment({
+      patientId: patient.id,
+      serviceId: service.id,
+      providerId: provider.id,
       startAt: '2026-09-10T15:00:00.000Z',
       endAt: '2026-09-10T15:30:00.000Z',
     });
 
-    const payload = mockInsert.mock.calls[0][0] as Record<string, unknown>;
-    expect(payload).not.toHaveProperty('confirmed_at');
-    expect(payload).not.toHaveProperty('cancelled_at');
-    expect(payload).not.toHaveProperty('no_show_at');
+    const row = await readAppointmentRow(created.id);
+    expect(row.confirmed_at).toBeNull();
+    expect(row.cancelled_at).toBeNull();
+    expect(row.no_show_at).toBeNull();
   });
 
   it('deletes an appointment', async () => {
-    mockEq.mockResolvedValue({ error: null });
+    const { patient, service, provider } = await seedFixtures();
+    const created = await createAppointment({
+      patientId: patient.id,
+      serviceId: service.id,
+      providerId: provider.id,
+      startAt: '2026-09-10T15:00:00.000Z',
+      endAt: '2026-09-10T15:30:00.000Z',
+    });
 
-    await deleteAppointment(APPOINTMENT_ID);
+    await deleteAppointment(created.id);
 
-    expect(mockEq).toHaveBeenCalledWith('id', APPOINTMENT_ID);
+    const appointments = await listAppointments();
+    expect(appointments.find((appointment) => appointment.id === created.id)).toBeUndefined();
   });
 
   describe('listUpcomingByProvider', () => {
     it('returns future appointments sorted ascending with patient/service names', async () => {
-      mockLimit.mockResolvedValue({
-        data: [
-          {
-            id: '660e8400-e29b-41d4-a716-446655440001',
-            patient_id: PATIENT_ID,
-            service_id: SERVICE_ID,
-            provider_id: PROVIDER_ID,
-            start_at: '2026-09-05T14:00:00.000Z',
-            end_at: '2026-09-05T14:30:00.000Z',
-            status: 'confirmed',
-            created_at: '2026-09-01T10:00:00Z',
-            updated_at: '2026-09-01T10:00:00Z',
-            patients: { id: PATIENT_ID, full_name: 'Juan Pérez' },
-            services: { id: SERVICE_ID, name: 'Limpieza' },
-          },
-          {
-            id: '660e8400-e29b-41d4-a716-446655440000',
-            patient_id: PATIENT_ID,
-            service_id: SERVICE_ID,
-            provider_id: PROVIDER_ID,
-            start_at: '2026-09-10T14:00:00.000Z',
-            end_at: '2026-09-10T14:30:00.000Z',
-            status: 'confirmed',
-            created_at: '2026-09-01T10:00:00Z',
-            updated_at: '2026-09-01T10:00:00Z',
-            patients: { id: PATIENT_ID, full_name: 'Juan Pérez' },
-            services: { id: SERVICE_ID, name: 'Limpieza' },
-          },
-        ],
-        error: null,
+      const { patient, service, provider } = await seedFixtures();
+      await createAppointment({
+        patientId: patient.id,
+        serviceId: service.id,
+        providerId: provider.id,
+        startAt: '2026-08-01T14:00:00.000Z',
+        endAt: '2026-08-01T14:30:00.000Z',
+        status: 'attended',
+      });
+      await createAppointment({
+        patientId: patient.id,
+        serviceId: service.id,
+        providerId: provider.id,
+        startAt: '2026-09-10T14:00:00.000Z',
+        endAt: '2026-09-10T14:30:00.000Z',
+        status: 'confirmed',
+      });
+      await createAppointment({
+        patientId: patient.id,
+        serviceId: service.id,
+        providerId: provider.id,
+        startAt: '2026-09-05T14:00:00.000Z',
+        endAt: '2026-09-05T14:30:00.000Z',
+        status: 'confirmed',
       });
 
       const now = new Date('2026-09-01T10:00:00.000Z');
-      const appointments = await listUpcomingByProvider(PROVIDER_ID, now);
+      const appointments = await listUpcomingByProvider(provider.id, now);
 
-      expect(mockGt).toHaveBeenCalledWith('start_at', now.toISOString());
-      expect(mockOrder).toHaveBeenCalledWith('start_at', { ascending: true });
       expect(appointments).toHaveLength(2);
-      expect(appointments[0].startAt).toBe('2026-09-05T14:00:00.000Z');
-      expect(appointments[1].startAt).toBe('2026-09-10T14:00:00.000Z');
+      expect(appointments.map((appointment) => iso(appointment.startAt))).toEqual([
+        '2026-09-05T14:00:00.000Z',
+        '2026-09-10T14:00:00.000Z',
+      ]);
       expect(appointments[0].patientName).toBe('Juan Pérez');
       expect(appointments[0].serviceName).toBe('Limpieza');
     });
 
     it('respects a custom limit', async () => {
-      mockLimit.mockResolvedValue({ data: [], error: null });
+      const { patient, service, provider } = await seedFixtures();
+      for (const day of ['2026-09-05', '2026-09-06', '2026-09-07']) {
+        await createAppointment({
+          patientId: patient.id,
+          serviceId: service.id,
+          providerId: provider.id,
+          startAt: `${day}T14:00:00.000Z`,
+          endAt: `${day}T14:30:00.000Z`,
+          status: 'confirmed',
+        });
+      }
 
-      await listUpcomingByProvider(PROVIDER_ID, new Date(), 3);
+      const appointments = await listUpcomingByProvider(
+        provider.id,
+        new Date('2026-09-01T10:00:00.000Z'),
+        2
+      );
 
-      expect(mockLimit).toHaveBeenCalledWith(3);
+      expect(appointments).toHaveLength(2);
+      expect(appointments.map((appointment) => iso(appointment.startAt))).toEqual([
+        '2026-09-05T14:00:00.000Z',
+        '2026-09-06T14:00:00.000Z',
+      ]);
     });
   });
 
   describe('listByProviderRange', () => {
     it('returns appointments within the half-open range and maps embeds', async () => {
-      mockOrder.mockResolvedValue({
-        data: [
-          {
-            id: '660e8400-e29b-41d4-a716-446655440002',
-            patient_id: PATIENT_ID,
-            service_id: SERVICE_ID,
-            provider_id: PROVIDER_ID,
-            start_at: '2026-09-03T14:00:00.000Z',
-            end_at: '2026-09-03T14:30:00.000Z',
-            status: 'attended',
-            created_at: '2026-09-01T10:00:00Z',
-            updated_at: '2026-09-01T10:00:00Z',
-            patients: { id: PATIENT_ID, full_name: 'Juan Pérez' },
-            services: { id: SERVICE_ID, name: 'Limpieza' },
-          },
-        ],
-        error: null,
+      const { patient, service, provider } = await seedFixtures();
+      const inRange = await createAppointment({
+        patientId: patient.id,
+        serviceId: service.id,
+        providerId: provider.id,
+        startAt: '2026-09-03T14:00:00.000Z',
+        endAt: '2026-09-03T14:30:00.000Z',
+        status: 'attended',
+      });
+      await createAppointment({
+        patientId: patient.id,
+        serviceId: service.id,
+        providerId: provider.id,
+        startAt: '2026-09-05T14:00:00.000Z',
+        endAt: '2026-09-05T14:30:00.000Z',
+        status: 'attended',
       });
 
       const start = new Date('2026-09-03T06:00:00.000Z');
       const end = new Date('2026-09-04T06:00:00.000Z');
-      const appointments = await listByProviderRange(PROVIDER_ID, start, end);
+      const appointments = await listByProviderRange(provider.id, start, end);
 
-      expect(mockGte).toHaveBeenCalledWith('start_at', start.toISOString());
-      expect(mockLt).toHaveBeenCalledWith('start_at', end.toISOString());
       expect(appointments).toHaveLength(1);
-      expect(appointments[0].status).toBe('attended');
+      expect(appointments[0]).toMatchObject({
+        id: inRange.id,
+        patientId: patient.id,
+        patientName: 'Juan Pérez',
+        serviceName: 'Limpieza',
+        status: 'attended',
+      });
+      expect(iso(appointments[0].startAt)).toBe('2026-09-03T14:00:00.000Z');
+      expect(iso(appointments[0].endAt)).toBe('2026-09-03T14:30:00.000Z');
     });
   });
 
   it('lists appointments within a date range', async () => {
-    mockOrder.mockResolvedValue({
-      data: [{
-        id: APPOINTMENT_ID,
-        patient_id: PATIENT_ID,
-        service_id: SERVICE_ID,
-        provider_id: PROVIDER_ID,
-        start_at: '2026-06-10T14:00:00.000Z',
-        end_at: '2026-06-10T14:30:00.000Z',
-        status: 'confirmed',
-        created_at: '2026-06-01T10:00:00Z',
-        updated_at: '2026-06-01T10:00:00Z',
-      }],
-      error: null,
+    const { patient, service, provider } = await seedFixtures();
+    const first = await createAppointment({
+      patientId: patient.id,
+      serviceId: service.id,
+      providerId: provider.id,
+      startAt: '2026-06-10T14:00:00.000Z',
+      endAt: '2026-06-10T14:30:00.000Z',
+      status: 'confirmed',
+    });
+    const second = await createAppointment({
+      patientId: patient.id,
+      serviceId: service.id,
+      providerId: provider.id,
+      startAt: '2026-06-12T09:00:00.000Z',
+      endAt: '2026-06-12T09:30:00.000Z',
+      status: 'confirmed',
+    });
+    // Fuera del rango: el filtro real `gte`/`lt` lo excluye.
+    await createAppointment({
+      patientId: patient.id,
+      serviceId: service.id,
+      providerId: provider.id,
+      startAt: '2026-07-05T09:00:00.000Z',
+      endAt: '2026-07-05T09:30:00.000Z',
+      status: 'confirmed',
     });
 
     const appointments = await listAppointmentsRange(
@@ -723,11 +684,11 @@ describe('appointments service', () => {
       '2026-07-01T06:00:00.000Z'
     );
 
-    expect(mockGte).toHaveBeenCalledWith('start_at', '2026-06-01T06:00:00.000Z');
-    expect(mockLt).toHaveBeenCalledWith('start_at', '2026-07-01T06:00:00.000Z');
-    expect(mockOrder).toHaveBeenCalledWith('start_at', { ascending: true });
-    expect(appointments).toHaveLength(1);
-    expect(appointments[0].startAt).toBe('2026-06-10T14:00:00.000Z');
+    expect(appointments.map((appointment) => appointment.id)).toEqual([
+      first.id,
+      second.id,
+    ]);
+    expect(iso(appointments[0].startAt)).toBe('2026-06-10T14:00:00.000Z');
   });
 
   it('rejects a range where end is before or equal to start', async () => {

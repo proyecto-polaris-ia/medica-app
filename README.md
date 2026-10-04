@@ -34,6 +34,19 @@ y en [`architecture.md`](architecture.md) (sección 9). El detalle operativo del
 agente Eve (monitoreo y rollback) está en
 [`docs/eve-runbook.md`](docs/eve-runbook.md).
 
+### Base local para desarrollo y pruebas
+
+Las pruebas de datos corren contra Supabase local (CLI), no contra mocks:
+
+```bash
+supabase start        # API 54331, Postgres 54332, Studio 54333 (config.toml)
+supabase db reset     # aplica migraciones + supabase/seed.sql
+npm run test:local    # suite completa contra la base local
+```
+
+Sin Docker/Supabase, `npm run test` corre la suite omitiendo las suites de datos.
+Detalle en [`architecture.md`](architecture.md) §9.
+
 ## Lectura obligatoria
 
 Antes de trabajar en este repo, lee:

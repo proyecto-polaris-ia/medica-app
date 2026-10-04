@@ -1,5 +1,12 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { getSupabaseAdmin } from '@/lib/supabase/server';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import {
+  acquireDbSuiteLock,
+  applyLocalDbEnv,
+  localDbEnabled,
+  releaseDbSuiteLock,
+  truncateAllTables,
+} from '@/test-utils/local-db';
+import { createProvider } from '../providers';
 import {
   createBusinessHour,
   deleteBusinessHour,
@@ -7,92 +14,143 @@ import {
   updateBusinessHour,
 } from '../business-hours';
 import { ValidationError } from '../validate';
+import { NotFoundError } from '../errors';
 
-vi.mock('@/lib/supabase/server', () => ({
-  getSupabaseAdmin: vi.fn(),
-}));
+/**
+ * Suite contra Supabase local (ver openspec/changes/supabase-local-testing).
+ * Corre solo con `npm run test:local` (SUPABASE_LOCAL=1 + supabase start);
+ * con `npm run test` regular se omite.
+ */
+const d = localDbEnabled ? describe : describe.skip;
 
-const HOUR_ID = '550e8400-e29b-41d4-a716-446655440000';
+// Las suites de datos se serializan con un advisory lock (ver
+// src/test-utils/local-db.ts) porque vitest corre los archivos en paralelo
+// y todas truncan el esquema `public`.
+
+// UUID válido para casos de validación pura, donde no se toca la BD.
 const PROVIDER_ID = '550e8400-e29b-41d4-a716-446655440001';
 
-describe('business-hours service', () => {
-  const mockSelect = vi.fn();
-  const mockInsert = vi.fn();
-  const mockUpdate = vi.fn();
-  const mockDelete = vi.fn();
-  const mockOrder = vi.fn();
-  const mockEq = vi.fn();
-  const mockSingle = vi.fn();
+d('business-hours service', () => {
+  beforeAll(async () => {
+    applyLocalDbEnv();
+    await acquireDbSuiteLock();
+  });
 
-  function buildQuery() {
-    return {
-      select: mockSelect.mockReturnThis(),
-      insert: mockInsert.mockReturnThis(),
-      update: mockUpdate.mockReturnThis(),
-      delete: mockDelete.mockReturnThis(),
-      order: mockOrder.mockReturnThis(),
-      eq: mockEq.mockReturnThis(),
-      single: mockSingle,
-    };
-  }
+  afterAll(async () => {
+    await releaseDbSuiteLock();
+  });
 
-  beforeEach(() => {
-    vi.resetAllMocks();
-    (getSupabaseAdmin as ReturnType<typeof vi.fn>).mockReturnValue({
-      from: vi.fn().mockReturnValue(buildQuery()),
-    });
+  beforeEach(async () => {
+    await truncateAllTables();
   });
 
   it('lists mapped business hours', async () => {
-    mockOrder.mockResolvedValue({
-      data: [{ id: HOUR_ID, provider_id: PROVIDER_ID, day_of_week: 1, start_time: '09:00', end_time: '17:00', created_at: '2026-09-01T10:00:00Z', updated_at: '2026-09-01T10:00:00Z' }],
-      error: null,
+    const provider = await createProvider({ name: 'Dra. Ana' });
+    await createBusinessHour({
+      providerId: provider.id,
+      dayOfWeek: 1,
+      startTime: '09:00',
+      endTime: '17:00',
     });
 
     const hours = await listBusinessHours();
 
-    expect(hours).toEqual([
-      { id: HOUR_ID, providerId: PROVIDER_ID, dayOfWeek: 1, startTime: '09:00', endTime: '17:00', createdAt: '2026-09-01T10:00:00Z', updatedAt: '2026-09-01T10:00:00Z' },
-    ]);
+    expect(hours).toHaveLength(1);
+    expect(hours[0]).toEqual({
+      id: expect.any(String),
+      providerId: provider.id,
+      dayOfWeek: 1,
+      startTime: '09:00:00',
+      endTime: '17:00:00',
+      createdAt: expect.any(String),
+      updatedAt: expect.any(String),
+    });
   });
 
   it('creates a business hour', async () => {
-    mockSingle.mockResolvedValue({
-      data: { id: HOUR_ID, provider_id: PROVIDER_ID, day_of_week: 1, start_time: '09:00', end_time: '17:00', created_at: '2026-09-01T10:00:00Z', updated_at: '2026-09-01T10:00:00Z' },
-      error: null,
+    const provider = await createProvider({ name: 'Dra. Ana' });
+
+    const hour = await createBusinessHour({
+      providerId: provider.id,
+      dayOfWeek: 1,
+      startTime: '09:00',
+      endTime: '17:00',
     });
 
-    const hour = await createBusinessHour({ providerId: PROVIDER_ID, dayOfWeek: 1, startTime: '09:00', endTime: '17:00' });
-
-    expect(mockInsert).toHaveBeenCalledWith({ provider_id: PROVIDER_ID, day_of_week: 1, start_time: '09:00', end_time: '17:00' });
+    expect(hour.providerId).toBe(provider.id);
     expect(hour.dayOfWeek).toBe(1);
+    // Outcome observable en la BD: el horario quedó persistido.
+    const stored = await listBusinessHours();
+    expect(stored.map((h) => h.id)).toContain(hour.id);
   });
 
   it('rejects an invalid day of week', async () => {
-    await expect(createBusinessHour({ providerId: PROVIDER_ID, dayOfWeek: 7, startTime: '09:00', endTime: '17:00' })).rejects.toThrow(ValidationError);
+    await expect(
+      createBusinessHour({
+        providerId: PROVIDER_ID,
+        dayOfWeek: 7,
+        startTime: '09:00',
+        endTime: '17:00',
+      })
+    ).rejects.toThrow(ValidationError);
   });
 
   it('rejects end time before start time', async () => {
-    await expect(createBusinessHour({ providerId: PROVIDER_ID, dayOfWeek: 1, startTime: '17:00', endTime: '09:00' })).rejects.toThrow(ValidationError);
+    await expect(
+      createBusinessHour({
+        providerId: PROVIDER_ID,
+        dayOfWeek: 1,
+        startTime: '17:00',
+        endTime: '09:00',
+      })
+    ).rejects.toThrow(ValidationError);
   });
 
   it('updates a business hour', async () => {
-    mockSingle.mockResolvedValue({
-      data: { id: HOUR_ID, provider_id: PROVIDER_ID, day_of_week: 2, start_time: '10:00', end_time: '18:00', created_at: '2026-09-01T10:00:00Z', updated_at: '2026-09-02T10:00:00Z' },
-      error: null,
+    const provider = await createProvider({ name: 'Dra. Ana' });
+    const created = await createBusinessHour({
+      providerId: provider.id,
+      dayOfWeek: 1,
+      startTime: '09:00',
+      endTime: '17:00',
     });
 
-    const hour = await updateBusinessHour(HOUR_ID, { providerId: PROVIDER_ID, dayOfWeek: 2, startTime: '10:00', endTime: '18:00' });
+    const hour = await updateBusinessHour(created.id, {
+      providerId: provider.id,
+      dayOfWeek: 2,
+      startTime: '10:00',
+      endTime: '18:00',
+    });
 
-    expect(mockUpdate).toHaveBeenCalledWith({ provider_id: PROVIDER_ID, day_of_week: 2, start_time: '10:00', end_time: '18:00' });
     expect(hour.dayOfWeek).toBe(2);
+    expect(hour.startTime).toBe('10:00:00');
+    const stored = await listBusinessHours();
+    expect(stored.find((h) => h.id === created.id)).toEqual(hour);
+  });
+
+  it('updateBusinessHour throws NotFoundError when it does not exist', async () => {
+    await expect(
+      updateBusinessHour('550e8400-e29b-41d4-a716-4466554400ff', {
+        providerId: '550e8400-e29b-41d4-a716-446655440001',
+        dayOfWeek: 1,
+        startTime: '09:00',
+        endTime: '17:00',
+      })
+    ).rejects.toThrow(NotFoundError);
   });
 
   it('deletes a business hour', async () => {
-    mockEq.mockResolvedValue({ error: null });
+    const provider = await createProvider({ name: 'Dra. Ana' });
+    const created = await createBusinessHour({
+      providerId: provider.id,
+      dayOfWeek: 1,
+      startTime: '09:00',
+      endTime: '17:00',
+    });
 
-    await deleteBusinessHour(HOUR_ID);
+    await deleteBusinessHour(created.id);
 
-    expect(mockEq).toHaveBeenCalledWith('id', HOUR_ID);
+    const hours = await listBusinessHours();
+    expect(hours.find((h) => h.id === created.id)).toBeUndefined();
   });
 });

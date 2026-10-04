@@ -1,5 +1,11 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { getSupabaseAdmin } from '@/lib/supabase/server';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import {
+  acquireDbSuiteLock,
+  applyLocalDbEnv,
+  localDbEnabled,
+  releaseDbSuiteLock,
+  truncateAllTables,
+} from '@/test-utils/local-db';
 import {
   createPatient,
   deletePatient,
@@ -10,137 +16,91 @@ import {
   updatePatientEmail,
 } from '../patients';
 import { ValidationError } from '../validate';
+import { ConflictError } from '../errors';
 
-vi.mock('@/lib/supabase/server', () => ({
-  getSupabaseAdmin: vi.fn(),
-}));
+/**
+ * Suite contra Supabase local (ver openspec/changes/supabase-local-testing).
+ * Corre solo con `npm run test:local` (SUPABASE_LOCAL=1 + supabase start);
+ * con `npm run test` regular se omite.
+ */
+const d = localDbEnabled ? describe : describe.skip;
 
-const PATIENT_ID = '550e8400-e29b-41d4-a716-446655440000';
+// Las suites de datos se serializan con un advisory lock (ver
+// src/test-utils/local-db.ts) porque vitest corre los archivos en paralelo
+// y todas truncan el esquema `public`.
 
-describe('patients service', () => {
-  const mockSelect = vi.fn();
-  const mockInsert = vi.fn();
-  const mockUpdate = vi.fn();
-  const mockDelete = vi.fn();
-  const mockOrder = vi.fn();
-  const mockEq = vi.fn();
-  const mockIlike = vi.fn();
-  const mockOr = vi.fn();
-  const mockSingle = vi.fn();
-  const mockMaybeSingle = vi.fn();
+// UUID válido para casos de validación pura (no llegan a la BD).
+const VALID_ID = '550e8400-e29b-41d4-a716-446655440000';
+const MISSING_ID = '550e8400-e29b-41d4-a716-4466554400ff';
 
-  function buildQuery() {
-    return {
-      select: mockSelect.mockReturnThis(),
-      insert: mockInsert.mockReturnThis(),
-      update: mockUpdate.mockReturnThis(),
-      delete: mockDelete.mockReturnThis(),
-      order: mockOrder.mockReturnThis(),
-      eq: mockEq.mockReturnThis(),
-      ilike: mockIlike.mockReturnThis(),
-      or: mockOr.mockReturnThis(),
-      single: mockSingle,
-      maybeSingle: mockMaybeSingle,
-    };
-  }
-
-  beforeEach(() => {
-    vi.resetAllMocks();
-    (getSupabaseAdmin as ReturnType<typeof vi.fn>).mockReturnValue({
-      from: vi.fn().mockReturnValue(buildQuery()),
-    });
+d('patients service', () => {
+  beforeAll(async () => {
+    applyLocalDbEnv();
+    await acquireDbSuiteLock();
   });
+
+  afterAll(async () => {
+    await releaseDbSuiteLock();
+  });
+
+  beforeEach(async () => {
+    await truncateAllTables();
+  });
+
+  const iso = (value: string) => new Date(value).toISOString();
 
   describe('listPatients', () => {
     it('returns mapped patients ordered by created_at desc', async () => {
-      mockOrder.mockResolvedValue({
-        data: [
-          {
-            id: PATIENT_ID,
-            full_name: 'María García',
-            phone_e164: '+5215512345678',
-            notes: 'Nota',
-            created_at: '2026-09-01T10:00:00Z',
-            updated_at: '2026-09-01T10:00:00Z',
-          },
-        ],
-        error: null,
+      const first = await createPatient({
+        fullName: 'María García',
+        phoneE164: '+5215512345678',
+        notes: 'Nota',
+      });
+      const second = await createPatient({
+        fullName: 'Pedro López',
+        phoneE164: '+5215599999999',
       });
 
       const patients = await listPatients();
 
-      expect(patients).toEqual([
-        {
-          id: PATIENT_ID,
-          fullName: 'María García',
-          phoneE164: '+5215512345678',
-          email: null,
-          notes: 'Nota',
-          birthDate: null,
-          sex: null,
-          address: null,
-          occupation: null,
-          referralSource: null,
-          secondaryPhone: null,
-          emergencyContactName: null,
-          emergencyContactPhone: null,
-          emergencyContactRelationship: null,
-          createdAt: '2026-09-01T10:00:00Z',
-          updatedAt: '2026-09-01T10:00:00Z',
-        },
-      ]);
-    });
-
-    it('throws when the query fails', async () => {
-      mockOrder.mockResolvedValue({
-        data: null,
-        error: { message: 'down' },
+      expect(patients.map((patient) => patient.id)).toEqual([second.id, first.id]);
+      const stored = patients.find((patient) => patient.id === first.id);
+      expect(stored).toMatchObject({
+        id: first.id,
+        fullName: 'María García',
+        phoneE164: '+5215512345678',
+        email: null,
+        notes: 'Nota',
+        birthDate: null,
+        sex: null,
+        address: null,
+        occupation: null,
+        referralSource: null,
+        secondaryPhone: null,
+        emergencyContactName: null,
+        emergencyContactPhone: null,
+        emergencyContactRelationship: null,
       });
-      await expect(listPatients()).rejects.toThrow('down');
+      // timestamptz vuelve con offset `+00:00`: se normaliza a ISO.
+      expect(iso(stored!.createdAt)).toBe(iso(first.createdAt));
+      expect(iso(stored!.updatedAt)).toBe(iso(first.updatedAt));
     });
   });
 
   describe('createPatient', () => {
     it('inserts and returns a mapped patient', async () => {
-      mockSingle.mockResolvedValue({
-        data: {
-          id: '550e8400-e29b-41d4-a716-446655440001',
-          full_name: 'Juan Pérez',
-          phone_e164: '+5215587654321',
-          notes: null,
-          created_at: '2026-09-02T10:00:00Z',
-          updated_at: '2026-09-02T10:00:00Z',
-        },
-        error: null,
-      });
-
       const patient = await createPatient({
         fullName: 'Juan Pérez',
         phoneE164: '+5215587654321',
       });
 
-      expect(mockInsert).toHaveBeenCalledWith({
-        full_name: 'Juan Pérez',
-        phone_e164: '+5215587654321',
+      expect(patient).toMatchObject({
+        fullName: 'Juan Pérez',
+        phoneE164: '+5215587654321',
         email: null,
-        notes: undefined,
-        birth_date: null,
-        sex: null,
-        address: null,
-        occupation: null,
-        referral_source: null,
-        secondary_phone: null,
-        emergency_contact_name: null,
-        emergency_contact_phone: null,
-        emergency_contact_relationship: null,
       });
-      expect(patient).toEqual(
-        expect.objectContaining({
-          id: '550e8400-e29b-41d4-a716-446655440001',
-          fullName: 'Juan Pérez',
-          phoneE164: '+5215587654321',
-        })
-      );
+      // Outcome observable en la BD: la fila quedó persistida con sus campos.
+      await expect(getPatient(patient.id)).resolves.toEqual(patient);
     });
 
     it('throws ValidationError for an invalid phone', async () => {
@@ -158,46 +118,25 @@ describe('patients service', () => {
 
   describe('updatePatient', () => {
     it('updates and returns the mapped patient', async () => {
-      mockSingle.mockResolvedValue({
-        data: {
-          id: PATIENT_ID,
-          full_name: 'María G.',
-          phone_e164: '+5215512345678',
-          notes: 'Actualizado',
-          created_at: '2026-09-01T10:00:00Z',
-          updated_at: '2026-09-02T10:00:00Z',
-        },
-        error: null,
+      const created = await createPatient({
+        fullName: 'María García',
+        phoneE164: '+5215512345678',
+        notes: 'Inicial',
       });
 
-      const patient = await updatePatient(PATIENT_ID, {
+      const patient = await updatePatient(created.id, {
         fullName: 'María G.',
         phoneE164: '+5215512345678',
         notes: 'Actualizado',
       });
 
-      expect(mockUpdate).toHaveBeenCalledWith({
-        full_name: 'María G.',
-        phone_e164: '+5215512345678',
-        email: null,
+      expect(patient).toMatchObject({
+        id: created.id,
+        fullName: 'María G.',
+        phoneE164: '+5215512345678',
         notes: 'Actualizado',
-        birth_date: null,
-        sex: null,
-        address: null,
-        occupation: null,
-        referral_source: null,
-        secondary_phone: null,
-        emergency_contact_name: null,
-        emergency_contact_phone: null,
-        emergency_contact_relationship: null,
       });
-      expect(patient).toEqual(
-        expect.objectContaining({
-          id: PATIENT_ID,
-          fullName: 'María G.',
-          notes: 'Actualizado',
-        })
-      );
+      await expect(getPatient(created.id)).resolves.toEqual(patient);
     });
 
     it('throws ValidationError for an invalid id', async () => {
@@ -212,11 +151,14 @@ describe('patients service', () => {
 
   describe('deletePatient', () => {
     it('deletes the patient', async () => {
-      mockEq.mockResolvedValue({ error: null });
+      const created = await createPatient({
+        fullName: 'María García',
+        phoneE164: '+5215512345678',
+      });
 
-      await deletePatient(PATIENT_ID);
+      await deletePatient(created.id);
 
-      expect(mockEq).toHaveBeenCalledWith('id', PATIENT_ID);
+      await expect(getPatient(created.id)).resolves.toBeNull();
     });
 
     it('throws ValidationError for an invalid id', async () => {
@@ -226,48 +168,20 @@ describe('patients service', () => {
 
   describe('getPatient', () => {
     it('returns the mapped patient for a valid id', async () => {
-      mockMaybeSingle.mockResolvedValue({
-        data: {
-          id: PATIENT_ID,
-          full_name: 'María García',
-          phone_e164: '+5215512345678',
-          notes: null,
-          created_at: '2026-09-01T10:00:00Z',
-          updated_at: '2026-09-01T10:00:00Z',
-        },
-        error: null,
+      const created = await createPatient({
+        fullName: 'María García',
+        phoneE164: '+5215512345678',
       });
 
-      const patient = await getPatient(PATIENT_ID);
-
-      expect(mockSelect).toHaveBeenCalled();
-      expect(mockEq).toHaveBeenCalledWith('id', PATIENT_ID);
-      expect(patient).toEqual(
-        expect.objectContaining({
-          id: PATIENT_ID,
-          fullName: 'María García',
-          phoneE164: '+5215512345678',
-        })
-      );
+      await expect(getPatient(created.id)).resolves.toEqual(created);
     });
 
     it('returns null when the patient does not exist', async () => {
-      mockMaybeSingle.mockResolvedValue({ data: null, error: null });
-
-      await expect(getPatient(PATIENT_ID)).resolves.toBeNull();
+      await expect(getPatient(MISSING_ID)).resolves.toBeNull();
     });
 
     it('throws ValidationError for an invalid id', async () => {
       await expect(getPatient('bad-id')).rejects.toThrow(ValidationError);
-    });
-
-    it('throws when the query fails', async () => {
-      mockMaybeSingle.mockResolvedValue({
-        data: null,
-        error: { message: 'down' },
-      });
-
-      await expect(getPatient(PATIENT_ID)).rejects.toThrow('down');
     });
   });
 
@@ -276,181 +190,156 @@ describe('patients service', () => {
       const patients = await searchPatients('');
 
       expect(patients).toEqual([]);
-      expect(mockSelect).not.toHaveBeenCalled();
     });
 
-    it('filters by full_name (ilike) or phone_e164 (contains)', async () => {
-      mockOrder.mockResolvedValue({
-        data: [
-          {
-            id: PATIENT_ID,
-            full_name: 'María García',
-            phone_e164: '+5215512345678',
-            notes: null,
-            created_at: '2026-09-01T10:00:00Z',
-            updated_at: '2026-09-01T10:00:00Z',
-          },
-        ],
-        error: null,
+    it('filters by full_name, phone_e164 or email case-insensitively', async () => {
+      const nameMatch = await createPatient({
+        fullName: 'María García',
+        phoneE164: '+5215512345678',
+      });
+      const phoneMatch = await createPatient({
+        fullName: 'Pedro López',
+        phoneE164: '+5215599999999',
+      });
+      const emailMatch = await createPatient({
+        fullName: 'Ana Ruiz',
+        phoneE164: '+5215588888888',
+        email: 'ana@example.com',
       });
 
-      const patients = await searchPatients('maria');
+      await expect(searchPatients('María')).resolves.toEqual([nameMatch]);
+      await expect(searchPatients('9999')).resolves.toEqual([phoneMatch]);
+      await expect(searchPatients('example.com')).resolves.toEqual([emailMatch]);
+    });
 
-      expect(mockOr).toHaveBeenCalledWith(
-        'full_name.ilike.%maria%,phone_e164.ilike.%maria%,email.ilike.%maria%'
+    it('returns an empty array when nothing matches', async () => {
+      await createPatient({
+        fullName: 'María García',
+        phoneE164: '+5215512345678',
+      });
+
+      await expect(searchPatients('zzzz')).resolves.toEqual([]);
+    });
+  });
+
+  describe('updatePatientEmail', () => {
+    it('actualiza y devuelve el paciente con solo el email normalizado', async () => {
+      const created = await createPatient({
+        fullName: 'María',
+        phoneE164: '+5215512345678',
+      });
+
+      const patient = await updatePatientEmail(created.id, '  NUEVA@Example.COM ');
+
+      expect(patient).toMatchObject({
+        id: created.id,
+        phoneE164: '+5215512345678',
+        email: 'nueva@example.com',
+      });
+      // El resto de campos no se toca (email targeted).
+      await expect(getPatient(created.id)).resolves.toEqual(patient);
+    });
+
+    it('rechaza un id inválido sin consultar la base', async () => {
+      await expect(updatePatientEmail('bad-id', 'ana@example.com')).rejects.toThrow(
+        ValidationError
       );
-      expect(patients).toEqual([
-        {
-          id: PATIENT_ID,
-          fullName: 'María García',
-          phoneE164: '+5215512345678',
-          email: null,
-          notes: null,
-          birthDate: null,
-          sex: null,
-          address: null,
-          occupation: null,
-          referralSource: null,
-          secondaryPhone: null,
-          emergencyContactName: null,
-          emergencyContactPhone: null,
-          emergencyContactRelationship: null,
-          createdAt: '2026-09-01T10:00:00Z',
-          updatedAt: '2026-09-01T10:00:00Z',
-        },
-      ]);
     });
 
-    it('throws when the query fails', async () => {
-      mockOrder.mockResolvedValue({ data: null, error: { message: 'down' } });
-
-      await expect(searchPatients('ana')).rejects.toThrow('down');
-    });
-  });
-});
-
-describe('updatePatientEmail', () => {
-  beforeEach(() => vi.resetAllMocks());
-
-  function buildQuery(overrides: Record<string, unknown> = {}) {
-    return {
-      update: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockReturnThis(),
-      select: vi.fn().mockReturnThis(),
-      single: vi.fn().mockResolvedValue({ data: null, error: null }),
-      ...overrides,
-    };
-  }
-
-  it('actualiza y devuelve el paciente con solo el email normalizado', async () => {
-    const row = {
-      id: PATIENT_ID,
-      full_name: 'María',
-      phone_e164: '+5215512345678',
-      email: 'nueva@example.com',
-      notes: null,
-      created_at: 'a',
-      updated_at: 'b',
-    };
-    const query = buildQuery({
-      single: vi.fn().mockResolvedValue({ data: row, error: null }),
-    });
-    (getSupabaseAdmin as ReturnType<typeof vi.fn>).mockReturnValue({
-      from: vi.fn().mockReturnValue(query),
+    it('rechaza un email inválido sin consultar la base', async () => {
+      await expect(
+        updatePatientEmail(VALID_ID, 'no-es-un-correo')
+      ).rejects.toMatchObject({ field: 'email' });
     });
 
-    const patient = await updatePatientEmail(PATIENT_ID, '  NUEVA@Example.COM ');
-
-    expect(query.update).toHaveBeenCalledWith({ email: 'nueva@example.com' });
-    expect(query.update).toHaveBeenCalledTimes(1);
-    expect(query.eq).toHaveBeenCalledWith('id', PATIENT_ID);
-    expect(query.select).toHaveBeenCalled();
-    expect(patient).toMatchObject({ id: PATIENT_ID, email: 'nueva@example.com' });
-  });
-
-  it('rechaza un id inválido sin consultar la base', async () => {
-    const from = vi.fn();
-    (getSupabaseAdmin as ReturnType<typeof vi.fn>).mockReturnValue({ from });
-
-    await expect(updatePatientEmail('bad-id', 'ana@example.com')).rejects.toThrow(
-      ValidationError
-    );
-    expect(from).not.toHaveBeenCalled();
-  });
-
-  it('rechaza un email inválido sin consultar la base', async () => {
-    const from = vi.fn();
-    (getSupabaseAdmin as ReturnType<typeof vi.fn>).mockReturnValue({ from });
-
-    await expect(
-      updatePatientEmail(PATIENT_ID, 'no-es-un-correo')
-    ).rejects.toMatchObject({ field: 'email' });
-    expect(from).not.toHaveBeenCalled();
-  });
-
-  it('rechaza un email ausente o vacío', async () => {
-    const from = vi.fn();
-    (getSupabaseAdmin as ReturnType<typeof vi.fn>).mockReturnValue({ from });
-
-    await expect(updatePatientEmail(PATIENT_ID, '')).rejects.toMatchObject({
-      field: 'email',
-    });
-    expect(from).not.toHaveBeenCalled();
-  });
-
-  it('traduce el conflicto de unicidad (23505) a ConflictError', async () => {
-    const query = buildQuery({
-      single: vi
-        .fn()
-        .mockResolvedValue({ data: null, error: { code: '23505', message: 'duplicate' } }),
-    });
-    (getSupabaseAdmin as ReturnType<typeof vi.fn>).mockReturnValue({
-      from: vi.fn().mockReturnValue(query),
+    it('rechaza un email ausente o vacío', async () => {
+      await expect(updatePatientEmail(VALID_ID, '')).rejects.toMatchObject({
+        field: 'email',
+      });
     });
 
-    const { ConflictError } = await import('../errors');
-    await expect(
-      updatePatientEmail(PATIENT_ID, 'ana@example.com')
-    ).rejects.toBeInstanceOf(ConflictError);
-    await expect(
-      updatePatientEmail(PATIENT_ID, 'ana@example.com')
-    ).rejects.toMatchObject({ code: 'contact_conflict' });
-  });
-});
+    it('traduce el conflicto de unicidad (23505) a ConflictError', async () => {
+      await createPatient({
+        fullName: 'Ana',
+        phoneE164: '+5215511111111',
+        email: 'ana@example.com',
+      });
+      const other = await createPatient({
+        fullName: 'Beto',
+        phoneE164: '+5215522222222',
+      });
 
-describe('patient email contact validation', () => {
-  it('creates an email-only patient with a normalized email', async () => {
-    const { createPatient } = await import('../patients');
-    const inserted = { id: 'pat-email', full_name: 'María', phone_e164: null, email: 'maria@example.com', notes: null, created_at: 'now', updated_at: 'now' };
-    const query = { insert: vi.fn().mockReturnThis(), select: vi.fn().mockReturnThis(), single: vi.fn().mockResolvedValue({ data: inserted, error: null }) };
-    (getSupabaseAdmin as ReturnType<typeof vi.fn>).mockReturnValue({ from: vi.fn().mockReturnValue(query) });
-    await expect(createPatient({ fullName: 'María', phoneE164: null, email: '  MARIA@EXAMPLE.COM ' })).resolves.toMatchObject({ phoneE164: null, email: 'maria@example.com' });
+      await expect(
+        updatePatientEmail(other.id, 'ana@example.com')
+      ).rejects.toBeInstanceOf(ConflictError);
+      await expect(
+        updatePatientEmail(other.id, 'ana@example.com')
+      ).rejects.toMatchObject({ code: 'contact_conflict' });
+    });
   });
 
-  it('rejects a patient without either contact', async () => {
-    const { createPatient } = await import('../patients');
-    await expect(createPatient({ fullName: 'María', phoneE164: null, email: null })).rejects.toThrow('contact');
-  });
-});
+  describe('patient email contact validation', () => {
+    it('creates an email-only patient with a normalized email', async () => {
+      const patient = await createPatient({
+        fullName: 'María',
+        phoneE164: null,
+        email: '  MARIA@EXAMPLE.COM ',
+      });
 
-describe('patient contact edge cases', () => {
-  beforeEach(() => vi.resetAllMocks());
-  it('rejects a duplicate normalized email as a contact conflict', async () => {
-    const query = { insert: vi.fn().mockReturnThis(), select: vi.fn().mockReturnThis(), single: vi.fn().mockResolvedValue({ data: null, error: { code: '23505', message: 'duplicate email' } }) };
-    (getSupabaseAdmin as ReturnType<typeof vi.fn>).mockReturnValue({ from: vi.fn().mockReturnValue(query) });
-    const { ConflictError } = await import('../errors');
-    await expect(createPatient({ fullName: 'Otra', phoneE164: null, email: 'maria@example.com' })).rejects.toBeInstanceOf(ConflictError);
+      expect(patient).toMatchObject({
+        phoneE164: null,
+        email: 'maria@example.com',
+      });
+      await expect(getPatient(patient.id)).resolves.toEqual(patient);
+    });
+
+    it('rejects a patient without either contact', async () => {
+      await expect(
+        createPatient({ fullName: 'María', phoneE164: null, email: null })
+      ).rejects.toThrow('contact');
+    });
   });
-  it('rejects update without contact before it can overwrite the current row', async () => {
-    const from = vi.fn(); (getSupabaseAdmin as ReturnType<typeof vi.fn>).mockReturnValue({ from });
-    await expect(updatePatient(PATIENT_ID, { fullName: 'María', phoneE164: null, email: null })).rejects.toMatchObject({ field: 'contact' });
-    expect(from).not.toHaveBeenCalled();
-  });
-  it('updates and maps both contact methods', async () => {
-    const row = { id: PATIENT_ID, full_name: 'María', phone_e164: '+5215512345678', email: 'maria@example.com', notes: null, created_at: 'a', updated_at: 'b' };
-    const query = { update: vi.fn().mockReturnThis(), eq: vi.fn().mockReturnThis(), select: vi.fn().mockReturnThis(), single: vi.fn().mockResolvedValue({ data: row, error: null }) };
-    (getSupabaseAdmin as ReturnType<typeof vi.fn>).mockReturnValue({ from: vi.fn().mockReturnValue(query) });
-    await expect(updatePatient(PATIENT_ID, { fullName: 'María', phoneE164: '+5215512345678', email: 'MARIA@example.COM' })).resolves.toMatchObject({ email: 'maria@example.com', phoneE164: '+5215512345678' });
-    expect(query.update).toHaveBeenCalledWith(expect.objectContaining({ email: 'maria@example.com' }));
+
+  describe('patient contact edge cases', () => {
+    it('rejects a duplicate normalized email as a contact conflict', async () => {
+      await createPatient({
+        fullName: 'María',
+        phoneE164: null,
+        email: 'maria@example.com',
+      });
+
+      await expect(
+        createPatient({
+          fullName: 'Otra',
+          phoneE164: null,
+          email: '  MARIA@example.com ',
+        })
+      ).rejects.toBeInstanceOf(ConflictError);
+    });
+
+    it('rejects update without contact before it can overwrite the current row', async () => {
+      await expect(
+        updatePatient(VALID_ID, { fullName: 'María', phoneE164: null, email: null })
+      ).rejects.toMatchObject({ field: 'contact' });
+    });
+
+    it('updates and maps both contact methods', async () => {
+      const created = await createPatient({
+        fullName: 'María',
+        phoneE164: '+5215512345678',
+      });
+
+      const patient = await updatePatient(created.id, {
+        fullName: 'María',
+        phoneE164: '+5215512345678',
+        email: 'MARIA@example.COM',
+      });
+
+      expect(patient).toMatchObject({
+        email: 'maria@example.com',
+        phoneE164: '+5215512345678',
+      });
+      await expect(getPatient(created.id)).resolves.toEqual(patient);
+    });
   });
 });

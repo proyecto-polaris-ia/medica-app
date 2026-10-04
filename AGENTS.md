@@ -36,6 +36,10 @@ copiar + adaptar).
 
 ## Flujo de trabajo (OpenSpec / SDD)
 
+- **Pruebas de datos contra Supabase local**: las suites de datos corren contra la base
+  local (CLI), no contra mocks del query builder. Antes de tocar un módulo de datos:
+  `supabase start` + `supabase db reset`, luego `npm run test:local`. Detalle en
+  `architecture.md` §9 y en `openspec/changes/supabase-local-testing/`.
 - Todo cambio no trivial se especifica con SDD/OpenSpec en `openspec/changes/`.
 - Ciclo: `proposal → spec → design → tasks → apply → verify → archive`.
 - Convención de archivos: `.agents/skills/_shared/openspec-convention.md`.
