@@ -1,249 +1,344 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-
-vi.mock('@/lib/wcc-client', () => ({
-  createWccClient: vi.fn(),
-  isSupabaseConfigured: vi.fn(() => true),
-}));
-
-import { createWccClient } from '@/lib/wcc-client';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  acquireDbSuiteLock,
+  applyLocalDbEnv,
+  localDbEnabled,
+  releaseDbSuiteLock,
+  truncateAllTables,
+} from '@/test-utils/local-db';
+import { getSupabaseAdmin } from '@/lib/supabase/server';
+import { createAppointment } from '@/lib/admin/appointments';
+import { createPatient } from '@/lib/admin/patients';
+import { createProvider } from '@/lib/admin/providers';
+import { createService } from '@/lib/admin/services';
 import {
   formatWccAppointmentStart,
   getWccUnconfirmedAppointments,
   resolveWccAppointmentsWindowHours,
+  type WccAppointmentReminderRow,
 } from './wcc-appointments';
 
-function query(data: Record<string, unknown>[]) {
-  const value = Promise.resolve({ data, error: null });
-  return Object.assign(value, {
-    select: vi.fn().mockReturnThis(),
-    in: vi.fn().mockReturnThis(),
-    gte: vi.fn().mockReturnThis(),
-    lt: vi.fn().mockReturnThis(),
-    eq: vi.fn().mockReturnThis(),
-    order: vi.fn().mockReturnThis(),
-    range: vi.fn().mockReturnThis(),
-    maybeSingle: vi.fn(),
-  });
-}
+/**
+ * Suite contra Supabase local (ver openspec/changes/supabase-local-testing).
+ * Corre solo con `npm run test:local` (SUPABASE_LOCAL=1 + supabase start);
+ * con `npm run test` regular se omite.
+ */
+const d = localDbEnabled ? describe : describe.skip;
 
-type MockQuery = ReturnType<typeof query>;
-
-function makeWccClient(tableQueues: Record<string, MockQuery[]>) {
-  vi.mocked(createWccClient).mockResolvedValue({
-    from: vi.fn((table: string) => {
-      const queue = tableQueues[table];
-      if (!queue || queue.length === 0) {
-        throw new Error(`Unexpected table: ${table}`);
-      }
-      return queue.shift()!;
-    }),
-  } as never);
-}
+// Las suites de datos se serializan con un advisory lock (ver
+// src/test-utils/local-db.ts) porque vitest corre los archivos en paralelo
+// y todas truncan el esquema `public`.
 
 const NOW = new Date('2026-10-03T12:00:00.000Z');
 
-describe('getWccUnconfirmedAppointments', () => {
-  beforeEach(() => {
-    vi.useFakeTimers();
+d('wcc appointments data layer', () => {
+  beforeAll(async () => {
+    applyLocalDbEnv();
+    await acquireDbSuiteLock();
+  });
+
+  afterAll(async () => {
+    await releaseDbSuiteLock();
+  });
+
+  beforeEach(async () => {
+    await truncateAllTables();
+  });
+
+  const iso = (value: string) => new Date(value).toISOString();
+
+  /** Congela solo `Date` durante la llamada: los timers reales siguen
+   * activos para que el fetch/undici del cliente real no se bloquee. */
+  async function withSystemTime<T>(run: () => Promise<T>): Promise<T> {
+    vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(NOW);
-  });
+    try {
+      return await run();
+    } finally {
+      vi.useRealTimers();
+    }
+  }
 
-  afterEach(() => {
-    vi.useRealTimers();
-  });
+  /** Ejecuta `run` con la config de Supabase ausente (rama "not configured"). */
+  async function withUnconfiguredSupabase<T>(run: () => Promise<T>): Promise<T> {
+    const previous = {
+      url: process.env.NEXT_PUBLIC_SUPABASE_URL,
+      anon: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+      service: process.env.SUPABASE_SERVICE_ROLE_KEY,
+    };
+    delete process.env.NEXT_PUBLIC_SUPABASE_URL;
+    delete process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    try {
+      return await run();
+    } finally {
+      if (previous.url !== undefined) process.env.NEXT_PUBLIC_SUPABASE_URL = previous.url;
+      if (previous.anon !== undefined) process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = previous.anon;
+      if (previous.service !== undefined) {
+        process.env.SUPABASE_SERVICE_ROLE_KEY = previous.service;
+      }
+    }
+  }
 
-  it('maps, sorts by start_at and attaches reminders for unconfirmed appointments', async () => {
-    const appointmentsQuery = query([
-      {
-        id: 'appt-b',
-        patient_id: 'patient-1',
-        service_id: 'service-1',
-        provider_id: 'provider-1',
-        start_at: '2026-10-04T12:00:00.000Z',
+  /**
+   * Fuerza una respuesta de error de PostgREST (service key inválida contra la
+   * API local ya corriendo): la consulta real falla y el módulo debe degradar a
+   * `isConfiguredButUnavailable`.
+   */
+  async function withFailingSupabase<T>(run: () => Promise<T>): Promise<T> {
+    const previousKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    process.env.SUPABASE_SERVICE_ROLE_KEY = 'invalid-service-role-key';
+    try {
+      return await run();
+    } finally {
+      if (previousKey !== undefined) {
+        process.env.SUPABASE_SERVICE_ROLE_KEY = previousKey;
+      }
+    }
+  }
+
+  /** Catálogo determinista vía funciones de dominio. */
+  async function seedCatalog() {
+    const providerOne = await createProvider({ name: 'Dr. Jorge' });
+    const providerTwo = await createProvider({ name: 'Dra. Ana' });
+    const serviceOne = await createService({ name: 'Limpieza', durationMinutes: 30 });
+    const serviceTwo = await createService({ name: 'Ortodoncia', durationMinutes: 30 });
+    return { providerOne, providerTwo, serviceOne, serviceTwo };
+  }
+
+  /**
+   * No existe función de dominio para recordatorios de cita: se insertan
+   * directo en la tabla, con `created_at` explícito para controlar el orden
+   * "más reciente primero" que aplica la consulta real.
+   */
+  async function insertReminder(input: {
+    appointmentId: string;
+    key: string;
+    cadence: WccAppointmentReminderRow['cadence'];
+    status: WccAppointmentReminderRow['status'];
+    dryRun: boolean;
+    sentAt: string | null;
+    createdAt: string;
+  }): Promise<void> {
+    const { error } = await getSupabaseAdmin().from('appointment_reminders').insert({
+      appointment_id: input.appointmentId,
+      reminder_key: input.key,
+      cadence: input.cadence,
+      status: input.status,
+      dry_run: input.dryRun,
+      sent_at: input.sentAt,
+      created_at: input.createdAt,
+    });
+    if (error) throw new Error(error.message);
+  }
+
+  const normalizeReminders = (reminders: WccAppointmentReminderRow[]) =>
+    reminders.map((reminder) => ({
+      cadence: reminder.cadence,
+      status: reminder.status,
+      sentAt: reminder.sentAt ? iso(reminder.sentAt) : null,
+      dryRun: reminder.dryRun,
+    }));
+
+  describe('getWccUnconfirmedAppointments', () => {
+    it('maps, sorts by start_at and attaches reminders for unconfirmed appointments', async () => {
+      const { providerOne, providerTwo, serviceOne, serviceTwo } = await seedCatalog();
+      const maria = await createPatient({
+        fullName: 'María López',
+        phoneE164: '+5215512345678',
+      });
+      const juan = await createPatient({
+        fullName: 'Juan Pérez',
+        phoneE164: null,
+        email: 'juan@example.com',
+      });
+
+      const apptB = await createAppointment({
+        patientId: maria.id,
+        serviceId: serviceOne.id,
+        providerId: providerOne.id,
+        startAt: '2026-10-04T12:00:00.000Z',
+        endAt: '2026-10-04T12:30:00.000Z',
         status: 'pending',
-      },
-      {
-        id: 'appt-a',
-        patient_id: 'patient-2',
-        service_id: 'service-2',
-        provider_id: 'provider-2',
-        start_at: '2026-10-03T18:00:00.000Z',
+      });
+      const apptA = await createAppointment({
+        patientId: juan.id,
+        serviceId: serviceTwo.id,
+        providerId: providerTwo.id,
+        startAt: '2026-10-03T18:00:00.000Z',
+        endAt: '2026-10-03T18:30:00.000Z',
         status: 'requested',
-      },
-      {
-        // Fuera de la ventana de 72 h: el data layer la descarta aunque el
-        // mock la devuelva (filtro defensivo).
-        id: 'appt-out',
-        patient_id: 'patient-2',
-        service_id: 'service-2',
-        provider_id: 'provider-2',
-        start_at: '2026-10-10T12:00:00.000Z',
+      });
+      // Fuera de la ventana de 72 h: el filtro real `.lt('start_at')` la excluye.
+      await createAppointment({
+        patientId: juan.id,
+        serviceId: serviceTwo.id,
+        providerId: providerTwo.id,
+        startAt: '2026-10-10T12:00:00.000Z',
+        endAt: '2026-10-10T12:30:00.000Z',
         status: 'requested',
-      },
-      {
-        // Estado confirmado: no debe aparecer en el indicador.
-        id: 'appt-confirmed',
-        patient_id: 'patient-1',
-        service_id: 'service-1',
-        provider_id: 'provider-1',
-        start_at: '2026-10-03T20:00:00.000Z',
+      });
+      // Estado confirmado: el filtro real `.in('status')` la excluye.
+      await createAppointment({
+        patientId: maria.id,
+        serviceId: serviceOne.id,
+        providerId: providerOne.id,
+        startAt: '2026-10-03T20:00:00.000Z',
+        endAt: '2026-10-03T20:30:00.000Z',
         status: 'confirmed',
-      },
-    ]);
+      });
 
-    makeWccClient({
-      appointments: [appointmentsQuery],
-      patients: [
-        query([
-          { id: 'patient-1', full_name: 'María López', phone_e164: '+5215512345678' },
-          { id: 'patient-2', full_name: 'Juan Pérez', phone_e164: null },
-        ]),
-      ],
-      providers: [
-        query([
-          { id: 'provider-1', name: 'Dr. Jorge' },
-          { id: 'provider-2', name: 'Dra. Ana' },
-        ]),
-      ],
-      services: [
-        query([
-          { id: 'service-1', name: 'Limpieza' },
-          { id: 'service-2', name: 'Ortodoncia' },
-        ]),
-      ],
-      appointment_reminders: [
-        query([
-          {
-            appointment_id: 'appt-a',
-            cadence: 'h24',
-            status: 'sent',
-            dry_run: false,
-            sent_at: '2026-10-02T15:15:00.000Z',
-          },
-          {
-            appointment_id: 'appt-a',
-            cadence: 'same_day',
-            status: 'scheduled',
-            dry_run: true,
-            sent_at: null,
-          },
-        ]),
-      ],
-    });
-
-    const result = await getWccUnconfirmedAppointments();
-
-    expect(result.isSupabaseConfigured).toBe(true);
-    expect(result.isConfiguredButUnavailable).toBe(false);
-    expect(result.windowHours).toBe(72);
-    expect(result.generatedAt).toBe(NOW.toISOString());
-
-    expect(appointmentsQuery.in).toHaveBeenCalledWith('status', ['requested', 'pending']);
-    expect(appointmentsQuery.gte).toHaveBeenCalledWith('start_at', NOW.toISOString());
-    expect(appointmentsQuery.lt).toHaveBeenCalledWith('start_at', '2026-10-06T12:00:00.000Z');
-    expect(appointmentsQuery.order).toHaveBeenCalledWith('start_at', { ascending: true });
-
-    expect(result.appointments.map((a) => a.appointmentId)).toEqual(['appt-a', 'appt-b']);
-    expect(result.appointments[0]).toMatchObject({
-      appointmentId: 'appt-a',
-      patientId: 'patient-2',
-      patientName: 'Juan Pérez',
-      patientPhoneE164: null,
-      providerName: 'Dra. Ana',
-      serviceName: 'Ortodoncia',
-      startAt: '2026-10-03T18:00:00.000Z',
-      status: 'requested',
-      hoursUntilStart: 6,
-    });
-    expect(result.appointments[0].reminders).toEqual([
-      {
+      await insertReminder({
+        appointmentId: apptA.id,
+        key: `${apptA.id}-h24`,
         cadence: 'h24',
         status: 'sent',
-        sentAt: '2026-10-02T15:15:00.000Z',
         dryRun: false,
-      },
-      { cadence: 'same_day', status: 'scheduled', sentAt: null, dryRun: true },
-    ]);
-    expect(result.appointments[1]).toMatchObject({
-      appointmentId: 'appt-b',
-      patientName: 'María López',
-      patientPhoneE164: '+5215512345678',
-      providerName: 'Dr. Jorge',
-      serviceName: 'Limpieza',
-      hoursUntilStart: 24,
-      reminders: [],
+        sentAt: '2026-10-02T15:15:00Z',
+        createdAt: '2026-10-02T16:00:00Z',
+      });
+      await insertReminder({
+        appointmentId: apptA.id,
+        key: `${apptA.id}-same_day`,
+        cadence: 'same_day',
+        status: 'scheduled',
+        dryRun: true,
+        sentAt: null,
+        createdAt: '2026-10-02T15:00:00Z',
+      });
+
+      const result = await withSystemTime(() => getWccUnconfirmedAppointments());
+
+      expect(result.isSupabaseConfigured).toBe(true);
+      expect(result.isConfiguredButUnavailable).toBe(false);
+      expect(result.windowHours).toBe(72);
+      expect(result.generatedAt).toBe(NOW.toISOString());
+
+      expect(result.appointments.map((appointment) => appointment.appointmentId)).toEqual([
+        apptA.id,
+        apptB.id,
+      ]);
+
+      const first = result.appointments[0];
+      // timestamptz vuelve con offset `+00:00`: se normaliza a ISO.
+      expect(iso(first.startAt)).toBe('2026-10-03T18:00:00.000Z');
+      expect(first).toMatchObject({
+        appointmentId: apptA.id,
+        patientId: juan.id,
+        patientName: 'Juan Pérez',
+        patientPhoneE164: null,
+        providerName: 'Dra. Ana',
+        serviceName: 'Ortodoncia',
+        status: 'requested',
+        hoursUntilStart: 6,
+      });
+      expect(normalizeReminders(first.reminders)).toEqual([
+        {
+          cadence: 'h24',
+          status: 'sent',
+          sentAt: '2026-10-02T15:15:00.000Z',
+          dryRun: false,
+        },
+        { cadence: 'same_day', status: 'scheduled', sentAt: null, dryRun: true },
+      ]);
+
+      const second = result.appointments[1];
+      expect(iso(second.startAt)).toBe('2026-10-04T12:00:00.000Z');
+      expect(second).toMatchObject({
+        appointmentId: apptB.id,
+        patientName: 'María López',
+        patientPhoneE164: '+5215512345678',
+        providerName: 'Dr. Jorge',
+        serviceName: 'Limpieza',
+        hoursUntilStart: 24,
+        reminders: [],
+      });
+    });
+
+    it('honors a custom windowHours filter', async () => {
+      const { providerOne, serviceOne } = await seedCatalog();
+      const patient = await createPatient({
+        fullName: 'María López',
+        phoneE164: '+5215512345678',
+      });
+      const within = await createAppointment({
+        patientId: patient.id,
+        serviceId: serviceOne.id,
+        providerId: providerOne.id,
+        startAt: '2026-10-04T08:00:00.000Z',
+        endAt: '2026-10-04T08:30:00.000Z',
+        status: 'requested',
+      });
+      // Fuera de la ventana de 24 h (NOW + 30 h): la consulta real lo excluye.
+      await createAppointment({
+        patientId: patient.id,
+        serviceId: serviceOne.id,
+        providerId: providerOne.id,
+        startAt: '2026-10-04T18:00:00.000Z',
+        endAt: '2026-10-04T18:30:00.000Z',
+        status: 'requested',
+      });
+
+      const result = await withSystemTime(() =>
+        getWccUnconfirmedAppointments({ windowHours: 24 })
+      );
+
+      expect(result.windowHours).toBe(24);
+      expect(result.appointments.map((appointment) => appointment.appointmentId)).toEqual([
+        within.id,
+      ]);
+    });
+
+    it('degrades to empty when Supabase is not configured', async () => {
+      const result = await withUnconfiguredSupabase(() =>
+        getWccUnconfirmedAppointments()
+      );
+
+      expect(result.isSupabaseConfigured).toBe(false);
+      expect(result.isConfiguredButUnavailable).toBe(false);
+      expect(result.appointments).toEqual([]);
+      expect(result.windowHours).toBe(72);
+    });
+
+    it('flags the queue as configured-but-unavailable when the upstream query fails', async () => {
+      const result = await withFailingSupabase(() =>
+        getWccUnconfirmedAppointments()
+      );
+
+      expect(result.isSupabaseConfigured).toBe(true);
+      expect(result.isConfiguredButUnavailable).toBe(true);
+      expect(result.appointments).toEqual([]);
     });
   });
 
-  it('honors a custom windowHours filter', async () => {
-    const appointmentsQuery = query([]);
-    makeWccClient({
-      appointments: [appointmentsQuery],
-      patients: [query([])],
-      providers: [query([])],
-      services: [query([])],
-      appointment_reminders: [query([])],
+  describe('resolveWccAppointmentsWindowHours', () => {
+    afterEach(() => {
+      delete process.env.WCC_APPOINTMENTS_WINDOW_HOURS;
     });
 
-    const result = await getWccUnconfirmedAppointments({ windowHours: 24 });
+    it('prefers an explicit positive value', () => {
+      expect(resolveWccAppointmentsWindowHours(12)).toBe(12);
+    });
 
-    expect(result.windowHours).toBe(24);
-    expect(appointmentsQuery.lt).toHaveBeenCalledWith(
-      'start_at',
-      '2026-10-04T12:00:00.000Z'
-    );
+    it('falls back to the env var, then to 72', () => {
+      process.env.WCC_APPOINTMENTS_WINDOW_HOURS = '48';
+      expect(resolveWccAppointmentsWindowHours()).toBe(48);
+
+      process.env.WCC_APPOINTMENTS_WINDOW_HOURS = 'not-a-number';
+      expect(resolveWccAppointmentsWindowHours()).toBe(72);
+    });
   });
 
-  it('degrades to empty when Supabase is not configured', async () => {
-    const wcc = await import('@/lib/wcc-client');
-    vi.mocked(wcc.isSupabaseConfigured).mockReturnValueOnce(false);
-
-    const result = await getWccUnconfirmedAppointments();
-
-    expect(result.isSupabaseConfigured).toBe(false);
-    expect(result.isConfiguredButUnavailable).toBe(false);
-    expect(result.appointments).toEqual([]);
-    expect(result.windowHours).toBe(72);
-  });
-
-  it('flags the queue as configured-but-unavailable when the client throws', async () => {
-    vi.mocked(createWccClient).mockRejectedValueOnce(new Error('connection refused'));
-
-    const result = await getWccUnconfirmedAppointments();
-
-    expect(result.isSupabaseConfigured).toBe(true);
-    expect(result.isConfiguredButUnavailable).toBe(true);
-    expect(result.appointments).toEqual([]);
-  });
-});
-
-describe('resolveWccAppointmentsWindowHours', () => {
-  afterEach(() => {
-    delete process.env.WCC_APPOINTMENTS_WINDOW_HOURS;
-  });
-
-  it('prefers an explicit positive value', () => {
-    expect(resolveWccAppointmentsWindowHours(12)).toBe(12);
-  });
-
-  it('falls back to the env var, then to 72', () => {
-    process.env.WCC_APPOINTMENTS_WINDOW_HOURS = '48';
-    expect(resolveWccAppointmentsWindowHours()).toBe(48);
-
-    process.env.WCC_APPOINTMENTS_WINDOW_HOURS = 'not-a-number';
-    expect(resolveWccAppointmentsWindowHours()).toBe(72);
-  });
-});
-
-describe('formatWccAppointmentStart', () => {
-  it('formats the instant in America/Mexico_City even across UTC midnight', () => {
-    // 15:15 UTC == 09:15 en CDMX (UTC-6, sin DST).
-    expect(formatWccAppointmentStart('2026-10-03T15:15:00.000Z')).toBe(
-      '2026-10-03 09:15'
-    );
-    // 2026-10-04T03:00Z == 2026-10-03 21:00 en CDMX.
-    expect(formatWccAppointmentStart('2026-10-04T03:00:00.000Z')).toBe(
-      '2026-10-03 21:00'
-    );
+  describe('formatWccAppointmentStart', () => {
+    it('formats the instant in America/Mexico_City even across UTC midnight', () => {
+      // 15:15 UTC == 09:15 en CDMX (UTC-6, sin DST).
+      expect(formatWccAppointmentStart('2026-10-03T15:15:00.000Z')).toBe(
+        '2026-10-03 09:15'
+      );
+      // 2026-10-04T03:00Z == 2026-10-03 21:00 en CDMX.
+      expect(formatWccAppointmentStart('2026-10-04T03:00:00.000Z')).toBe(
+        '2026-10-03 21:00'
+      );
+    });
   });
 });
