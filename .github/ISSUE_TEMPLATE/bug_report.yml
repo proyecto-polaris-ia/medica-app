@@ -1,0 +1,65 @@
+name: Bug report
+description: Reportar un comportamiento incorrecto en la app o el agente de WhatsApp.
+labels: ["type:bug"]
+body:
+  - type: markdown
+    attributes:
+      value: >
+        Gracias por reportar. Revisa primero si ya existe un issue similar
+        (búsqueda arriba a la derecha) para evitar duplicados.
+
+        Recuerda: no incluyas datos reales de pacientes ni números de
+        teléfono en este issue.
+
+  - type: textarea
+    id: descripcion
+    attributes:
+      label: Descripción
+      description: Qué pasó y qué esperabas que pasara.
+      placeholder: "El agente respondió X cuando debería responder Y."
+    validations:
+      required: true
+
+  - type: textarea
+    id: pasos
+    attributes:
+      label: Pasos para reproducir
+      placeholder: |
+        1. Enviar mensaje "..."
+        2. El agente responde "..."
+        3. Se observa el error.
+    validations:
+      required: true
+
+  - type: textarea
+    id: contexto
+    attributes:
+      label: Contexto técnico
+      description: >
+        Componente afectado (backend, orquestador, agente, UI), logs o
+        mensajes relevantes. Redacta identificadores y código en inglés.
+    validations:
+      required: false
+
+  - type: dropdown
+    id: severidad
+    attributes:
+      label: Severidad
+      options:
+        - Baja (cosmético o menor)
+        - Media (afecta flujo principal con alternativa)
+        - Alta (rompe flujo principal o reglas de dominio)
+        - Crítica (dato incorrecto hacia el paciente, escalado fallido)
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: dominio
+    attributes:
+      label: Reglas de dominio
+      description: Marca si este bug involucra alguna regla dura del consultorio.
+      options:
+        - label: El agente diagnosticó o recetó
+        - label: El agente inventó horarios o precios
+        - label: Falló el escalado a humano (dolor, urgencia, infección, medicamento)
+        - label: Ninguna de las anteriores

@@ -1,0 +1,50 @@
+name: Feature request
+description: Proponer una nueva funcionalidad o mejora para la app o el agente.
+labels: ["type:feature"]
+body:
+  - type: markdown
+    attributes:
+      value: >
+        Antes de crear este issue, revisa si ya existe una propuesta similar.
+        El detalle de diseño se refina después con SDD/OpenSpec; aquí basta
+        el alcance general.
+
+  - type: textarea
+    id: problema
+    attributes:
+      label: Problema u oportunidad
+      description: Qué problema del consultorio o del paciente resuelve.
+      placeholder: "Los pacientes cancelan por WhatsApp y hay que reprogramar a mano."
+    validations:
+      required: true
+
+  - type: textarea
+    id: propuesta
+    attributes:
+      label: Propuesta
+      description: Qué propones, en términos generales.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alcance
+    attributes:
+      label: Alcance sugerido
+      description: >
+        Forma aproximada de la solución (backend, orquestador, agente, UI).
+        No es una spec completa; se refinará en la fase de diseño.
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: dominio
+    attributes:
+      label: Reglas de dominio
+      description: >
+        El agente NO decide disponibilidad, NO escribe en Supabase y NO
+        envía WhatsApps por sí mismo. Marca si tu propuesta toca estas áreas.
+      options:
+        - label: Involucra disponibilidad de citas (debe salir de la BD)
+        - label: Involucra comunicación por WhatsApp (el orquestador la ejecuta)
+        - label: Involucra datos del paciente (requiere RLS y privacidad)
+        - label: Ninguna de las anteriores
