@@ -1,75 +1,88 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { getSupabaseAdmin } from '@/lib/supabase/server';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import {
-  getMedicalHistory,
-  upsertMedicalHistory,
-} from '../medical-history';
+  acquireDbSuiteLock,
+  applyLocalDbEnv,
+  localDbEnabled,
+  releaseDbSuiteLock,
+  truncateAllTables,
+} from '@/test-utils/local-db';
+import { getSupabaseAdmin } from '@/lib/supabase/server';
+import { createPatient } from '../patients';
+import { getMedicalHistory, upsertMedicalHistory } from '../medical-history';
 import { ValidationError } from '../validate';
+import type { MedicalHistoryInput } from '../types';
 
-vi.mock('@/lib/supabase/server', () => ({
-  getSupabaseAdmin: vi.fn(),
-}));
+/**
+ * Suite contra Supabase local (ver openspec/changes/supabase-local-testing).
+ * Corre solo con `npm run test:local` (SUPABASE_LOCAL=1 + supabase start);
+ * con `npm run test` regular se omite.
+ */
+const d = localDbEnabled ? describe : describe.skip;
 
-const PATIENT_ID = '550e8400-e29b-41d4-a716-446655440000';
+// Las suites de datos se serializan con un advisory lock (ver
+// src/test-utils/local-db.ts) porque vitest corre los archivos en paralelo
+// y todas truncan el esquema `public`.
 
-function buildQuery() {
-  const mockSelect = vi.fn();
-  const mockInsert = vi.fn();
-  const mockUpdate = vi.fn();
-  const mockUpsert = vi.fn();
-  const mockEq = vi.fn();
-  const mockSingle = vi.fn();
-  const mockOrder = vi.fn();
-
-  return {
-    select: mockSelect.mockReturnThis(),
-    insert: mockInsert.mockReturnThis(),
-    update: mockUpdate.mockReturnThis(),
-    upsert: mockUpsert.mockReturnThis(),
-    eq: mockEq.mockReturnThis(),
-    single: mockSingle,
-    order: mockOrder.mockReturnThis(),
-    _mocks: { mockSelect, mockInsert, mockUpdate, mockUpsert, mockEq, mockSingle, mockOrder },
-  };
-}
-
-describe('medical-history service', () => {
-  beforeEach(() => {
-    vi.resetAllMocks();
+d('medical-history service', () => {
+  beforeAll(async () => {
+    applyLocalDbEnv();
+    await acquireDbSuiteLock();
   });
+
+  afterAll(async () => {
+    await releaseDbSuiteLock();
+  });
+
+  beforeEach(async () => {
+    await truncateAllTables();
+  });
+
+  const iso = (value: string) => new Date(value).toISOString();
+
+  async function seedPatient() {
+    return createPatient({
+      fullName: 'Juan Pérez',
+      phoneE164: '+5215512345678',
+    });
+  }
+
+  /** Lectura cruda: valida columnas que el mapper normaliza (p. ej. `source`). */
+  async function readHistoryRow(
+    patientId: string
+  ): Promise<Record<string, unknown> | null> {
+    const { data, error } = await getSupabaseAdmin()
+      .from('patient_medical_history')
+      .select('*')
+      .eq('patient_id', patientId)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    return (data as Record<string, unknown> | null) ?? null;
+  }
 
   describe('getMedicalHistory', () => {
     it('returns an existing medical history mapped to camelCase', async () => {
-      const query = buildQuery();
-      query._mocks.mockSingle.mockResolvedValue({
-        data: {
-          patient_id: PATIENT_ID,
-          allergies: ['penicillin'],
-          systemic_conditions: ['diabetes'],
-          medications: ['metformin'],
-          pregnancy_status: 'no',
-          coagulation_disorders: 'none',
-          anticoagulants: null,
-          surgeries: 'appendectomy',
-          infectious_diseases: null,
-          smoking: 'never',
-          alcohol: 'occasional',
-          dental_history: 'brackets',
-          oral_habits: ['nail_biting'],
-          clinical_notes: 'notes',
-          created_at: '2026-09-01T10:00:00Z',
-          updated_at: '2026-09-01T10:00:00Z',
-        },
-        error: null,
-      });
-      (getSupabaseAdmin as ReturnType<typeof vi.fn>).mockReturnValue({
-        from: vi.fn().mockReturnValue(query),
-      });
+      const patient = await seedPatient();
+      const input: MedicalHistoryInput = {
+        allergies: ['penicillin'],
+        systemicConditions: ['diabetes'],
+        medications: ['metformin'],
+        pregnancyStatus: 'no',
+        coagulationDisorders: 'none',
+        anticoagulants: null,
+        surgeries: 'appendectomy',
+        infectiousDiseases: null,
+        smoking: 'never',
+        alcohol: 'occasional',
+        dentalHistory: 'brackets',
+        oralHabits: ['nail_biting'],
+        clinicalNotes: 'notes',
+      };
+      const stored = await upsertMedicalHistory(patient.id, input);
 
-      const history = await getMedicalHistory(PATIENT_ID);
+      const history = await getMedicalHistory(patient.id);
 
-      expect(history).toEqual({
-        patientId: PATIENT_ID,
+      expect(history).toMatchObject({
+        patientId: patient.id,
         allergies: ['penicillin'],
         systemicConditions: ['diabetes'],
         medications: ['metformin'],
@@ -84,90 +97,52 @@ describe('medical-history service', () => {
         oralHabits: ['nail_biting'],
         clinicalNotes: 'notes',
         source: 'staff',
-        createdAt: '2026-09-01T10:00:00Z',
-        updatedAt: '2026-09-01T10:00:00Z',
       });
+      // timestamptz vuelve con offset y microsegundos: se compara el instante.
+      expect(iso(history.createdAt)).toBe(iso(stored.createdAt));
+      expect(iso(history.updatedAt)).toBe(iso(stored.updatedAt));
+      const row = await readHistoryRow(patient.id);
+      expect(row?.source).toBe('staff');
+      expect(iso(row?.created_at as string)).toBe(iso(stored.createdAt));
     });
 
     it('maps the patient_autoreport provenance from the row', async () => {
-      const query = buildQuery();
-      query._mocks.mockSingle.mockResolvedValue({
-        data: {
-          patient_id: PATIENT_ID,
-          allergies: ['penicillin'],
-          systemic_conditions: [],
-          medications: [],
-          pregnancy_status: null,
-          coagulation_disorders: null,
-          anticoagulants: null,
-          surgeries: null,
-          infectious_diseases: null,
-          smoking: null,
-          alcohol: null,
-          dental_history: null,
-          oral_habits: [],
-          clinical_notes: null,
-          source: 'patient_autoreport',
-          created_at: '2026-09-01T10:00:00Z',
-          updated_at: '2026-09-01T10:00:00Z',
-        },
-        error: null,
-      });
-      (getSupabaseAdmin as ReturnType<typeof vi.fn>).mockReturnValue({
-        from: vi.fn().mockReturnValue(query),
+      const patient = await seedPatient();
+      await upsertMedicalHistory(patient.id, {
+        allergies: ['penicillin'],
+        source: 'patient_autoreport',
       });
 
-      const history = await getMedicalHistory(PATIENT_ID);
+      const history = await getMedicalHistory(patient.id);
 
       expect(history.source).toBe('patient_autoreport');
+      const row = await readHistoryRow(patient.id);
+      expect(row?.source).toBe('patient_autoreport');
     });
 
     it('defaults source to staff when the row omits it', async () => {
-      const query = buildQuery();
-      query._mocks.mockSingle.mockResolvedValue({
-        data: {
-          patient_id: PATIENT_ID,
-          allergies: [],
-          systemic_conditions: [],
-          medications: [],
-          pregnancy_status: null,
-          coagulation_disorders: null,
-          anticoagulants: null,
-          surgeries: null,
-          infectious_diseases: null,
-          smoking: null,
-          alcohol: null,
-          dental_history: null,
-          oral_habits: [],
-          clinical_notes: null,
-          created_at: '2026-09-01T10:00:00Z',
-          updated_at: '2026-09-01T10:00:00Z',
-        },
-        error: null,
-      });
-      (getSupabaseAdmin as ReturnType<typeof vi.fn>).mockReturnValue({
-        from: vi.fn().mockReturnValue(query),
-      });
+      const patient = await seedPatient();
+      // Inserción cruda sin `source`: el default de la columna es 'staff'.
+      const { error } = await getSupabaseAdmin()
+        .from('patient_medical_history')
+        .insert({ patient_id: patient.id });
+      expect(error).toBeNull();
 
-      const history = await getMedicalHistory(PATIENT_ID);
+      const history = await getMedicalHistory(patient.id);
 
       expect(history.source).toBe('staff');
+      expect(history.allergies).toEqual([]);
+      const row = await readHistoryRow(patient.id);
+      expect(row?.source).toBe('staff');
     });
 
     it('returns default empty values when no history exists', async () => {
-      const query = buildQuery();
-      query._mocks.mockSingle.mockResolvedValue({
-        data: null,
-        error: { code: 'PGRST116', message: 'No rows found' },
-      });
-      (getSupabaseAdmin as ReturnType<typeof vi.fn>).mockReturnValue({
-        from: vi.fn().mockReturnValue(query),
-      });
+      const patient = await seedPatient();
 
-      const history = await getMedicalHistory(PATIENT_ID);
+      const history = await getMedicalHistory(patient.id);
 
       expect(history).toEqual({
-        patientId: PATIENT_ID,
+        patientId: patient.id,
         allergies: [],
         systemicConditions: [],
         medications: [],
@@ -185,6 +160,8 @@ describe('medical-history service', () => {
         createdAt: expect.any(String),
         updatedAt: expect.any(String),
       });
+      // No se materializó ninguna fila para un paciente sin historia.
+      expect(await readHistoryRow(patient.id)).toBeNull();
     });
 
     it('throws ValidationError for an invalid patient id', async () => {
@@ -194,149 +171,99 @@ describe('medical-history service', () => {
 
   describe('upsertMedicalHistory', () => {
     it('replaces the medical history and returns the mapped row', async () => {
-      const query = buildQuery();
-      query._mocks.mockSingle.mockResolvedValue({
-        data: {
-          patient_id: PATIENT_ID,
-          allergies: ['latex'],
-          systemic_conditions: [],
-          medications: [],
-          pregnancy_status: null,
-          coagulation_disorders: null,
-          anticoagulants: null,
-          surgeries: null,
-          infectious_diseases: null,
-          smoking: null,
-          alcohol: null,
-          dental_history: null,
-          oral_habits: [],
-          clinical_notes: null,
-          created_at: '2026-09-01T10:00:00Z',
-          updated_at: '2026-09-02T10:00:00Z',
-        },
-        error: null,
-      });
-      (getSupabaseAdmin as ReturnType<typeof vi.fn>).mockReturnValue({
-        from: vi.fn().mockReturnValue(query),
+      const patient = await seedPatient();
+      const first = await upsertMedicalHistory(patient.id, {
+        allergies: ['penicillin'],
+        clinicalNotes: 'primera nota',
       });
 
-      const history = await upsertMedicalHistory(PATIENT_ID, {
+      const second = await upsertMedicalHistory(patient.id, {
         allergies: ['latex'],
       });
 
-      expect(query._mocks.mockUpsert).toHaveBeenCalledWith(
-        expect.objectContaining({
-          patient_id: PATIENT_ID,
-          allergies: ['latex'],
-          systemic_conditions: [],
-          medications: [],
-          source: 'staff',
-        }),
-        expect.objectContaining({ onConflict: 'patient_id' })
-      );
-      expect(history.allergies).toEqual(['latex']);
-      expect(history.updatedAt).toBe('2026-09-02T10:00:00Z');
+      expect(second.allergies).toEqual(['latex']);
+      // Reemplazo completo: los campos omitidos vuelven a su default.
+      expect(second.clinicalNotes).toBeNull();
+      // ON CONFLICT (patient_id): una sola fila y `created_at` intacto.
+      expect(iso(second.createdAt)).toBe(iso(first.createdAt));
+      const { data, error } = await getSupabaseAdmin()
+        .from('patient_medical_history')
+        .select('patient_id, allergies, clinical_notes')
+        .eq('patient_id', patient.id);
+      expect(error).toBeNull();
+      expect(data).toHaveLength(1);
+      expect(data?.[0]).toMatchObject({
+        patient_id: patient.id,
+        allergies: ['latex'],
+        clinical_notes: null,
+      });
     });
 
     it('always includes source, resetting provenance to staff when the input omits it', async () => {
-      const query = buildQuery();
-      query._mocks.mockSingle.mockResolvedValue({
-        data: {
-          patient_id: PATIENT_ID,
-          allergies: [],
-          systemic_conditions: [],
-          medications: [],
-          pregnancy_status: null,
-          coagulation_disorders: null,
-          anticoagulants: null,
-          surgeries: null,
-          infectious_diseases: null,
-          smoking: null,
-          alcohol: null,
-          dental_history: null,
-          oral_habits: [],
-          clinical_notes: null,
-          source: 'staff',
-          created_at: '2026-09-01T10:00:00Z',
-          updated_at: '2026-09-02T10:00:00Z',
-        },
-        error: null,
-      });
-      (getSupabaseAdmin as ReturnType<typeof vi.fn>).mockReturnValue({
-        from: vi.fn().mockReturnValue(query),
+      const patient = await seedPatient();
+      await upsertMedicalHistory(patient.id, { source: 'patient_autoreport' });
+
+      const history = await upsertMedicalHistory(patient.id, {
+        allergies: ['latex'],
       });
 
-      await upsertMedicalHistory(PATIENT_ID, { allergies: ['latex'] });
-
-      const payload = query._mocks.mockUpsert.mock.calls[0][0] as Record<
-        string,
-        unknown
-      >;
-      expect(payload.source).toBe('staff');
+      expect(history.source).toBe('staff');
+      const row = await readHistoryRow(patient.id);
+      expect(row?.source).toBe('staff');
     });
 
     it('sends patient_autoreport in the upsert payload when onboarding provides it', async () => {
-      const query = buildQuery();
-      query._mocks.mockSingle.mockResolvedValue({
-        data: {
-          patient_id: PATIENT_ID,
-          allergies: [],
-          systemic_conditions: [],
-          medications: [],
-          pregnancy_status: null,
-          coagulation_disorders: null,
-          anticoagulants: null,
-          surgeries: null,
-          infectious_diseases: null,
-          smoking: null,
-          alcohol: null,
-          dental_history: null,
-          oral_habits: [],
-          clinical_notes: null,
-          source: 'patient_autoreport',
-          created_at: '2026-09-01T10:00:00Z',
-          updated_at: '2026-09-02T10:00:00Z',
-        },
-        error: null,
-      });
-      (getSupabaseAdmin as ReturnType<typeof vi.fn>).mockReturnValue({
-        from: vi.fn().mockReturnValue(query),
-      });
+      const patient = await seedPatient();
 
-      const history = await upsertMedicalHistory(PATIENT_ID, {
+      const history = await upsertMedicalHistory(patient.id, {
         source: 'patient_autoreport',
       });
 
-      const payload = query._mocks.mockUpsert.mock.calls[0][0] as Record<
-        string,
-        unknown
-      >;
-      expect(payload.source).toBe('patient_autoreport');
       expect(history.source).toBe('patient_autoreport');
+      const row = await readHistoryRow(patient.id);
+      expect(row).toMatchObject({
+        patient_id: patient.id,
+        source: 'patient_autoreport',
+        allergies: [],
+        systemic_conditions: [],
+        medications: [],
+        oral_habits: [],
+      });
     });
 
     it('rejects an unknown source value', async () => {
-      (getSupabaseAdmin as ReturnType<typeof vi.fn>).mockReturnValue({
-        from: vi.fn().mockReturnValue(buildQuery()),
-      });
+      const patient = await seedPatient();
 
       await expect(
-        upsertMedicalHistory(PATIENT_ID, {
+        upsertMedicalHistory(patient.id, {
           source: 'unknown' as 'staff',
         })
       ).rejects.toThrow(ValidationError);
+
+      // La validación corre antes del upsert: no hay escritura.
+      expect(await readHistoryRow(patient.id)).toBeNull();
     });
 
     it('validates pregnancy, smoking and alcohol statuses', async () => {
-      (getSupabaseAdmin as ReturnType<typeof vi.fn>).mockReturnValue({
-        from: vi.fn().mockReturnValue(buildQuery()),
-      });
+      const patient = await seedPatient();
 
       await expect(
-        upsertMedicalHistory(PATIENT_ID, {
+        upsertMedicalHistory(patient.id, {
           pregnancyStatus: 'maybe' as 'yes',
         })
       ).rejects.toThrow(ValidationError);
+      await expect(
+        upsertMedicalHistory(patient.id, {
+          smoking: 'sometimes' as 'never',
+        })
+      ).rejects.toThrow(ValidationError);
+      await expect(
+        upsertMedicalHistory(patient.id, {
+          alcohol: 'daily' as 'never',
+        })
+      ).rejects.toThrow(ValidationError);
+
+      expect(await readHistoryRow(patient.id)).toBeNull();
     });
   });
 });
