@@ -64,11 +64,7 @@
     "undici": "^8.11.2",
     "jsdom": {
       "undici": "^7.30.0"
-    },
-    "eslint-config-next": {
-      "@next/eslint-plugin-next": "14.2.35"
-    },
-    "glob": "^10.5.0"
+    }
   },
   "allowScripts": {
     "fsevents@2.3.3": true
