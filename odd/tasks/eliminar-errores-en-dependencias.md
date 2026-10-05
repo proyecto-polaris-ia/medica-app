@@ -7,7 +7,7 @@
 ## Objetivo
 
 Reducir las vulnerabilidades de dependencias: métrica actual
-**15 vulnerabilities (critical: 2, high: 8, moderate: 5, low: 0; accepted: 0)**.
+**15 vulnerabilities (critical: 2, high: 8, moderate: 5, low: 0; accepted: 0)** → **5 high (cadena braces dev-only, aceptada documentada), 0 critical, 0 moderate; accepted: 5**.
 
 ## Análisis (npm audit, mapeo completo)
 
@@ -18,16 +18,16 @@ Reducir las vulnerabilidades de dependencias: métrica actual
 | undici vía eve 0.52.2 | undici 8.9.0, eve | 2 high… (1 high + 1 moderate) | `overrides`: `undici@^8.11.2` (fixed ≥8.10.2; sin subir eve 0.71) |
 | braces vía eslint-config-next 15 | braces, micromatch, fast-glob, @next/eslint-plugin-next, eslint-config-next | 5 high | Advisory GHSA-vfj7-8cjw-p6xm **sin parche** (braces 3.0.3 es el último). La vía es romper la cadena: `overrides`: `@next/eslint-plugin-next@14.2.35` (usa `glob@10`/minimatch, sin fast-glob). Mantener eslint-config-next 15.5.24 |
 
-Nota: `braces` no tiene versión parcheada publicada; cualquier cadena que lo
-arrastre quedará marcada mientras exista. Romper la arista fast-glob es la
-única vía sin downgrade completo de eslint-config-next (que tiene peer eslint ^8
-y rompería ESLint 9).
+Nota final: `braces` no tiene versión parcheada publicada y ninguna versión del plugin (@next/eslint-plugin-next 14.x usa API legacy de ESLint; 15.x y 16.x dependen de fast-glob→braces) evita la cadena sin romper ESLint 9. Excepción aceptada y documentada: dev-only (lint), sin input no confiable, mitigación = monitorear un braces parcheado.
 
 ## Tareas
 
 - [x] Crear change OpenSpec `dependency-vulnerability-remediation` (proposal/specs/design/tasks/exploration/state).
 - [x] Apply: vitest 5 + overrides (postcss, undici, @next/eslint-plugin-next, glob) + `npm install` + migración de `vitest.config.ts` (`test.projects`) y `vitest.setup.ts` (`jest-dom/vitest`).
-- [x] Verify: npm audit → 0 ✅; lint ✅ (33 warnings baseline); typecheck ✅; test ✅ (1145 passed); build ✅ PASS (verificador gentle-ai-verify).
+- [x] Verify: CI揭露ó 2 fallos ocultos por cachés locales (`.tsbuildinfo` incremental y caché de ESLint en `.next/`):
+  1. `moduleResolution: "node"` no resuelve paquetes exports-only (`@vitejs/plugin-react@5` ya no trae `main`/`types`) → tsconfig movido a `bundler`.
+  2. `@next/eslint-plugin-next@14.2.35` usa API legacy eliminada en ESLint 9 → no existe versión del plugin compatible con ESLint 9 y libre de la cadena braces. Se restaura 15.5.24 y la cadena braces queda como **excepción aceptada documentada** (dev-only, sin input no confiable, sin parche publicado; monitorear braces 3.0.4+).
+  Estado final: `npm audit` **5 high (cadena braces, dev-only), 0 críticas, 0 moderadas**; lint 0 errores / 33 warnings; tsc limpio (check fresco); 1145 passed / 216 skipped; build compila.
 - [x] Archive + work-unit commits + PR. Spec principal `openspec/specs/dependency-management/` + change en `archive/2026-10-05-dependency-vulnerability-remediation/`.
 - [x] Cierre: resumen, checks pendientes, siguiente paso. PR #134.
 
