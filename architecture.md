@@ -354,3 +354,17 @@ código muertas, errores de BD tragados como "sin historial").
   propios fixtures vía funciones de dominio.
 - **CI**: job `test-local-db` en `.github/workflows/ci.yml` levanta Supabase local sin
   credenciales de producción y corre `npm run test:local`.
+- **Troubleshooting — contenedores obsoletos tras actualizar la CLI**: `supabase start`
+  y `supabase db reset` **no recrean contenedores**; si el stack se levantó con una
+  versión anterior de la CLI, siguen corriendo las imágenes viejas (por ejemplo,
+  storage-api v1.71.0 genera `INSERT ... ON CONFLICT (name, bucket_id)` en
+  `storage.objects` que PostgreSQL 17 no puede resolver contra índices únicos parciales,
+  error `42P10` / `infer_arbiter_indexes`, y rompe los uploads de
+  `patient-files.test.ts`). Síntoma típico: fallas locales deterministas que CI
+  (`test-local-db`, con stack fresco en cada run) no reproduce. Tras actualizar la CLI,
+  recrear el stack completo:
+
+  ```sh
+  supabase stop --no-backup && supabase start && supabase db reset
+  npm run test:local
+  ```
