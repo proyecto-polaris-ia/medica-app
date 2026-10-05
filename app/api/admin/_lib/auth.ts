@@ -1,1 +1,1 @@
-export { requireUser, UnauthorizedError } from '@/lib/supabase/auth';
+export { requireUser } from '@/lib/supabase/auth';

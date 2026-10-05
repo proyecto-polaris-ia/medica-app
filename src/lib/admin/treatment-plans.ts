@@ -50,11 +50,6 @@ const ITEM_COLUMNS = [
   'updated_at',
 ].join(', ');
 
-export const SELECT_COLUMNS = {
-  plan: PLAN_COLUMNS,
-  item: ITEM_COLUMNS,
-};
-
 export const ALLOWED_TRANSITIONS: Record<
   TreatmentPlanStatus,
   TreatmentPlanStatus[]

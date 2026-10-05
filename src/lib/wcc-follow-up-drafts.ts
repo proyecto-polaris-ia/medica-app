@@ -13,14 +13,6 @@ import {
  * cola vacía y expone `isSupabaseConfigured` / `isConfiguredButUnavailable`.
  */
 
-export const WCC_FOLLOW_UP_DRAFTS_STATUSES: FollowUpDraftStatus[] = [
-  'draft',
-  'approved',
-  'rejected',
-  'sent',
-  'sent_failed',
-];
-
 export type WccFollowUpDraftRow = {
   id: string;
   patientId: string;

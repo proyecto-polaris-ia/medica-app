@@ -4,8 +4,10 @@
     "app/**/page.{ts,tsx}",
     "app/**/layout.{ts,tsx}",
     "app/**/route.{ts,tsx}",
-    "middleware.ts",
     "scripts/**"
   ],
-  "project": ["app/**", "src/**", "scripts/**", "tests/**"]
+  "project": ["app/**", "src/**", "scripts/**", "tests/**"],
+  "ignoreBinaries": ["supabase"],
+  "ignoreDependencies": ["eslint-config-next", "chat"],
+  "ignoreExportsUsedInFile": true
 }
