@@ -45,7 +45,7 @@ Primero se apagan los falsos positivos para que el reporte restante sea señal
 real. `knip.json` es JSON estricto: la justificación de cada clave vive en
 `design.md` D1 (documentación referenciada), no como comentario inline.
 
-- [ ] 1.1 Reescribir `knip.json` a la forma final de D1: `entry` sin
+- [x] 1.1 Reescribir `knip.json` a la forma final de D1: `entry` sin
   `middleware.ts` (`app/**/page|layout|route.{ts,tsx}` + `scripts/**`),
   `project` sin cambios (`app/**`, `src/**`, `scripts/**`, `tests/**`),
   `ignoreBinaries: ["supabase"]`, `ignoreDependencies: ["eslint-config-next", "chat"]`,
@@ -61,7 +61,7 @@ real. `knip.json` es JSON estricto: la justificación de cada clave vive en
 
 ## 2. Retiro de dependencias muertas (design D3)
 
-- [ ] 2.1 Borrar de `package.json` las líneas de `@chat-adapter/state-redis`
+- [x] 2.1 Borrar de `package.json` las líneas de `@chat-adapter/state-redis`
   y `ai-sdk-provider-opencode-sdk` (sin tocar `@chat-adapter/state-memory` ni
   `@ai-sdk/openai-compatible`) y correr `npm install` para regenerar
   `package-lock.json`. **Prohibido:** `npm audit fix`, `npm audit fix --force`,
@@ -79,11 +79,11 @@ Cada archivo se re-verifica con `grep` **antes** de borrarlo. Si el grep muestra
 uso ≠ 0, **no se borra**: se registra como contrato compartido y se documenta la
 excepción.
 
-- [ ] 3.1 `app/api/admin/_lib/validate.ts`: `grep -rn "_lib/validate" app src agent scripts tests`
+- [x] 3.1 `app/api/admin/_lib/validate.ts`: `grep -rn "_lib/validate" app src agent scripts tests`
   (sólo deben aparecer importadores de `app/api/booking/_lib/validate.ts`) → borrar.
-- [ ] 3.2 `src/lib/admin/metrics/index.ts`: `grep -rn "@/lib/admin/metrics\"\|'@/lib/admin/metrics'" app src agent scripts tests`
+- [x] 3.2 `src/lib/admin/metrics/index.ts`: `grep -rn "@/lib/admin/metrics\"\|'@/lib/admin/metrics'" app src agent scripts tests`
   (0 coincidencias; los consumidores importan submódulos) → borrar.
-- [ ] 3.3 `src/lib/booking/index.ts`: `grep -rn "@/lib/booking\"\|'@/lib/booking'" app src agent scripts tests`
+- [x] 3.3 `src/lib/booking/index.ts`: `grep -rn "@/lib/booking\"\|'@/lib/booking'" app src agent scripts tests`
   (0 coincidencias) → borrar.
 
 Verificación (al cerrar la sección): `npx tsc --noEmit`, `npm run lint` y
