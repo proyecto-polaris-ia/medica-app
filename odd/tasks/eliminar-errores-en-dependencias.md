@@ -29,7 +29,7 @@ y rompería ESLint 9).
 - [x] Apply: vitest 5 + overrides (postcss, undici, @next/eslint-plugin-next, glob) + `npm install` + migración de `vitest.config.ts` (`test.projects`) y `vitest.setup.ts` (`jest-dom/vitest`).
 - [x] Verify: npm audit → 0 ✅; lint ✅ (33 warnings baseline); typecheck ✅; test ✅ (1145 passed); build ✅ PASS (verificador gentle-ai-verify).
 - [x] Archive + work-unit commits + PR. Spec principal `openspec/specs/dependency-management/` + change en `archive/2026-10-05-dependency-vulnerability-remediation/`.
-- [ ] Cierre: resumen, checks pendientes, siguiente paso.
+- [x] Cierre: resumen, checks pendientes, siguiente paso. PR #134.
 
 ## Decisión aprobada: Opción A (migrar a Vitest 5)
 
