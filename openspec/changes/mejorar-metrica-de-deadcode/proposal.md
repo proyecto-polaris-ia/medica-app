@@ -28,13 +28,17 @@ exploración previa del issue.
 
 - Quitar la entrada redundante `middleware.ts` de `entry`: el plugin de Next.js
   de Knip ya detecta el middleware.
-- Agregar `"binaries": ["supabase"]`: el Supabase CLI es global en el flujo de
-  trabajo (ver `architecture.md` §9), por lo que no es una dependencia Node.
+- Agregar `"ignoreBinaries": ["supabase"]`: el Supabase CLI es global en el flujo
+  de trabajo (ver `architecture.md` §9), por lo que no es una dependencia Node.
 - Agregar `"ignoreDependencies": ["eslint-config-next"]`: se consume vía
   `FlatCompat` en `eslint.config.mjs:6`, forma que Knip no resuelve.
 - Resolver el import de tipo `chat` no listado en `agent/channels/whatsapp.ts:3`
-  contra el shim ambiental existente `agent/eve-shim.d.ts:53`. **No** se agrega
-  el paquete `chat`: es un tipo cubierto por el shim.
+  con un mecanismo de dos capas: el shim ambiental existente
+  `agent/eve-shim.d.ts:53` es la cobertura de tipos para `tsc`, y
+  `"ignoreDependencies": ["chat"]` en `knip.json` suprime el issue `unlisted`
+  que Knip reporta (Knip resuelve contra el manifiesto y no consulta
+  declaraciones ambientales). **No** se agrega el paquete `chat`: `chat` no es
+  una dependencia del manifiesto.
 
 ### 2. Dependencias realmente muertas
 
@@ -85,7 +89,7 @@ Eliminar, **cada uno verificado con `grep` antes de borrar**:
 - `dead-code-metric` (dominio `code-quality`): define una métrica de código
   muerto **confiable y reproducible**. El reporte de Knip MUST reducirse a 0 (o
   casi 0, con cada excepción documentada) y MUST poder reproducirse con
-  `npx knip`. Toda exclusión en `knip.json` (`entry`, `binaries`,
+  `npx knip`. Toda exclusión en `knip.json` (`entry`, `ignoreBinaries`,
   `ignoreDependencies`, `ignoreExportsUsedInFile`) MUST tener una justificación
   verificable en el repo. La eliminación o des-exportación de exports y tipos
   MUST basarse en evidencia de cero uso (grep, tests incluidos) y no en la sola
@@ -119,9 +123,9 @@ Eliminar, **cada uno verificado con `grep` antes de borrar**:
 | Decisión | Valor | Razón |
 |---|---|---|
 | Entrada `middleware.ts` | Quitar de `entry` | El plugin de Next.js de Knip ya detecta el middleware; la entrada era redundante. |
-| Supabase CLI | `"binaries": ["supabase"]` | Es una herramienta global (`architecture.md` §9), no una dependencia Node del proyecto. |
+| Supabase CLI | `"ignoreBinaries": ["supabase"]` | Es una herramienta global (`architecture.md` §9), no una dependencia Node del proyecto. |
 | `eslint-config-next` | `"ignoreDependencies"` | Se usa vía `FlatCompat` en `eslint.config.mjs:6`; Knip no resuelve ese patrón. |
-| Tipo `chat` | Shim ambiental, no paquete | `agent/eve-shim.d.ts:53` ya declara el módulo; agregarlo sería una dependencia fantasma. |
+| Tipo `chat` | Shim ambiental + `ignoreDependencies` | `agent/eve-shim.d.ts:53` cubre `tsc`; `"ignoreDependencies": ["chat"]` suprime el issue `unlisted` de Knip. No se agrega el paquete. |
 | `@chat-adapter/state-redis` | Eliminar | Decisión de Stage 5 de usar `state-memory`; Redis nunca se configuró. |
 | `ai-sdk-provider-opencode-sdk` | Eliminar | Cero imports. |
 | Exports usados en su archivo | `ignoreExportsUsedInFile: true` | Dejan de contar sin forzar des-exportaciones artificiales. |
@@ -131,7 +135,7 @@ Eliminar, **cada uno verificado con `grep` antes de borrar**:
 
 | Área | Impacto | Descripción |
 |---|---|---|
-| `knip.json` | Modificado | `entry` sin `middleware.ts`; `binaries`, `ignoreDependencies` e `ignoreExportsUsedInFile`. |
+| `knip.json` | Modificado | `entry` sin `middleware.ts`; `ignoreBinaries`, `ignoreDependencies` e `ignoreExportsUsedInFile`. |
 | `package.json` | Modificado | Elimina `@chat-adapter/state-redis` y `ai-sdk-provider-opencode-sdk`; agrega script `knip`. |
 | `package-lock.json` | Regenerado | Solo por `npm install` tras quitar las dos dependencias. |
 | `app/api/admin/_lib/validate.ts` | Eliminado | Sin uso verificado con `grep`. |
@@ -172,7 +176,7 @@ ni la autenticación.
 - [ ] Exports y tipos sin uso eliminados o des-exportados solo con evidencia de
       cero uso (tests incluidos).
 - [ ] `npx tsc --noEmit`, `npm run lint`, `npm run test` y `npm run build` pasan.
-- [ ] `knip.json` justifica cada `entry`, `binaries`, `ignoreDependencies` e
+- [ ] `knip.json` justifica cada `entry`, `ignoreBinaries`, `ignoreDependencies` e
       `ignoreExportsUsedInFile`.
 - [ ] Sin cambios en `travelhub-app`.
 - [ ] El cambio está especificado con SDD/OpenSpec.

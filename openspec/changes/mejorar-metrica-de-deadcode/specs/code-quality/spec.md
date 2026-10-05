@@ -48,7 +48,7 @@ como defecto, no como configuración válida. En particular:
 
 - `entry` MUST NOT incluir `middleware.ts`, porque el plugin de Next.js de Knip
   ya detecta el middleware.
-- `binaries` MUST declarar `["supabase"]`, porque el Supabase CLI es una
+- `ignoreBinaries` MUST declarar `["supabase"]`, porque el Supabase CLI es una
   herramienta global del flujo de trabajo (`architecture.md` §9), no una
   dependencia Node del proyecto.
 - `ignoreDependencies` MUST declarar `["eslint-config-next"]`, consumido vía
@@ -78,11 +78,11 @@ como defecto, no como configuración válida. En particular:
 - THEN `middleware.ts` MUST NOT aparecer
 - AND el middleware MUST seguir siendo analizado por el plugin de Next.js de Knip
 
-#### Scenario: Entradas de `binaries` e `ignoreDependencies`
+#### Scenario: Entradas de `ignoreBinaries` e `ignoreDependencies`
 
 - GIVEN el `knip.json` del cambio aplicado
-- WHEN se inspeccionan `binaries` e `ignoreDependencies`
-- THEN `binaries` MUST contener `supabase`
+- WHEN se inspeccionan `ignoreBinaries` e `ignoreDependencies`
+- THEN `ignoreBinaries` MUST contener `supabase`
 - AND `ignoreDependencies` MUST contener `eslint-config-next`
 - AND `ignoreExportsUsedInFile` MUST ser `true`
 
@@ -169,18 +169,24 @@ MUST quedar visible en la salida del paso.
 - THEN el pipeline SHOULD completarse sin fallar por esos warnings
 - AND el reporte de la métrica MUST quedar visible en el log del paso
 
-### Requirement: Falsos positivos de tipos resueltos por shim documentado
+### Requirement: Falsos positivos del tipo `chat` resueltos en dos capas
 
 El import de tipo `chat` en `agent/channels/whatsapp.ts:3` MUST quedar cubierto
-por el shim ambiental existente `agent/eve-shim.d.ts:53`, sin agregar el paquete
-`chat` como dependencia. La cobertura del shim MUST ser suficiente para que Knip
-y `npx tsc --noEmit` no reporten ese import.
+por el shim ambiental existente `agent/eve-shim.d.ts:53` para el chequeo de
+TypeScript, sin agregar el paquete `chat` como dependencia. Además, el issue
+`unlisted` que Knip reporta para ese especificador (el shim aporta tipos, pero
+Knip resuelve contra el manifiesto y no consulta declaraciones ambientales) MUST
+resolverse declarando `"ignoreDependencies": ["chat"]` en `knip.json`, con la
+justificación documentada de que `chat` es un tipo cubierto por el shim y no una
+dependencia del manifiesto. El paquete `chat` MUST NOT agregarse a
+`package.json` en ningún caso.
 
 #### Scenario: Tipo `chat` cubierto sin dependencia fantasma
 
 - GIVEN `agent/channels/whatsapp.ts` importando `Message` y `Thread` desde `chat`
 - WHEN se ejecutan `npx knip` y `npx tsc --noEmit`
-- THEN ninguno de los dos MUST reportar el import de tipo `chat` como issue o error
+- THEN `npx tsc --noEmit` MUST seguir en verde con el shim `agent/eve-shim.d.ts:53`
+- AND `npx knip` MUST NOT reportar el import de tipo `chat` como issue, gracias a `"ignoreDependencies": ["chat"]` en `knip.json`
 - AND el paquete `chat` MUST NOT agregarse a `package.json`
 
 #### Scenario: Shims de los adaptadores de chat documentados
