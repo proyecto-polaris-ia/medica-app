@@ -208,9 +208,3 @@ export function getWhatsAppAiObservabilitySnapshot(): WhatsAppAiObservabilitySna
     recentFailures: state.recentFailures.map((event) => ({ ...event })),
   };
 }
-
-export function resetWhatsAppAiObservabilityForTests() {
-  state.metrics = initialMetrics();
-  state.recentEvents = [];
-  state.recentFailures = [];
-}

@@ -185,5 +185,3 @@ export async function sendPaymentReminder(
     error: sendResult.ok ? undefined : sendResult.error ?? 'send_failed',
   };
 }
-
-export type { ReminderCandidate as ReminderCandidateInput };

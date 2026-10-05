@@ -92,14 +92,3 @@ export type FlowResult = {
   missingEntity?: keyof ExtractedEntities;
   data?: unknown;
 };
-
-// Contexto de conversación para el flow engine
-export type FlowContext = {
-  conversationId: string;
-  flowState: FlowState;
-  contact: {
-    id?: string;
-    phone?: string;
-    profileName?: string;
-  };
-};
