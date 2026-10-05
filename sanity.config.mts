@@ -21,7 +21,9 @@ export default {
       minFunctions: 75,
       minStatements: 70,
     },
-    // No playwright in this project yet.
-    e2e: { enabled: false },
+    // Playwright e2e (issue: activate-playwright-e2e-booking, archived). The
+    // playwright.config.ts pins its own env and dev servers; `pre` reuses the
+    // same Supabase reset gate as `npm run test:e2e`.
+    e2e: { enabled: true, pre: "node scripts/e2e-pretest.mjs" },
   },
 };
