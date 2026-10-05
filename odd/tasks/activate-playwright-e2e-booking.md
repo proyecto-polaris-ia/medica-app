@@ -25,6 +25,12 @@
 
 - `c9d3271` — test(booking): activate Playwright e2e suite for public booking flow
   (13 archivos, +1080; incluye docs de feature y change OpenSpec).
+- `a3d8546` — docs(odd): record e2e work-unit evidence and findings.
+- Revisión nativa (RDD): lineage `review-1bce7024f8c37532`, 4 lentes, riesgo alto →
+  **approved** y acuse quemado (`gentle-ai.review-acknowledged/v1`). 13 hallazgos
+  todos informativos (0 bloqueantes); destacados: R4 `nonidempotent-retry` y
+  `network-skip-green` (WARNING), R3 `port-toctou` / `retry-state` (WARNING) —
+  trabajo posterior, no reabren la revisión.
 
 ## Hallazgos y seguimiento
 
