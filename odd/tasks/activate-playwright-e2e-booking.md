@@ -23,7 +23,8 @@
 
 ## Evidencia (commits)
 
-- (pendiente)
+- `c9d3271` — test(booking): activate Playwright e2e suite for public booking flow
+  (13 archivos, +1080; incluye docs de feature y change OpenSpec).
 
 ## Hallazgos y seguimiento
 
