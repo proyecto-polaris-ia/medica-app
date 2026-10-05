@@ -39,14 +39,6 @@ const CONTACT_COLUMNS = [
   'updated_at',
 ].join(', ');
 
-export const SELECT_COLUMNS = {
-  appointment: APPOINTMENT_COLUMNS,
-  plan: PLAN_COLUMNS,
-  visit: VISIT_COLUMNS,
-  patient: PATIENT_COLUMNS,
-  contact: CONTACT_COLUMNS,
-};
-
 const ELIGIBLE_PLAN_STATUSES: TreatmentPlanStatus[] = [
   'in_progress',
   'presented',

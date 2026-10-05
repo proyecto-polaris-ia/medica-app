@@ -36,16 +36,6 @@ export const OCCUPANCY_STATUSES = [
   'requested',
 ] as const;
 
-/** Status que nunca suman al numerador de ocupación. */
-export const NON_OCCUPANCY_STATUSES = [
-  'cancelled',
-  'rescheduled',
-  'no_show',
-] as const;
-
-/** Status que alimentan el numerador y el denominador de la tasa de no-show. */
-export const NO_SHOW_STATUSES = ['no_show', 'attended'] as const;
-
 export const ALL_APPOINTMENT_STATUSES: readonly AppointmentStatus[] = [
   'requested',
   'confirmed',

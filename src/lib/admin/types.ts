@@ -211,11 +211,6 @@ export type PatientFile = {
   signedUrl?: string;
 };
 
-export type PatientFileInput = {
-  category?: PatientFileCategory | null;
-  clinicalVisitId?: string | null;
-};
-
 export type PatientRecordAppointment = Omit<Appointment, 'reminders'> & {
   serviceName: string;
   providerName: string;

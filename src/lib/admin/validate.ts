@@ -365,5 +365,3 @@ export function parseThresholdDays(
 
   return numericValue;
 }
-
-export { parseOptionalEmail } from '@/lib/booking/patient-contact';
