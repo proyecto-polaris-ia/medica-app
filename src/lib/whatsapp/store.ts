@@ -1,19 +1,9 @@
 import { getSupabaseAdmin } from '@/lib/supabase/server';
 import type { WhatsAppInboundAgentDecision } from './inbound-decision';
-import type { NormalizedWhatsAppInboundEvent, NormalizedWhatsAppStatusEvent, WhatsAppDeliveryStatus } from './normalize';
-import type { FlowState } from '@/lib/flows/types';
+import type { NormalizedWhatsAppInboundEvent } from './normalize';
 
 export type JsonPayload = Record<string, unknown>;
-export type WhatsAppIngestionResult = { received: number; inserted: number; duplicates: number };
-export type WhatsAppStatusPersistenceResult = { received: number; inserted: number; duplicates: number; matched: number; updated: number };
 export type PersistedWhatsAppInboundEvent = { inserted: boolean; contactId: string; conversationId: string; messageId: string };
-export type WhatsAppConversationContext = { 
-  bookingContext?: JsonPayload | null; 
-  lastIntent?: string | null; 
-  recentMessages?: Array<{ role: 'user' | 'assistant'; content: string }>; 
-  summary?: string | null;
-  flowState?: FlowState | null;
-};
 
 export class WhatsAppStoreConfigurationError extends Error {
   constructor(message = 'WhatsApp webhook persistence is not configured') { super(message); this.name = 'WhatsAppStoreConfigurationError'; }
@@ -23,22 +13,6 @@ type DbClient = ReturnType<typeof getSupabaseAdmin>;
 type ResultError = { message?: string; code?: string } | null;
 
 type WhatsAppStoreDecision = Pick<WhatsAppInboundAgentDecision, 'intent' | 'confidence' | 'summary' | 'citedKnowledgeIds' | 'citedToolCallIds' | 'dynamicToolResults' | 'providerDiagnostics'>;
-
-export type WhatsAppStore = {
-  persistInboundEvent(event: NormalizedWhatsAppInboundEvent): Promise<PersistedWhatsAppInboundEvent>;
-  linkWhatsAppContactToPatient(input: { contactId: string; patientId: string }): Promise<void>;
-  loadConversationContext(conversationId: string): Promise<WhatsAppConversationContext>;
-  createIntent(input: { persisted: PersistedWhatsAppInboundEvent; decision: WhatsAppStoreDecision }): Promise<{ id: string }>;
-  insertOutboundMessage(input: { persisted: PersistedWhatsAppInboundEvent; body: string; sendResult?: unknown; purpose: 'auto_answer' | 'customer_escalation' | 'human_alert' | 'booking' }): Promise<void>;
-  createEscalation(input: { persisted: PersistedWhatsAppInboundEvent; intentId: string; reason: string; priority: string; summary: string }): Promise<{ id: string }>;
-  createCrmSyncEvent(input: { sourceTable: string; sourceId: string; eventType: string; aggregateType: string; aggregateId?: string | null; payload?: JsonPayload }): Promise<void>;
-  updateConversationStatus(input: { conversationId: string; status: string; lastIntent?: string | null; bookingContext?: JsonPayload | null }): Promise<void>;
-  markInboundMessageProcessed(input: { messageId: string; status: 'processed' | 'responded' | 'escalated' | 'failed' }): Promise<void>;
-  persistStatusEvents(events: NormalizedWhatsAppStatusEvent[]): Promise<WhatsAppStatusPersistenceResult>;
-  loadConversationHistory(conversationId: string, limit?: number): Promise<Array<{ role: 'user' | 'assistant'; content: string }>>;
-  updateConversationSummary(input: { conversationId: string; summary: string }): Promise<void>;
-  updateConversationFlowState(input: { conversationId: string; flowState: FlowState | null }): Promise<void>;
-};
 
 function db() {
   try { return getSupabaseAdmin(); } catch (error) { throw new WhatsAppStoreConfigurationError(error instanceof Error ? error.message : undefined); }
@@ -90,28 +64,9 @@ export async function persistWhatsAppInboundEvent(event: NormalizedWhatsAppInbou
   return { inserted: false, contactId: existing?.contact_id ?? contactId, conversationId: existing?.conversation_id ?? conversationId, messageId: existing?.id ?? '' };
 }
 
-export async function linkWhatsAppContactToPatient(input: { contactId: string; patientId: string }) {
-  const result = await db()
-    .from('whatsapp_contacts')
-    .update({ linked_patient_id: input.patientId, linked_patient_source: 'auto_phone', linked_patient_matched_at: new Date().toISOString() })
-    .eq('id', input.contactId);
-  throwIfError(result.error, 'Could not link WhatsApp contact to patient');
-}
-
 async function touchConversation(client: DbClient, conversationId: string, event: NormalizedWhatsAppInboundEvent) {
   const result = await client.from('whatsapp_conversations').update({ last_message_at: event.occurredAt, last_inbound_at: event.occurredAt }).eq('id', conversationId);
   throwIfError(result.error, 'Could not update WhatsApp conversation');
-}
-
-export async function loadWhatsAppConversationContext(conversationId: string): Promise<WhatsAppConversationContext> {
-  const result = await db().from('whatsapp_conversations').select('booking_context, last_intent, summary, flow_state').eq('id', conversationId).maybeSingle();
-  throwIfError(result.error, 'Could not load WhatsApp conversation context');
-  return { 
-    bookingContext: (result.data?.booking_context as JsonPayload | null | undefined) ?? null, 
-    lastIntent: result.data?.last_intent as string | null | undefined, 
-    summary: result.data?.summary as string | null | undefined,
-    flowState: (result.data?.flow_state as FlowState | null | undefined) ?? null,
-  };
 }
 
 export async function createWhatsAppIntent(input: { persisted: PersistedWhatsAppInboundEvent; decision: WhatsAppStoreDecision }) {
@@ -134,12 +89,6 @@ export async function createWhatsAppEscalation(input: { persisted: PersistedWhat
   return { id: result.data.id as string };
 }
 
-export async function createCrmSyncEvent(input: { sourceTable: string; sourceId: string; eventType: string; aggregateType: string; aggregateId?: string | null; payload?: JsonPayload }) {
-  const eventKey = `${input.sourceTable}:${input.sourceId}:${input.eventType}`;
-  const result = await db().from('crm_sync_events').upsert({ source_table: input.sourceTable, source_id: input.sourceId, event_type: input.eventType, aggregate_type: input.aggregateType, aggregate_id: input.aggregateId ?? null, event_key: eventKey, payload: input.payload ?? {} }, { onConflict: 'event_key', ignoreDuplicates: true });
-  throwIfError(result.error, 'Could not create CRM sync event');
-}
-
 export async function updateWhatsAppConversationStatus(input: { conversationId: string; status: string; lastIntent?: string | null; bookingContext?: JsonPayload | null }) {
   const patch: JsonPayload = { status: input.status, last_intent: input.lastIntent ?? null };
   if ('bookingContext' in input) patch.booking_context = input.bookingContext ?? null;
@@ -151,48 +100,4 @@ export async function markWhatsAppInboundMessageProcessed(input: { messageId: st
   if (!input.messageId) return;
   const result = await db().from('whatsapp_messages').update({ status: input.status, processed_at: new Date().toISOString() }).eq('id', input.messageId);
   throwIfError(result.error, 'Could not mark WhatsApp inbound message processed');
-}
-
-const deliveryStatusRank: Record<WhatsAppDeliveryStatus, number> = { sent: 1, delivered: 2, read: 3, failed: 4 };
-function callbackKey(event: NormalizedWhatsAppStatusEvent) { return `whatsapp:status:${event.providerMessageId}:${event.status}:${event.occurredAt}`; }
-
-export async function persistWhatsAppStatusEvents(events: NormalizedWhatsAppStatusEvent[]): Promise<WhatsAppStatusPersistenceResult> {
-  const client = db();
-  const result = { received: events.length, inserted: 0, duplicates: 0, matched: 0, updated: 0 };
-  for (const event of events) {
-    const message = await client.from('whatsapp_messages').select('id, conversation_id, contact_id, status, payload').eq('whatsapp_message_id', event.providerMessageId).maybeSingle();
-    throwIfError(message.error, 'Could not read outbound WhatsApp message');
-    if (message.data) result.matched += 1;
-    const inserted = await client.from('whatsapp_message_status_callbacks').insert({ message_id: message.data?.id ?? null, whatsapp_message_id: event.providerMessageId, status: event.status, recipient_phone: event.recipientPhone ?? null, occurred_at: event.occurredAt, payload: { pricing: event.pricing ?? null, errors: event.errors, rawStatus: event.rawStatus, rawValue: event.rawValue }, callback_key: callbackKey(event) });
-    if (inserted.error?.code === '23505') { result.duplicates += 1; continue; }
-    throwIfError(inserted.error, 'Could not persist WhatsApp status callback');
-    result.inserted += 1;
-    const current = typeof message.data?.status === 'string' ? message.data.status as WhatsAppDeliveryStatus : 'sent';
-    if (message.data && (deliveryStatusRank[event.status] ?? 0) >= (deliveryStatusRank[current] ?? 0)) {
-      const updated = await client.from('whatsapp_messages').update({ status: event.status, payload: { ...(message.data.payload as JsonPayload | null ?? {}), delivery: { status: event.status, occurredAt: event.occurredAt } } }).eq('id', message.data.id);
-      throwIfError(updated.error, 'Could not update WhatsApp outbound delivery status');
-      result.updated += 1;
-    }
-  }
-  return result;
-}
-
-export async function loadWhatsAppConversationHistory(conversationId: string, limit = 20): Promise<Array<{ role: 'user' | 'assistant'; content: string }>> {
-  const result = await db().from('whatsapp_messages').select('direction, body').eq('conversation_id', conversationId).eq('message_type', 'text').not('body', 'is', null).order('occurred_at', { ascending: false }).limit(limit);
-  throwIfError(result.error, 'Could not load WhatsApp conversation history');
-  if (!result.data || result.data.length === 0) return [];
-  return result.data.reverse().map((row) => ({
-    role: row.direction === 'inbound' ? 'user' as const : 'assistant' as const,
-    content: row.body as string,
-  }));
-}
-
-export async function updateWhatsAppConversationSummary(input: { conversationId: string; summary: string }): Promise<void> {
-  const result = await db().from('whatsapp_conversations').update({ summary: input.summary.slice(0, 500) }).eq('id', input.conversationId);
-  throwIfError(result.error, 'Could not update WhatsApp conversation summary');
-}
-
-export async function updateWhatsAppConversationFlowState(input: { conversationId: string; flowState: FlowState | null }): Promise<void> {
-  const result = await db().from('whatsapp_conversations').update({ flow_state: input.flowState as unknown as JsonPayload }).eq('id', input.conversationId);
-  throwIfError(result.error, 'Could not update WhatsApp conversation flow state');
 }
