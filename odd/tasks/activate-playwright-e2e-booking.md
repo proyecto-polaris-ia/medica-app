@@ -31,6 +31,13 @@
   todos informativos (0 bloqueantes); destacados: R4 `nonidempotent-retry` y
   `network-skip-green` (WARNING), R3 `port-toctou` / `retry-state` (WARNING) —
   trabajo posterior, no reabren la revisión.
+- Revisión nativa del candidato acumulado (lineage `review-e23175d83e69f1a1`,
+  target `5b4fb673…`, rango comprometido desde `a99275d`): **approved**, acuse
+  quemado. 17 hallazgos todos informativos; WARNINGs: R2 `duplicated-turnstile-probe`,
+  R3 `port-reuse-window` / `retry-nonidempotent`, R4 `network-skip-coverage` /
+  `retry-poisoning`. Nota de infraestructura: el primer relay de `review-risk` fue
+  rechazado 2 veces por rutas de evidencia malformadas (truncadas); el 3er intento
+  produjo rutas válidas y pasó.
 
 ## Hallazgos y seguimiento
 
