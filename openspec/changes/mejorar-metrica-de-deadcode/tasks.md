@@ -117,35 +117,35 @@ agente de apply MAY consolidar grupos con el mensaje
 siempre unidades revisables; si consolida, corre igualmente los cuatro comandos
 en cada frontera de consolidación y lo documenta en `verify-report.md`.
 
-- [ ] 4.1 Grupo (a) `src/lib/admin/**` sin `metrics/` (cubre el lote 3 del design).
+- [x] 4.1 Grupo (a) `src/lib/admin/**` sin `metrics/` (cubre el lote 3 del design).
   Verificación de cierre de grupo: `npm run lint && npm run test && npm run build` + `npx knip`.
   Commit: `chore(cleanup): remove unused exports in src/lib/admin`
-- [ ] 4.2 Grupo (b) `src/lib/booking/**` + `src/lib/citas/**` + `src/lib/follow-up/**`
+- [x] 4.2 Grupo (b) `src/lib/booking/**` + `src/lib/citas/**` + `src/lib/follow-up/**`
   (lotes 5–6 y parte del 7 del design). Nota: los barriles `booking/index.ts` y
   `admin/metrics/index.ts` ya se borraron en 3.2/3.3.
   Verificación de cierre de grupo: `npm run lint && npm run test && npm run build` + `npx knip`.
   Commit: `chore(cleanup): remove unused exports in booking, citas and follow-up`
-- [ ] 4.3 Grupo (c) `src/lib/observability/**` + `src/lib/payments/**` (parte del lote 7/9 del design).
+- [x] 4.3 Grupo (c) `src/lib/observability/**` + `src/lib/payments/**` (parte del lote 7/9 del design).
   Verificación de cierre de grupo: `npm run lint && npm run test && npm run build` + `npx knip`.
   Commit: `chore(cleanup): remove unused exports in observability and payments`
-- [ ] 4.4 Grupo (d) `src/lib/wcc-*.ts` (lote 8 del design).
+- [x] 4.4 Grupo (d) `src/lib/wcc-*.ts` (lote 8 del design).
   Verificación de cierre de grupo: `npm run lint && npm run test && npm run build` + `npx knip`.
   Commit: `chore(cleanup): remove unused exports in wcc modules`
-- [ ] 4.5 Grupo (e) `src/lib/whatsapp/**` + `src/lib/web-chat/**` + `src/lib/ai/**` + `src/lib/flows/**` + `src/lib/supabase/**` (lote 9 del design).
+- [x] 4.5 Grupo (e) `src/lib/whatsapp/**` + `src/lib/web-chat/**` + `src/lib/ai/**` + `src/lib/flows/**` + `src/lib/supabase/**` (lote 9 del design).
   Conservar explícitamente los contratos que el grep muestre en uso
   (`whatsapp/inbound-decision.ts` en particular).
   Verificación de cierre de grupo: `npm run lint && npm run test && npm run build` + `npx knip`.
   Commit: `chore(cleanup): remove unused exports in whatsapp and related lib modules`
-- [ ] 4.6 Grupo (f) `src/components/**` + `src/test-utils/**` (harness de UI; remanente del lote 12 del design).
+- [x] 4.6 Grupo (f) `src/components/**` + `src/test-utils/**` (harness de UI; remanente del lote 12 del design).
   Verificación de cierre de grupo: `npm run lint && npm run test && npm run build` + `npx knip`.
   Commit: `chore(cleanup): remove unused exports in components and test-utils`
-- [ ] 4.7 Grupo (g) `app/**` restante: rutas admin, `app/(admin)/**` y páginas (lotes 1–2 y remanente del 12 del design).
+- [x] 4.7 Grupo (g) `app/**` restante: rutas admin, `app/(admin)/**` y páginas (lotes 1–2 y remanente del 12 del design).
   Verificación de cierre de grupo: `npm run lint && npm run test && npm run build` + `npx knip`.
   Commit: `chore(cleanup): remove unused exports under app`
-- [ ] 4.8 Grupo (h) `tests/**` incluyendo `tests/e2e/helpers/{booking,db}.ts` (lote 11 del design). Los exports marcados se tratan igual: el grep incluye `tests/` y los `*.spec.ts` (entries por los plugins vitest/playwright).
+- [x] 4.8 Grupo (h) `tests/**` incluyendo `tests/e2e/helpers/{booking,db}.ts` (lote 11 del design). Los exports marcados se tratan igual: el grep incluye `tests/` y los `*.spec.ts` (entries por los plugins vitest/playwright).
   Verificación de cierre de grupo: `npm run lint && npm run test && npm run build` + `npx knip`.
   Commit: `chore(cleanup): remove unused exports in test helpers`
-- [ ] 4.9 Grupo (i) `agent/**` + `scripts/**` + remanente de raíz (`middleware.ts`) (lotes 10 y 12 del design; requerido para llegar a 0 issues).
+- [x] 4.9 Grupo (i) `agent/**` + `scripts/**` + remanente de raíz (`middleware.ts`) (lotes 10 y 12 del design; requerido para llegar a 0 issues).
   Verificación de cierre de grupo: `npm run lint && npm run test && npm run build` + `npx knip`.
   Commit: `chore(cleanup): remove unused exports in agent and scripts`
 
