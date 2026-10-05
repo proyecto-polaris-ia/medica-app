@@ -153,7 +153,7 @@ en cada frontera de consolidación y lo documenta en `verify-report.md`.
 
 ## 5. Métrica sostenida: script + CI (design D6)
 
-- [ ] 5.1 Agregar `"knip": "knip"` a `scripts` de `package.json` (entre
+- [x] 5.1 Agregar `"knip": "knip"` a `scripts` de `package.json` (entre
   `typecheck` y `sanity`) y agregar al job `test` de `.github/workflows/ci.yml`,
   después de `Typecheck`, el paso de D6 con **paso normal, sin
   `continue-on-error`**: Knip 6 sale con código 1 sólo ante issues reales
