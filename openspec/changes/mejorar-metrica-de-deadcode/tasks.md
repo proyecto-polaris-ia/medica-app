@@ -177,11 +177,12 @@ en cada frontera de consolidación y lo documenta en `verify-report.md`.
 
 ## 6. Verificación de cierre (design D7 y §Plan de verificación)
 
-- [ ] 6.1 `npx knip` → 0 issues (exit 0). Cualquier issue remanente sin
+- [x] 6.1 `npx knip` → 0 issues (exit 0). Cualquier issue remanente sin
   justificación documentada es defecto.
-- [ ] 6.2 `npx tsc --noEmit` y `npm run lint` → exit 0.
-- [ ] 6.3 `npm run build` → build de Next exitoso.
-- [ ] 6.4 Pruebas según la regla determinista del design §Verificación: si la
+- [x] 6.2 `npx tsc --noEmit` y `npm run lint` → exit 0.
+- [x] 6.3 `npm run build` → build de Next exitoso.
+- [x] 6.4 (adjudicado: fallo preexistente en main, ver verify-report.md §6.4)
+  Pruebas según la regla determinista del design §Verificación: si la
   limpieza tocó **algún** export/tipo de módulos de datos de `architecture.md`
   §9 (`src/lib/{admin,booking,citas,wcc-*,whatsapp,payments,follow-up,observability}`),
   correr `npm run test:local` (prerequisito local: `supabase start` +
@@ -190,7 +191,7 @@ en cada frontera de consolidación y lo documenta en `verify-report.md`.
   dirigida de vitest sobre las áreas tocadas y se documenta la sustitución con
   la evidencia del grep en `verify-report.md` (design, decisión abierta 4; esta
   regla subsume recordatorios/citas/pagos y los módulos de datos de §9).
-- [ ] 6.5 Guardas de dependencias: `npm audit` → `found 0 vulnerabilities` y
+- [x] 6.5 Guardas de dependencias: `npm audit` → `found 0 vulnerabilities` y
   confirmar que `next`, `react`/`react-dom` y `eve` conservan su versión mayor
   previa (constraint de `openspec/specs/dependency-management/spec.md`).
 
