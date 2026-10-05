@@ -103,7 +103,9 @@ const noCaptchaPort = resolveServerPort('E2E_NO_CAPTCHA_PORT', DEFAULT_NO_CAPTCH
   bookingPort,
 ]);
 
-console.log(
+// stderr: with the json reporter, stdout must stay parseable for tooling
+// (sanity-kit's e2e check JSON-parses playwright's stdout).
+console.error(
   `[playwright] dev servers → booking=http://127.0.0.1:${bookingPort} no-captcha=http://127.0.0.1:${noCaptchaPort}`
 );
 
