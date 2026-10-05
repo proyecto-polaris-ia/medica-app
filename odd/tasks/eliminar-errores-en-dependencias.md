@@ -79,3 +79,10 @@ Nota: `npm run build` fue ejecutado por el verificador del orquestador
   package-lock.json, vitest.config.ts, vitest.setup.ts).
 - `0337275` — docs(openspec): archive dependency-vulnerability-remediation change
   (spec principal `dependency-management` + change en `archive/2026-10-05-...`).
+- Revisión nativa (RDD): lineage `review-389131bc7a09ef02`, riesgo medio, lente
+  `review-reliability` → **approved** y acuse quemado
+  (`gentle-ai.review-acknowledged/v1`, rev `7e10e5e0…`). 5 hallazgos, todos
+  informativos (0 bloqueantes): WARNING `R3-silent-drop-js-tests`
+  (`vitest.config.ts:33-48`, proyectos jsdom solo incluyen `*.test.ts*`; trabajo
+  posterior) y SUGGESTIONs `R3-brittle-baseline-count`, `R3-ci-audit-should`,
+  `R3-tracking-inconsistency`, `R3-unscoped-overrides`.
