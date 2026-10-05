@@ -27,6 +27,14 @@ jobs:
       - name: Typecheck
         run: npx tsc --noEmit
 
+      - name: Dead code (knip)
+        # Métrica de código muerto. Knip 6 sale con código 1 sólo cuando hay
+        # issues (maxIssues=0); los configuration/tag hints (warnings) no
+        # cambian el exit code salvo treatConfigHintsAsErrors/treatTagHintsAsErrors,
+        # que no se fijan. Así el paso falla por regresiones reales y nunca
+        # sólo por warnings.
+        run: npm run knip
+
   test-local-db:
     # Pruebas de datos contra Supabase local (openspec/changes/supabase-local-testing).
     # Levanta la base con CLI, aplica migraciones + seed, y corre la suite completa

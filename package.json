@@ -17,6 +17,7 @@
     "db:reset": "supabase db reset",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
+    "knip": "knip",
     "sanity": "node ../sanity-kit/src/cli.ts run",
     "sanity:fast": "node ../sanity-kit/src/cli.ts run --fast",
     "whatsapp:simulate": "node scripts/whatsapp-simulate-inbound.mjs"
