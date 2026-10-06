@@ -34,12 +34,21 @@ Hipótesis por defecto del issue: Eva raíz + Mora subagente; outbound server-si
    - `eve build` verde baseline; con sonda de subagente también verde.
    - Multi-agente raíz (`agents/<name>/agent/`): NO validado y NO necesario para la topología elegida (B).
    - **Decisión D1: Opción B** — Eva agente raíz ligado a WhatsApp; Mora subagente declarado en `agent/subagents/mora/`.
-2. **SDD proposal** — `openspec/changes/<cambio>/proposal.md`. Estado: pendiente.
-3. **SDD design** — topología resuelta con evidencia del spike. Estado: pendiente.
-4. **SDD spec delta + tasks** — mora-agent actualizada. Estado: pendiente.
-5. **Implementar Fase 1** — extraer Mora (TDD). Estado: pendiente.
-6. **Verificación** — `npm run test:local`, `npx tsc --noEmit`, `npm run build`. Estado: pendiente.
-7. **Cierre** — commits por unidad, task file actualizado. Estado: pendiente.
+2. **SDD proposal** — `openspec/changes/separate-mora-agent/proposal.md`. Estado: **hecho** (commit efc68eb).
+3. **SDD design** — topología B resuelta con evidencia del spike; identidad de delegación vía binding server-side. Estado: **hecho** (commit efc68eb).
+4. **SDD spec delta + tasks** — `specs/mora-agent/spec.md` (2 ADDED, 2 MODIFIED) + tasks.md. Estado: **hecho** (commit efc68eb).
+5. **Implementar Fase 1** — extraer Mora (TDD, delegado a gentle-ai-worker). Estado: **hecho** (implementación en working tree; verificación en curso).
+   - Shim eliminado; `agent/model.ts` compartido; subagente `agent/subagents/mora/` (agent.ts + instructions + 3 tools movidas + skill movida).
+   - Binding de identidad: migración `20261006080000_agent_delegation_bindings.sql` (RLS forzado, service-role only), `src/lib/agent/delegation-bindings.ts` (TTL 1h, resultados discriminados), hook raíz `agent/hooks/delegation-identity.ts` (subagent.called → binding; degradación segura).
+   - `register-payment-intent` perdió inputs model-visible de teléfono (cierre de vía de identidad mediada por modelo).
+   - Forma del evento `subagent.called` validada contra el runtime (`createSubagentCalledEvent` emite `name`/`toolName`/`childSessionId`).
+6. **Verificación** — hecha en dos capas: worker (tsc, test, build, eve build/info) + gentle-ai-verify independiente (test:local secuencial 151 archivos / 1403 tests en verde, build, eve info `Subagents 1 subagent` 0 diagnostics, partición del manifiesto: raíz sin tools de cobranza, mora con exactamente 3 tools + skill y sin tools de agenda; RLS sin políticas públicas). Estado: **hecho**.
+7. **Cierre** — commits por unidad de trabajo: `86b001d` (shim), `b272a8d` (binding identidad), `7d1f36f` (extracción Mora), docs de topología en commit posterior. Estado: **hecho** (pendiente push/PR: decisión del usuario).
+
+## Notas de cierre
+- `npm run test:local` en modo paralelo tiene fragilidad preexistente (lock de BD con hookTimeout 10s bajo carga del host); la forma secuencial (`--no-file-parallelism`) es la de referencia.
+- Suposición runtime validada contra el código de eve 0.52.2: `createSubagentCalledEvent` emite `name`/`toolName`/`childSessionId` (coincide con el narrowing del hook).
+- Pendiente fuera de alcance de Fase 0+1: validación end-to-end en vivo de una delegación real (requiere credenciales del modelo en `eve dev` o producción); Fases 2–4 del issue #140 (Clara, Nora, panel de agentes).
 
 ## Evidencia
 
