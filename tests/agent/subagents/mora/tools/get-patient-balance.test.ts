@@ -38,7 +38,7 @@ const getSupabaseAdmin = vi.fn(() => ({ from }));
 
 vi.mock("@/lib/supabase/server", () => ({ getSupabaseAdmin }));
 
-const { default: tool } = await import("../../../agent/tools/get-patient-balance");
+const { default: tool } = await import("../../../../../agent/subagents/mora/tools/get-patient-balance");
 const execute = tool.execute as (
   input: { thresholdDays?: number },
   ctx?: unknown,

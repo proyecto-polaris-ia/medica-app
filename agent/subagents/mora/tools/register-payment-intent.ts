@@ -6,9 +6,9 @@ import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { createEveWhatsAppEscalation } from "@/lib/whatsapp/eve-escalation";
 
 import {
-  selectPatientPhone,
-  type TrustedContactToolContext,
-} from "../trusted-contact-context";
+  resolveCollectionsPatientPhone,
+  type CollectionsToolContext,
+} from "../identity";
 
 const ELIGIBLE_PLAN_STATUSES = ["accepted", "in_progress", "completed"] as const;
 
@@ -42,8 +42,6 @@ const registerPaymentIntentInputSchema = z.object({
     .trim()
     .optional()
     .describe("Notas adicionales para el equipo que dará seguimiento"),
-  trustedContactSource: z.literal("whatsapp").optional(),
-  trustedPatientPhone: z.string().optional(),
 });
 
 type RegisterPaymentIntentInput = z.infer<typeof registerPaymentIntentInputSchema>;
@@ -199,8 +197,8 @@ export default defineTool({
   description:
     "Registra la intención de pago del paciente (paciente verificado) en payment_intents y escala a un humano. Nunca mueve dinero, nunca genera links de pago, nunca marca nada como pagado.",
   inputSchema: registerPaymentIntentInputSchema,
-  async execute(input: RegisterPaymentIntentInput, ctx: TrustedContactToolContext) {
-    const patientPhone = selectPatientPhone(input, SECURITY_REFUSAL, ctx);
+  async execute(input: RegisterPaymentIntentInput, ctx: CollectionsToolContext) {
+    const patientPhone = await resolveCollectionsPatientPhone(ctx, SECURITY_REFUSAL);
     if ("error" in patientPhone) {
       return { success: false, error: patientPhone.error };
     }
