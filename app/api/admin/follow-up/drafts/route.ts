@@ -2,10 +2,12 @@ import { requireUser } from '../../_lib/auth';
 import { handleAdminRequest, parseJsonBody } from '../../_lib/responses';
 import { NotFoundError } from '@/lib/admin/errors';
 import { parseStatus, parseUuid } from '@/lib/admin/validate';
-import { buildFollowUpDraft } from '@/lib/admin/follow-up/draft';
+import { generateFollowUpDraftText } from '@/lib/admin/follow-up/draft-llm';
 import {
   createFollowUpDraft,
+  findFollowUpDraftForRound,
   FOLLOW_UP_DRAFT_STATUSES,
+  updateFollowUpDraftBody,
 } from '@/lib/admin/follow-up/drafts';
 import {
   currentRoundDate,
@@ -36,12 +38,15 @@ export async function GET(request: Request): Promise<Response> {
 }
 
 /**
- * Genera y persiste el borrador determinista de un paciente de la lista del día.
+ * Genera (o regenera) y persiste el borrador de un paciente de la lista del día.
  *
+ * El texto viene de `generateFollowUpDraftText` (LLM validado con fallback
+ * determinista) y `source` viaja en la respuesta solo para observabilidad.
  * `now` y la ronda se derivan en el servidor; la generación es idempotente por
- * `follow-up-draft:<patientId>:<roundDate>` (no duplica si ya existe) y los
- * guardrails de texto se ejecutan antes de persistir. Esta ruta **no** envía
- * nada: el envío exige aprobación humana explícita.
+ * `follow-up-draft:<patientId>:<roundDate>`: si ya existe un borrador en `draft`
+ * se regenera su texto, y si ya está decidido (`approved`, `rejected`, `sent`,
+ * `sent_failed`) se devuelve sin llamar al LLM ni escribir. Esta ruta **no**
+ * envía nada: el envío exige aprobación humana explícita.
  */
 export async function POST(request: Request): Promise<Response> {
   return handleAdminRequest(async () => {
@@ -57,10 +62,27 @@ export async function POST(request: Request): Promise<Response> {
       throw new NotFoundError('Follow-up case');
     }
 
-    const draftText = buildFollowUpDraft({
-      patientName: followUpCase.patientName,
-      reason: followUpCase.reason,
-    });
+    const existing = await findFollowUpDraftForRound({ patientId, roundDate });
+    if (existing && existing.status !== 'draft') {
+      // Borrador ya decidido: inmutable, sin tokens y sin escritura.
+      return Response.json({ draft: existing, regenerated: false });
+    }
+
+    const draftText = await generateFollowUpDraftText(followUpCase);
+
+    if (existing) {
+      const draft = await updateFollowUpDraftBody({
+        id: existing.id,
+        body: draftText.body,
+        userId: user.id,
+        now,
+      });
+      return Response.json({
+        draft,
+        source: draftText.source,
+        regenerated: true,
+      });
+    }
 
     const { draft, created } = await createFollowUpDraft({
       patientId,
@@ -70,6 +92,9 @@ export async function POST(request: Request): Promise<Response> {
       roundDate,
     });
 
-    return Response.json({ draft }, { status: created ? 201 : 200 });
+    return Response.json(
+      { draft, source: draftText.source },
+      { status: created ? 201 : 200 }
+    );
   });
 }

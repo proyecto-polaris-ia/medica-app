@@ -17,10 +17,19 @@ vi.mock('@/lib/admin/follow-up/follow-up', () => ({
   currentRoundDate: vi.fn(),
 }));
 
+vi.mock('@/lib/admin/follow-up/draft-llm', () => ({
+  generateFollowUpDraftText: vi.fn(),
+}));
+
 vi.mock('@/lib/admin/follow-up/drafts', async (importOriginal) => {
   const actual =
     await importOriginal<typeof import('@/lib/admin/follow-up/drafts')>();
-  return { ...actual, createFollowUpDraft: vi.fn() };
+  return {
+    ...actual,
+    createFollowUpDraft: vi.fn(),
+    findFollowUpDraftForRound: vi.fn(),
+    updateFollowUpDraftBody: vi.fn(),
+  };
 });
 
 vi.mock('@/lib/wcc-follow-up-drafts', () => ({
@@ -32,8 +41,15 @@ import {
   currentRoundDate,
   listDailyFollowUpCases,
 } from '@/lib/admin/follow-up/follow-up';
-import { createFollowUpDraft } from '@/lib/admin/follow-up/drafts';
+import { generateFollowUpDraftText } from '@/lib/admin/follow-up/draft-llm';
+import { validateFollowUpDraftText } from '@/lib/admin/follow-up/draft';
+import {
+  createFollowUpDraft,
+  findFollowUpDraftForRound,
+  updateFollowUpDraftBody,
+} from '@/lib/admin/follow-up/drafts';
 import { getWccFollowUpDrafts } from '@/lib/wcc-follow-up-drafts';
+import { ValidationError } from '@/lib/admin/validate';
 
 const USER = { id: '990e8400-e29b-41d4-a716-446655440000', email: 'a@b.c' };
 const PATIENT_ID = '550e8400-e29b-41d4-a716-446655440000';
@@ -62,11 +78,17 @@ const DRAFT = {
   errorMessage: null,
   approvedBy: null,
   approvedAt: null,
+  editedBy: null,
+  editedAt: null,
   sentAt: null,
   createdBy: USER.id,
   createdAt: '2026-10-03T17:00:00.000Z',
   updatedAt: '2026-10-03T17:00:00.000Z',
 };
+
+/** Texto que devuelve el generador mockeado; pasa los guardrails reales. */
+const GENERATED_BODY =
+  'Hola María, notamos que no pudimos atenderte en tu cita anterior. ¿Te gustaría agendar de nuevo?';
 
 function postDraft(body: unknown): Promise<Response> {
   return POST(
@@ -89,6 +111,17 @@ describe('/api/admin/follow-up/drafts', () => {
     (createFollowUpDraft as ReturnType<typeof vi.fn>).mockResolvedValue({
       draft: DRAFT,
       created: true,
+    });
+    (findFollowUpDraftForRound as ReturnType<typeof vi.fn>).mockResolvedValue(
+      null
+    );
+    (updateFollowUpDraftBody as ReturnType<typeof vi.fn>).mockResolvedValue(
+      DRAFT
+    );
+    (generateFollowUpDraftText as ReturnType<typeof vi.fn>).mockResolvedValue({
+      body: GENERATED_BODY,
+      templateName: 'seguimiento_paciente',
+      source: 'template',
     });
     (getWccFollowUpDrafts as ReturnType<typeof vi.fn>).mockResolvedValue({
       isSupabaseConfigured: true,
@@ -151,24 +184,85 @@ describe('/api/admin/follow-up/drafts', () => {
     expect(createFollowUpDraft).not.toHaveBeenCalled();
   });
 
-  it('POST generates and persists a deterministic draft (201)', async () => {
+  it('POST generates via the LLM module and persists a validated draft (201)', async () => {
     const res = await postDraft({ patientId: PATIENT_ID });
     const body = await res.json();
     expect(res.status).toBe(201);
     expect(body.draft.status).toBe('draft');
+    expect(body.source).toBe('template');
+    expect(generateFollowUpDraftText).toHaveBeenCalledWith(CASE);
+    // El texto persistido cumple los guardrails en todos los caminos.
+    expect(() => validateFollowUpDraftText(GENERATED_BODY)).not.toThrow();
     expect(createFollowUpDraft).toHaveBeenCalledWith(
       expect.objectContaining({
         patientId: PATIENT_ID,
         userId: USER.id,
         roundDate: ROUND_DATE,
         templateName: 'seguimiento_paciente',
-        body: expect.stringContaining('no pudimos atenderte'),
+        body: GENERATED_BODY,
       })
     );
     expect(listDailyFollowUpCases).toHaveBeenCalledWith({
       now: expect.any(Date),
     });
   });
+
+  it('POST regenerates an existing draft through the generator and updateFollowUpDraftBody (200)', async () => {
+    (findFollowUpDraftForRound as ReturnType<typeof vi.fn>).mockResolvedValue(
+      DRAFT
+    );
+    (generateFollowUpDraftText as ReturnType<typeof vi.fn>).mockResolvedValue({
+      body: GENERATED_BODY,
+      templateName: 'seguimiento_paciente',
+      source: 'llm',
+    });
+    (updateFollowUpDraftBody as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ...DRAFT,
+      body: GENERATED_BODY,
+      editedBy: USER.id,
+      editedAt: '2026-10-03T17:20:00.000Z',
+    });
+
+    const res = await postDraft({ patientId: PATIENT_ID });
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body.regenerated).toBe(true);
+    expect(body.source).toBe('llm');
+    expect(body.draft.body).toBe(GENERATED_BODY);
+    expect(findFollowUpDraftForRound).toHaveBeenCalledWith({
+      patientId: PATIENT_ID,
+      roundDate: ROUND_DATE,
+    });
+    expect(generateFollowUpDraftText).toHaveBeenCalledWith(CASE);
+    expect(updateFollowUpDraftBody).toHaveBeenCalledWith({
+      id: DRAFT.id,
+      body: GENERATED_BODY,
+      userId: USER.id,
+      now: expect.any(Date),
+    });
+    expect(createFollowUpDraft).not.toHaveBeenCalled();
+  });
+
+  it.each(['approved', 'sent', 'rejected', 'sent_failed'] as const)(
+    'POST does not call the LLM nor write when the draft is %s (200)',
+    async (status) => {
+      (findFollowUpDraftForRound as ReturnType<typeof vi.fn>).mockResolvedValue({
+        ...DRAFT,
+        status,
+      });
+
+      const res = await postDraft({ patientId: PATIENT_ID });
+      const body = await res.json();
+
+      expect(res.status).toBe(200);
+      expect(body.draft.status).toBe(status);
+      expect(body.regenerated).toBe(false);
+      expect(generateFollowUpDraftText).not.toHaveBeenCalled();
+      expect(updateFollowUpDraftBody).not.toHaveBeenCalled();
+      expect(createFollowUpDraft).not.toHaveBeenCalled();
+    }
+  );
 
   it('POST is idempotent per patient and round: a second call does not duplicate', async () => {
     (createFollowUpDraft as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
@@ -193,14 +287,15 @@ describe('/api/admin/follow-up/drafts', () => {
   });
 
   it('POST returns 400 without persisting when a text guardrail fails', async () => {
-    (listDailyFollowUpCases as ReturnType<typeof vi.fn>).mockResolvedValue([
-      { ...CASE, patientName: 'Precio $500 María' },
-    ]);
+    (generateFollowUpDraftText as ReturnType<typeof vi.fn>).mockRejectedValue(
+      new ValidationError('body', 'Draft body contains a forbidden phrase')
+    );
     const res = await postDraft({ patientId: PATIENT_ID });
     const body = await res.json();
     expect(res.status).toBe(400);
     expect(body.error).toBe('invalid_request');
     expect(createFollowUpDraft).not.toHaveBeenCalled();
+    expect(updateFollowUpDraftBody).not.toHaveBeenCalled();
   });
 
   it('POST returns 400 for a non-UUID patientId', async () => {
