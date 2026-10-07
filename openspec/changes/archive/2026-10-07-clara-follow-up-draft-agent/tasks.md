@@ -107,33 +107,33 @@ regeneración sin gastar LLM sobre borradores ya decididos. Depende del slice 1.
 
 ### 2.1 RED — test estructural `migration-0023.test.ts`
 
-- [ ] Crear `src/lib/admin/follow-up/__tests__/migration-0023.test.ts` (estilo de
+- [x] Crear `src/lib/admin/follow-up/__tests__/migration-0023.test.ts` (estilo de
   `migration-0020.test.ts`). **Trampa:** el test existente quedó desfasado y lee
   `0021_*.sql`; el nuevo se llama `migration-0023.test.ts` y lee
   `0023_*.sql`, sin repetir el off-by-one.
-- [ ] Casos: el SQL contiene `ADD COLUMN IF NOT EXISTS edited_by uuid` y
+- [x] Casos: el SQL contiene `ADD COLUMN IF NOT EXISTS edited_by uuid` y
   `edited_at timestamptz` (nullable, sin `NOT NULL`, sin `DEFAULT`); no contiene
   `CREATE POLICY`, `GRANT`, `REVOKE`, `DROP` ni `NOT NULL`; el down
   `down/0023_*.down.sql` elimina `edited_at` y luego `edited_by`.
-- [ ] Verificar la falla esperada:
+- [x] Verificar la falla esperada:
   `npx vitest run src/lib/admin/follow-up/__tests__/migration-0023.test.ts`
 
 ### 2.2 GREEN — migración `0023` up + down
 
-- [ ] Crear `supabase/migrations/0023_follow_up_draft_edit_audit.sql`:
+- [x] Crear `supabase/migrations/0023_follow_up_draft_edit_audit.sql`:
   `ALTER TABLE follow_up_message_drafts ADD COLUMN IF NOT EXISTS edited_by uuid,
   ADD COLUMN IF NOT EXISTS edited_at timestamptz;` (sin FK, sin default, sin
   backfill; RLS y policy existentes intactas). **0022 ya está ocupado por
   `0022_patient_files.sql`; no reutilizar ese número.**
-- [ ] Crear `supabase/migrations/down/0023_follow_up_draft_edit_audit.down.sql`
+- [x] Crear `supabase/migrations/down/0023_follow_up_draft_edit_audit.down.sql`
   con `DROP COLUMN IF EXISTS edited_at, DROP COLUMN IF EXISTS edited_by`.
-- [ ] Test 2.1 en verde:
+- [x] Test 2.1 en verde:
   `npx vitest run src/lib/admin/follow-up/__tests__/migration-0023.test.ts`
 
 ### 2.3 RED — capa de datos `drafts.test.ts` (extender)
 
-- [ ] Extender `src/lib/admin/follow-up/__tests__/drafts.test.ts`.
-- [ ] Casos: `findFollowUpDraftForRound({ patientId, roundDate })` encuentra por
+- [x] Extender `src/lib/admin/follow-up/__tests__/drafts.test.ts`.
+- [x] Casos: `findFollowUpDraftForRound({ patientId, roundDate })` encuentra por
   `dedup_key` y devuelve `null` si no existe; `updateFollowUpDraftBody({ id, body,
   userId, now })` en `draft` persiste body + `edited_by` + `edited_at` y conserva
   `status`; en `approved`/`rejected`/`sent`/`sent_failed` lanza `ConflictError` y
@@ -143,9 +143,9 @@ regeneración sin gastar LLM sobre borradores ya decididos. Depende del slice 1.
 
 ### 2.4 GREEN — `types.ts` + `drafts.ts`
 
-- [ ] `src/lib/admin/follow-up/types.ts`: agregar `editedBy`/`editedAt` a
+- [x] `src/lib/admin/follow-up/types.ts`: agregar `editedBy`/`editedAt` a
   `FollowUpDraft`.
-- [ ] `src/lib/admin/follow-up/drafts.ts`: exportar `findFollowUpDraftForRound`
+- [x] `src/lib/admin/follow-up/drafts.ts`: exportar `findFollowUpDraftForRound`
   (envuelve la búsqueda privada por `dedup_key`), agregar
   `updateFollowUpDraftBody` (único punto de escritura de texto; verifica
   `status === 'draft'`, valida con `validateFollowUpDraftText`, persiste
@@ -154,16 +154,16 @@ regeneración sin gastar LLM sobre borradores ya decididos. Depende del slice 1.
 
 ### 2.5 Capa de datos contra Supabase local
 
-- [ ] `supabase start`
-- [ ] `supabase db reset` (aplica `0023`)
-- [ ] `npm run test:local` — los casos de 2.3 en verde contra columnas reales y
+- [x] `supabase start`
+- [x] `supabase db reset` (aplica `0023`)
+- [x] `npm run test:local` — los casos de 2.3 en verde contra columnas reales y
   `edited_by`/`edited_at` persistidos.
 
 ### 2.6 RED — ruta POST `route.test.ts` (extender)
 
-- [ ] Extender `app/api/admin/follow-up/drafts/route.test.ts` con `draft-llm`
+- [x] Extender `app/api/admin/follow-up/drafts/route.test.ts` con `draft-llm`
   mockeado.
-- [ ] Casos: `201` al crear con texto LLM; `200` al regenerar un `draft`
+- [x] Casos: `201` al crear con texto LLM; `200` al regenerar un `draft`
   (llamando al generador y a `updateFollowUpDraftBody`); `200` **sin** llamar al
   generador ni escribir cuando el borrador existente está en
   `approved`/`sent`/`rejected`; `401` sin sesión; `400` con `patientId` inválido;
@@ -172,7 +172,7 @@ regeneración sin gastar LLM sobre borradores ya decididos. Depende del slice 1.
 
 ### 2.7 GREEN — `POST /api/admin/follow-up/drafts/route.ts`
 
-- [ ] Modificar `POST`: `requireUser()` → `parseUuid` → `listDailyFollowUpCases`
+- [x] Modificar `POST`: `requireUser()` → `parseUuid` → `listDailyFollowUpCases`
   (solo lectura) → `findFollowUpDraftForRound`: no existe ⇒ generar + crear
   (`201`); existe en `draft` ⇒ regenerar + `updateFollowUpDraftBody` (`200`,
   `regenerated: true`); existe en otro estado ⇒ `200` sin LLM ni escritura
@@ -180,15 +180,15 @@ regeneración sin gastar LLM sobre borradores ya decididos. Depende del slice 1.
 
 ### 2.8 RED — ruta PATCH `[id]/route.test.ts` (extender)
 
-- [ ] Extender `app/api/admin/follow-up/drafts/[id]/route.test.ts`.
-- [ ] Casos: `{ status: 'approved' | 'rejected' }` sigue funcionando igual;
+- [x] Extender `app/api/admin/follow-up/drafts/[id]/route.test.ts`.
+- [x] Casos: `{ status: 'approved' | 'rejected' }` sigue funcionando igual;
   `{ action: 'edit', body }` válido ⇒ `200` y persiste texto + auditoría dejando
   `draft`; guardrail violado ⇒ `400` y sin escritura; estado no-`draft` ⇒ `409` y
   sin escritura; payload sin `status` ni `action` ⇒ `400`.
 
 ### 2.9 GREEN — `PATCH /api/admin/follow-up/drafts/[id]/route.ts`
 
-- [ ] Extender `PATCH` con el payload discriminado:
+- [x] Extender `PATCH` con el payload discriminado:
   `{ status }` → `transitionFollowUpDraft` (sin cambios);
   `{ action: 'edit', body }` → `parseNonEmptyString` + `updateFollowUpDraftBody`
   (`409` fuera de `draft`, `400` si viola guardrail);
@@ -197,11 +197,11 @@ regeneración sin gastar LLM sobre borradores ya decididos. Depende del slice 1.
 
 ### 2.10 Checks del slice 2
 
-- [ ] `npx vitest run src/lib/admin/follow-up/__tests__/migration-0023.test.ts src/lib/admin/follow-up/__tests__/drafts.test.ts --exclude 'tests/e2e/**'`
+- [x] `npx vitest run src/lib/admin/follow-up/__tests__/migration-0023.test.ts src/lib/admin/follow-up/__tests__/drafts.test.ts --exclude 'tests/e2e/**'`
   en verde.
-- [ ] `npm run test` en verde.
-- [ ] `npm run test:local` en verde (con Supabase local levantado y reseteado).
-- [ ] `npx tsc --noEmit` y `npm run lint` sin errores nuevos.
+- [x] `npm run test` en verde.
+- [x] `npm run test:local` en verde (con Supabase local levantado y reseteado).
+- [x] `npx tsc --noEmit` y `npm run lint` sin errores nuevos.
 
 ---
 
@@ -213,58 +213,61 @@ pero se encadena después por orden de revisión.
 
 ### 3.1 RED — `page.test.tsx` del WCC (extender)
 
-- [ ] Extender
+- [x] Extender
   `app/(admin)/whatsapp-command-center/follow-up-drafts/page.test.tsx`.
-- [ ] Casos: en `draft` se renderiza el `<textarea>` con el body y el aviso "El
+- [x] Casos: en `draft` se renderiza el `<textarea>` con el body y el aviso "El
   envío requiere aprobación; guardar no envía nada."; guardar hace `fetch` a
   `/api/admin/follow-up/drafts/<id>` con `method: 'PATCH'` y
   `{ action: 'edit', body }`; en `approved`/`sent` no hay editor; se muestra
-  "Editado {fecha}" cuando `editedAt` existe.
+  "Editado {fecha}" cuando `editedAt` existe. Triangulación: 409 muestra error
+  visible y no llama a `router.refresh()`.
 
 ### 3.2 RED — `FollowUpList.test.tsx` (extender)
 
-- [ ] Extender
+- [x] Extender
   `src/components/admin/follow-up/__tests__/FollowUpList.test.tsx`.
-- [ ] Casos: con `draftGenerated === true` el botón dice "Regenerar borrador" y
+- [x] Casos: con `draftGenerated === true` el botón dice "Regenerar borrador" y
   sigue haciendo `POST` al endpoint de borradores; "Agendar cita" sigue siendo un
   `Link`.
 
 ### 3.3 GREEN — editor WCC + data layer
 
-- [ ] Crear `app/(admin)/whatsapp-command-center/follow-up-drafts/draft-editor.tsx`
+- [x] Crear `app/(admin)/whatsapp-command-center/follow-up-drafts/draft-editor.tsx`
   (client): `<textarea>`, "Guardar cambios" (`PATCH { action: 'edit' }`), estado
   `busy`, error visible, `router.refresh()`, aviso de que guardar no envía. Solo
   se renderiza cuando `status === 'draft'`.
-- [ ] Modificar
+- [x] Modificar
   `app/(admin)/whatsapp-command-center/follow-up-drafts/page.tsx`: renderiza
   `<DraftEditor>` en `DraftCard` cuando `status === 'draft'` y muestra "Editado …"
   con `formatRelativeTime` cuando `editedAt` no es `null`; ajustar el copy de
   "generados por plantilla" a "redactados por Clara y revisados por una persona".
-- [ ] Modificar `src/lib/wcc-follow-up-drafts.ts`: `WccFollowUpDraftRow`/`mapDraft`
+- [x] Modificar `src/lib/wcc-follow-up-drafts.ts`: `WccFollowUpDraftRow`/`mapDraft`
   agregan `editedBy`/`editedAt` y el `select` incluye `edited_by, edited_at`;
   mantener la degradación a cola vacía.
-- [ ] `draft-actions.tsx` sin cambios funcionales (Aprobar / Rechazar / Enviar).
+- [x] `draft-actions.tsx` sin cambios funcionales (Aprobar / Rechazar / Enviar).
 
 ### 3.4 GREEN — `FollowUpCaseCard.tsx` (+ `FollowUpList.tsx` si aplica)
 
-- [ ] `src/components/admin/follow-up/FollowUpCaseCard.tsx`: el botón dice
+- [x] `src/components/admin/follow-up/FollowUpCaseCard.tsx`: el botón dice
   "Generar borrador" y, con `draftGenerated`, "Regenerar borrador" (mismo
-  `onGenerateDraft`); conservar el enlace al WCC. Ajustar el copy en
-  `FollowUpList.tsx` solo si vive ahí.
-- [ ] Tests 3.1–3.2 en verde:
+  `onGenerateDraft`); conservar el enlace al WCC. El copy del botón vive en la
+  tarjeta, así que `FollowUpList.tsx` no requiere cambios.
+- [x] Tests 3.1–3.2 en verde:
   `npx vitest run "app/(admin)/whatsapp-command-center/follow-up-drafts/page.test.tsx" src/components/admin/follow-up/__tests__/FollowUpList.test.tsx`
 
 ### 3.5 GREEN — `.env.local.example`
 
-- [ ] Agregar `CLARA_DRAFTING_ENABLED=false` con comentario de rollback
+- [x] Agregar `CLARA_DRAFTING_ENABLED=false` con comentario de rollback
   (patrón de `WHATSAPP_REMINDER_REPLY_ENABLED`): `true` enciende el LLM; `false`
   o unset fuerza la plantilla y restaura el comportamiento previo.
+  **Resuelto:** aplicado por el orquestador (ruta `.env*` denegada al worker;
+  archivo de ejemplo versionado, sin secretos).
 
 ### 3.6 Checks del slice 3
 
-- [ ] `npm run test` en verde.
-- [ ] `npx tsc --noEmit` y `npm run lint` sin errores nuevos.
-- [ ] `npm run build` en verde.
+- [x] `npm run test` en verde.
+- [x] `npx tsc --noEmit` y `npm run lint` sin errores nuevos.
+- [ ] `npm run build` en verde (lo ejecuta el orquestador en la fase Verify).
 
 ---
 

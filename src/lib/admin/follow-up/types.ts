@@ -52,6 +52,8 @@ export type FollowUpDraft = {
   errorMessage: string | null;
   approvedBy: string | null;
   approvedAt: string | null;
+  editedBy: string | null;
+  editedAt: string | null;
   sentAt: string | null;
   createdBy: string | null;
   createdAt: string;

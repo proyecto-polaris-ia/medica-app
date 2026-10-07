@@ -6,6 +6,7 @@ import {
 import type { FollowUpDraftStatus } from '@/lib/admin/follow-up/types';
 import { WccEmptyState, WccNotice } from '../components';
 import { DraftActions } from './draft-actions';
+import { DraftEditor } from './draft-editor';
 
 export const dynamic = 'force-dynamic';
 
@@ -62,12 +63,21 @@ function DraftCard({ draft }: { draft: WccFollowUpDraftRow }) {
         <span className="text-xs text-gray-400">·</span>
         <DraftStatusBadge status={draft.status} />
       </div>
-      <p className="mt-3 whitespace-pre-wrap text-sm text-gray-700">
-        {draft.body}
-      </p>
+      {draft.status === 'draft' ? (
+        <DraftEditor draftId={draft.id} body={draft.body} />
+      ) : (
+        <p className="mt-3 whitespace-pre-wrap text-sm text-gray-700">
+          {draft.body}
+        </p>
+      )}
       <p className="mt-2 text-xs text-gray-500">
         {formatRelativeTime(draft.createdAt)}
       </p>
+      {draft.editedAt && (
+        <p className="mt-1 text-xs text-gray-500">
+          Editado {formatRelativeTime(draft.editedAt)}
+        </p>
+      )}
       {draft.status === 'sent_failed' && draft.errorMessage && (
         <p className="mt-2 rounded-md border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs text-rose-900">
           Error: {draft.errorMessage}
@@ -85,7 +95,7 @@ export default async function Page() {
     <main>
       <h2 className="text-xl font-bold">Borradores de seguimiento</h2>
       <p className="mt-1 text-sm text-gray-600">
-        Borradores generados por plantilla para pacientes a contactar. Aprobar y
+        Borradores redactados por Clara y revisados por una persona. Aprobar y
         enviar son acciones humanas explícitas; ningún borrador se envía solo.
       </p>
 

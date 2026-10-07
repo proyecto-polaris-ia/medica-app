@@ -1,11 +1,27 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { getSupabaseAdmin } from '@/lib/supabase/server';
-import { ConflictError, NotFoundError } from '../../errors';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  acquireDbSuiteLock,
+  applyLocalDbEnv,
+  localDbEnabled,
+  releaseDbSuiteLock,
+  truncateAllTables,
+} from '@/test-utils/local-db';
+import { getSupabaseAdmin } from '@/lib/supabase/server';
+import { createPatient } from '../../patients';
+import { ConflictError, NotFoundError } from '../../errors';
+import { ValidationError } from '../../validate';
+import {
+  DRAFT_SELECT_COLUMNS,
   buildDraftDedupKey,
   claimFollowUpDraftForSend,
   createFollowUpDraft,
+  findFollowUpDraftForRound,
+  getFollowUpDraftById,
+  mapFollowUpDraftRow,
+  markFollowUpDraftSent,
+  markFollowUpDraftSentFailed,
   transitionFollowUpDraft,
+  updateFollowUpDraftBody,
 } from '../drafts';
 
 vi.mock('@/lib/supabase/server', () => ({
@@ -234,5 +250,191 @@ describe('claimFollowUpDraftForSend', () => {
     expect(drafts.eq).toHaveBeenCalledWith('status', 'approved');
     drafts.maybeSingle.mockResolvedValue({ data: null, error: null });
     expect(await claimFollowUpDraftForSend(DRAFT_ID)).toBeNull();
+  });
+});
+
+describe('DRAFT_SELECT_COLUMNS y mapFollowUpDraftRow', () => {
+  it('exponen edited_by/edited_at como editedBy/editedAt', () => {
+    expect(DRAFT_SELECT_COLUMNS).toContain('edited_by');
+    expect(DRAFT_SELECT_COLUMNS).toContain('edited_at');
+
+    const mapped = mapFollowUpDraftRow(
+      draftRow({
+        edited_by: USER_ID,
+        edited_at: '2026-10-03T17:20:00.000Z',
+      })
+    );
+
+    expect(mapped.editedBy).toBe(USER_ID);
+    expect(mapped.editedAt).toBe('2026-10-03T17:20:00.000Z');
+  });
+
+  it('deja editedBy/editedAt en null cuando el borrador no se editó', () => {
+    const mapped = mapFollowUpDraftRow(draftRow());
+    expect(mapped.editedBy).toBeNull();
+    expect(mapped.editedAt).toBeNull();
+  });
+});
+
+/**
+ * Suite de datos contra Supabase local (ver openspec/changes/supabase-local-testing).
+ * Corre solo con `npm run test:local` (SUPABASE_LOCAL=1 + supabase start); con
+ * `npm run test` regular se omite. Aquí se prueban las columnas reales de la
+ * migración 0023 y el no-escrito de los caminos rechazados.
+ */
+const d = localDbEnabled ? describe : describe.skip;
+const MISSING_DRAFT_ID = '770e8400-e29b-41d4-a716-4466554400ff';
+const DRAFT_BODY =
+  'Hola María, seguimos a tus órdenes para agendar tu revisión.';
+
+/** Lleva un borrador recién creado a un estado decidido usando la capa real. */
+async function setDraftStatus(
+  id: string,
+  status: 'approved' | 'rejected' | 'sent' | 'sent_failed'
+): Promise<void> {
+  const now = new Date('2026-10-03T17:10:00.000Z');
+  if (status === 'approved' || status === 'rejected') {
+    await transitionFollowUpDraft({ id, status, userId: USER_ID, now });
+    return;
+  }
+  if (status === 'sent') {
+    await markFollowUpDraftSent({ id, providerMessageId: 'wamid-test', now });
+    return;
+  }
+  await markFollowUpDraftSentFailed({ id, errorMessage: 'provider error' });
+}
+
+d('capa de datos de drafts contra Supabase local', () => {
+  let serverModule: typeof import('@/lib/supabase/server');
+
+  beforeAll(async () => {
+    applyLocalDbEnv();
+    await acquireDbSuiteLock();
+    serverModule = await vi.importActual<
+      typeof import('@/lib/supabase/server')
+    >('@/lib/supabase/server');
+  });
+
+  afterAll(async () => {
+    await releaseDbSuiteLock();
+  });
+
+  beforeEach(async () => {
+    // El mock del query builder se sustituye por el cliente real de la BD local.
+    (getSupabaseAdmin as ReturnType<typeof vi.fn>).mockImplementation(() =>
+      serverModule.getSupabaseAdmin()
+    );
+    await truncateAllTables();
+  });
+
+  async function seedDraft() {
+    const patient = await createPatient({
+      fullName: 'María García',
+      phoneE164: '+5215512345678',
+    });
+    const { draft } = await createFollowUpDraft({
+      patientId: patient.id,
+      userId: USER_ID,
+      body: DRAFT_BODY,
+      templateName: 'seguimiento_paciente',
+      roundDate: ROUND_DATE,
+    });
+    return { patient, draft };
+  }
+
+  describe('findFollowUpDraftForRound', () => {
+    it('encuentra por dedup_key y devuelve null si la ronda no existe', async () => {
+      const { patient, draft } = await seedDraft();
+
+      const found = await findFollowUpDraftForRound({
+        patientId: patient.id,
+        roundDate: ROUND_DATE,
+      });
+      expect(found?.id).toBe(draft.id);
+      expect(found?.dedupKey).toBe(buildDraftDedupKey(patient.id, ROUND_DATE));
+
+      const missing = await findFollowUpDraftForRound({
+        patientId: patient.id,
+        roundDate: '2026-10-04',
+      });
+      expect(missing).toBeNull();
+    });
+  });
+
+  describe('updateFollowUpDraftBody', () => {
+    it('persiste body normalizado + edited_by/edited_at conservando draft', async () => {
+      const { draft } = await seedDraft();
+      const now = new Date('2026-10-03T17:20:00.000Z');
+
+      const updated = await updateFollowUpDraftBody({
+        id: draft.id,
+        body: '  Hola María,   te esperamos para revisar tu plan. ',
+        userId: USER_ID,
+        now,
+      });
+
+      expect(updated.status).toBe('draft');
+      expect(updated.body).toBe('Hola María, te esperamos para revisar tu plan.');
+      expect(updated.editedBy).toBe(USER_ID);
+      // PostgREST devuelve `timestamptz` con desfase (`+00:00`): se compara el instante.
+      expect(new Date(updated.editedAt as string).toISOString()).toBe(
+        now.toISOString()
+      );
+
+      const persisted = await getFollowUpDraftById(draft.id);
+      expect(persisted?.body).toBe(updated.body);
+      expect(persisted?.editedBy).toBe(USER_ID);
+      expect(new Date(persisted?.editedAt as string).toISOString()).toBe(
+        now.toISOString()
+      );
+    });
+
+    it.each(['approved', 'rejected', 'sent', 'sent_failed'] as const)(
+      'lanza ConflictError sin escribir cuando el borrador está %s',
+      async (status) => {
+        const { draft } = await seedDraft();
+        await setDraftStatus(draft.id, status);
+
+        await expect(
+          updateFollowUpDraftBody({
+            id: draft.id,
+            body: 'Otro texto válido para el paciente.',
+            userId: USER_ID,
+          })
+        ).rejects.toBeInstanceOf(ConflictError);
+
+        const persisted = await getFollowUpDraftById(draft.id);
+        expect(persisted?.body).toBe(DRAFT_BODY);
+        expect(persisted?.editedBy).toBeNull();
+        expect(persisted?.editedAt).toBeNull();
+      }
+    );
+
+    it('lanza NotFoundError con un id desconocido', async () => {
+      await expect(
+        updateFollowUpDraftBody({
+          id: MISSING_DRAFT_ID,
+          body: 'Texto válido de seguimiento.',
+          userId: USER_ID,
+        })
+      ).rejects.toBeInstanceOf(NotFoundError);
+    });
+
+    it('lanza ValidationError y no escribe con texto inválido', async () => {
+      const { draft } = await seedDraft();
+
+      await expect(
+        updateFollowUpDraftBody({
+          id: draft.id,
+          body: 'Precio $500 por tu revisión.',
+          userId: USER_ID,
+        })
+      ).rejects.toBeInstanceOf(ValidationError);
+
+      const persisted = await getFollowUpDraftById(draft.id);
+      expect(persisted?.body).toBe(DRAFT_BODY);
+      expect(persisted?.editedBy).toBeNull();
+      expect(persisted?.editedAt).toBeNull();
+    });
   });
 });
