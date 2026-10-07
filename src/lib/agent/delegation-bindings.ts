@@ -57,7 +57,19 @@ export async function saveDelegationBinding(
         { onConflict: 'child_session_id' },
       );
 
-    return error ? { ok: false } : { ok: true };
+    if (error) return { ok: false };
+
+    // Opportunistic TTL enforcement (review finding R3-001): the table only
+    // grows on delegations, so purging expired rows on each successful save
+    // keeps it bounded without a dedicated cron. A purge failure must never
+    // fail the save.
+    try {
+      await purgeExpiredDelegationBindings();
+    } catch {
+      // ignore: cleanup is best-effort
+    }
+
+    return { ok: true };
   } catch {
     return { ok: false };
   }
