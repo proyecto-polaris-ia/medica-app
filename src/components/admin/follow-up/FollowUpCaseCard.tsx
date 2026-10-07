@@ -19,9 +19,10 @@ export function formatReasonDate(iso: string): string {
  * Tarjeta de un caso de seguimiento con las acciones manuales.
  *
  * "Agendar cita" es un `<Link>` que solo navega al wizard existente; no crea
- * la cita ni cambia el estado de contacto. "Generar borrador" hace `POST` a la
- * API de borradores (no envía nada) y, al generarse, ofrece un enlace al
- * WhatsApp Command Center para su aprobación.
+ * la cita ni cambia el estado de contacto. "Generar borrador" (y "Regenerar
+ * borrador" cuando ya existe uno) hace `POST` a la API de borradores (no envía
+ * nada) y, al generarse, ofrece un enlace al WhatsApp Command Center para su
+ * aprobación.
  */
 export function FollowUpCaseCard({
   followUpCase,
@@ -82,7 +83,7 @@ export function FollowUpCaseCard({
             onClick={() => onGenerateDraft(followUpCase.patientId)}
             className="rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
           >
-            Generar borrador
+            {draftGenerated ? 'Regenerar borrador' : 'Generar borrador'}
           </button>
           {draftGenerated && (
             <Link
