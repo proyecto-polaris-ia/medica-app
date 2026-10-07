@@ -1,7 +1,9 @@
 import Link from 'next/link';
 import { getDashboardMetrics } from '@/lib/admin/metrics/loader';
+import { getNoraView } from '@/lib/admin/nora/loader';
 import { MetricsRangeSelector } from './components/MetricsRangeSelector';
 import { MetricsSection } from './components/MetricsSection';
+import { NoraSection } from './components/NoraSection';
 
 export const dynamic = 'force-dynamic';
 
@@ -20,7 +22,11 @@ export default async function DashboardPage({
   searchParams?: Promise<{ preset?: string; from?: string; to?: string }>;
 }) {
   const params = (await searchParams) ?? {};
-  const view = await getDashboardMetrics(params);
+  // Mismo rango (preset/from/to) para ambos loaders, resueltos en paralelo.
+  const [view, noraView] = await Promise.all([
+    getDashboardMetrics(params),
+    getNoraView(params),
+  ]);
 
   return (
     <div>
@@ -32,6 +38,7 @@ export default async function DashboardPage({
 
       <MetricsRangeSelector preset={view.preset} from={params.from} to={params.to} />
       <MetricsSection view={view} />
+      <NoraSection view={noraView} />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {sections.map((section) => (

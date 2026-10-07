@@ -10,9 +10,15 @@ vi.mock('@/lib/admin/metrics/loader', () => ({
   getDashboardMetrics: vi.fn(),
 }));
 
+vi.mock('@/lib/admin/nora/loader', () => ({
+  getNoraView: vi.fn(),
+}));
+
 import Page from './page';
 import { getDashboardMetrics, type DashboardMetricsView } from '@/lib/admin/metrics/loader';
+import { getNoraView, type NoraView } from '@/lib/admin/nora/loader';
 import type { MetricsResult, ProviderMetrics, StatusCounts } from '@/lib/admin/metrics/types';
+import type { NoraGap } from '@/lib/admin/nora/types';
 import type { MetricsSeriesBucket, MetricsTrend } from '@/lib/admin/metrics/trend';
 
 function statusCounts(overrides: Partial<StatusCounts> = {}): StatusCounts {
@@ -113,10 +119,38 @@ function buildView(overrides: Partial<DashboardMetricsView> = {}): DashboardMetr
   };
 }
 
+/** Hueco ficticio; 16:00Z = 10:00 en America/Mexico_City (UTC−6). */
+function gap(overrides: Partial<NoraGap> = {}): NoraGap {
+  return {
+    providerId: 'provider-1',
+    dayKey: '2026-10-05',
+    startAt: '2026-10-05T16:00:00.000Z',
+    endAt: '2026-10-05T17:00:00.000Z',
+    minutes: 60,
+    ...overrides,
+  };
+}
+
+function buildNoraView(overrides: Partial<NoraView> = {}): NoraView {
+  return {
+    isSupabaseConfigured: true,
+    isConfiguredButUnavailable: false,
+    generatedAt: '2026-10-15T18:00:00.000Z',
+    preset: 'month',
+    rangeLabel: '1 – 31 de octubre, 2026',
+    range: { startAt: '2026-10-01T06:00:00.000Z', endAt: '2026-11-01T06:00:00.000Z' },
+    // Valores distintos a los de las métricas para aislar la sección en el DOM.
+    metrics: metrics({ occupancyPct: 12.5, noShowRatePct: 33.3 }),
+    gaps: [gap(), gap({ startAt: '2026-10-05T18:00:00.000Z', endAt: '2026-10-05T20:00:00.000Z', minutes: 120 })],
+    ...overrides,
+  };
+}
+
 describe('/dashboard (métricas de agenda)', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     vi.mocked(getDashboardMetrics).mockResolvedValue(buildView());
+    vi.mocked(getNoraView).mockResolvedValue(buildNoraView());
   });
 
   it('muestra las 4 cards, la etiqueta de rango y el desglose por proveedor', async () => {
@@ -292,5 +326,106 @@ describe('/dashboard (métricas de agenda)', () => {
     expect(text).not.toMatch(/-\d/);
     expect(text).not.toContain('null');
     expect(text).not.toContain('undefined');
+  });
+
+  it('muestra los huecos improductivos por proveedor y día con su conteo y minutos', async () => {
+    render(await Page({ searchParams: Promise.resolve({ preset: 'month' }) }));
+
+    expect(screen.getByText('Agenda productiva')).toBeInTheDocument();
+    expect(screen.getByText('Ocupación del rango %')).toBeInTheDocument();
+    expect(screen.getByText('No-show del rango %')).toBeInTheDocument();
+
+    const gapsCard = screen.getByText('Huecos improductivos').closest('div');
+    expect(gapsCard).toHaveTextContent('2');
+
+    const minutesCard = screen.getByText('Minutos improductivos').closest('div');
+    expect(minutesCard).toHaveTextContent('180 min');
+
+    expect(screen.getByText('Dra. Ana · 5 oct 2026')).toBeInTheDocument();
+    expect(screen.getByText('10:00–11:00 (60 min)')).toBeInTheDocument();
+    expect(screen.getByText('12:00–14:00 (120 min)')).toBeInTheDocument();
+  });
+
+  it('resuelve getNoraView con el mismo rango (searchParams) que las métricas', async () => {
+    render(
+      await Page({
+        searchParams: Promise.resolve({
+          preset: 'custom',
+          from: '2026-10-05',
+          to: '2026-10-07',
+        }),
+      })
+    );
+
+    expect(getNoraView).toHaveBeenCalledWith({
+      preset: 'custom',
+      from: '2026-10-05',
+      to: '2026-10-07',
+    });
+  });
+
+  it('estado vacío de Nora cuando el rango no tiene datos, sin romper las métricas', async () => {
+    vi.mocked(getNoraView).mockResolvedValue(buildNoraView({ metrics: null, gaps: [] }));
+
+    render(await Page({ searchParams: Promise.resolve({ preset: 'month' }) }));
+
+    expect(
+      screen.getByText('Sin datos de agenda productiva para el rango seleccionado.')
+    ).toBeInTheDocument();
+    expect(screen.queryByText('Huecos improductivos')).not.toBeInTheDocument();
+    // Las métricas del rango siguen visibles.
+    expect(screen.getByText('Ocupación %')).toBeInTheDocument();
+  });
+
+  it('sin huecos (agenda llena) muestra estado vacío y minutos cero, nunca negativos', async () => {
+    vi.mocked(getNoraView).mockResolvedValue(buildNoraView({ gaps: [] }));
+
+    render(await Page({ searchParams: Promise.resolve({ preset: 'month' }) }));
+
+    expect(
+      screen.getByText('Sin huecos improductivos en el rango seleccionado.')
+    ).toBeInTheDocument();
+    expect(screen.getByText('0 min')).toBeInTheDocument();
+    expect(document.body.textContent ?? '').not.toMatch(/-\d/);
+  });
+
+  it('muestra el aviso de degradación de Nora y conserva el resto del panel', async () => {
+    vi.mocked(getNoraView).mockResolvedValue(
+      buildNoraView({ isConfiguredButUnavailable: true, metrics: null, gaps: [] })
+    );
+
+    render(await Page({ searchParams: Promise.resolve({}) }));
+
+    expect(
+      screen.getByText(/No se pudieron leer los indicadores de agenda productiva/)
+    ).toBeInTheDocument();
+    expect(screen.getByText('Ocupación %')).toBeInTheDocument();
+  });
+
+  it('recalcula los huecos de Nora al cambiar el preset', async () => {
+    vi.mocked(getNoraView).mockImplementation(async (params) =>
+      params.preset === 'week' ? buildNoraView({ preset: 'week', gaps: [] }) : buildNoraView()
+    );
+
+    render(await Page({ searchParams: Promise.resolve({ preset: 'week' }) }));
+
+    expect(getNoraView).toHaveBeenCalledWith({ preset: 'week' });
+    expect(
+      screen.getByText('Sin huecos improductivos en el rango seleccionado.')
+    ).toBeInTheDocument();
+  });
+
+  it('sin tasa de no-show en el rango, Nora muestra "No disponible" (nunca null crudo)', async () => {
+    vi.mocked(getNoraView).mockResolvedValue(
+      buildNoraView({ metrics: metrics({ noShowRatePct: null, noShowCount: 0, attendedCount: 0 }) })
+    );
+
+    render(await Page({ searchParams: Promise.resolve({ preset: 'month' }) }));
+
+    expect(screen.getByText('No disponible')).toBeInTheDocument();
+    const text = document.body.textContent ?? '';
+    expect(text).not.toContain('null');
+    expect(text).not.toContain('undefined');
+    expect(text).not.toMatch(/-\d/);
   });
 });
