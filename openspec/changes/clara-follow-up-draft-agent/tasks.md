@@ -213,58 +213,61 @@ pero se encadena después por orden de revisión.
 
 ### 3.1 RED — `page.test.tsx` del WCC (extender)
 
-- [ ] Extender
+- [x] Extender
   `app/(admin)/whatsapp-command-center/follow-up-drafts/page.test.tsx`.
-- [ ] Casos: en `draft` se renderiza el `<textarea>` con el body y el aviso "El
+- [x] Casos: en `draft` se renderiza el `<textarea>` con el body y el aviso "El
   envío requiere aprobación; guardar no envía nada."; guardar hace `fetch` a
   `/api/admin/follow-up/drafts/<id>` con `method: 'PATCH'` y
   `{ action: 'edit', body }`; en `approved`/`sent` no hay editor; se muestra
-  "Editado {fecha}" cuando `editedAt` existe.
+  "Editado {fecha}" cuando `editedAt` existe. Triangulación: 409 muestra error
+  visible y no llama a `router.refresh()`.
 
 ### 3.2 RED — `FollowUpList.test.tsx` (extender)
 
-- [ ] Extender
+- [x] Extender
   `src/components/admin/follow-up/__tests__/FollowUpList.test.tsx`.
-- [ ] Casos: con `draftGenerated === true` el botón dice "Regenerar borrador" y
+- [x] Casos: con `draftGenerated === true` el botón dice "Regenerar borrador" y
   sigue haciendo `POST` al endpoint de borradores; "Agendar cita" sigue siendo un
   `Link`.
 
 ### 3.3 GREEN — editor WCC + data layer
 
-- [ ] Crear `app/(admin)/whatsapp-command-center/follow-up-drafts/draft-editor.tsx`
+- [x] Crear `app/(admin)/whatsapp-command-center/follow-up-drafts/draft-editor.tsx`
   (client): `<textarea>`, "Guardar cambios" (`PATCH { action: 'edit' }`), estado
   `busy`, error visible, `router.refresh()`, aviso de que guardar no envía. Solo
   se renderiza cuando `status === 'draft'`.
-- [ ] Modificar
+- [x] Modificar
   `app/(admin)/whatsapp-command-center/follow-up-drafts/page.tsx`: renderiza
   `<DraftEditor>` en `DraftCard` cuando `status === 'draft'` y muestra "Editado …"
   con `formatRelativeTime` cuando `editedAt` no es `null`; ajustar el copy de
   "generados por plantilla" a "redactados por Clara y revisados por una persona".
-- [ ] Modificar `src/lib/wcc-follow-up-drafts.ts`: `WccFollowUpDraftRow`/`mapDraft`
+- [x] Modificar `src/lib/wcc-follow-up-drafts.ts`: `WccFollowUpDraftRow`/`mapDraft`
   agregan `editedBy`/`editedAt` y el `select` incluye `edited_by, edited_at`;
   mantener la degradación a cola vacía.
-- [ ] `draft-actions.tsx` sin cambios funcionales (Aprobar / Rechazar / Enviar).
+- [x] `draft-actions.tsx` sin cambios funcionales (Aprobar / Rechazar / Enviar).
 
 ### 3.4 GREEN — `FollowUpCaseCard.tsx` (+ `FollowUpList.tsx` si aplica)
 
-- [ ] `src/components/admin/follow-up/FollowUpCaseCard.tsx`: el botón dice
+- [x] `src/components/admin/follow-up/FollowUpCaseCard.tsx`: el botón dice
   "Generar borrador" y, con `draftGenerated`, "Regenerar borrador" (mismo
-  `onGenerateDraft`); conservar el enlace al WCC. Ajustar el copy en
-  `FollowUpList.tsx` solo si vive ahí.
-- [ ] Tests 3.1–3.2 en verde:
+  `onGenerateDraft`); conservar el enlace al WCC. El copy del botón vive en la
+  tarjeta, así que `FollowUpList.tsx` no requiere cambios.
+- [x] Tests 3.1–3.2 en verde:
   `npx vitest run "app/(admin)/whatsapp-command-center/follow-up-drafts/page.test.tsx" src/components/admin/follow-up/__tests__/FollowUpList.test.tsx`
 
 ### 3.5 GREEN — `.env.local.example`
 
-- [ ] Agregar `CLARA_DRAFTING_ENABLED=false` con comentario de rollback
+- [x] Agregar `CLARA_DRAFTING_ENABLED=false` con comentario de rollback
   (patrón de `WHATSAPP_REMINDER_REPLY_ENABLED`): `true` enciende el LLM; `false`
   o unset fuerza la plantilla y restaura el comportamiento previo.
+  **Resuelto:** aplicado por el orquestador (ruta `.env*` denegada al worker;
+  archivo de ejemplo versionado, sin secretos).
 
 ### 3.6 Checks del slice 3
 
-- [ ] `npm run test` en verde.
-- [ ] `npx tsc --noEmit` y `npm run lint` sin errores nuevos.
-- [ ] `npm run build` en verde.
+- [x] `npm run test` en verde.
+- [x] `npx tsc --noEmit` y `npm run lint` sin errores nuevos.
+- [ ] `npm run build` en verde (lo ejecuta el orquestador en la fase Verify).
 
 ---
 
