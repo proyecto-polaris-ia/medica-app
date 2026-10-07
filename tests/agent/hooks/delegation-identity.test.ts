@@ -19,9 +19,9 @@ vi.mock('@/lib/agent/delegation-bindings', () => ({
   DELEGATION_BINDING_TTL_SECONDS: 3600,
 }));
 
-const module = await import('../../../agent/hooks/delegation-identity');
-const { extractMoraChildSessionId, readTrustedPatientPhone } = module;
-const hook = module.default;
+const hookModule = await import('../../../agent/hooks/delegation-identity');
+const { extractMoraChildSessionId, readTrustedPatientPhone } = hookModule;
+const hook = hookModule.default;
 
 type Handler = (event: unknown, ctx: unknown) => void | Promise<void>;
 
