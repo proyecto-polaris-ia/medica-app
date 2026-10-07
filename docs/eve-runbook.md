@@ -4,6 +4,28 @@ Guía operativa del agente Eve de WhatsApp, que es el **único** path de WhatsAp
 desde la Etapa 7 (issue #37). No hay flag de routing ni agente legacy en
 paralelo.
 
+## Topología multiagente (issue #140)
+
+Eva es el agente **raíz** y el único ligado al canal de WhatsApp. Los agentes
+de cobranza y seguimiento no tienen número propio: se alcanzan por
+**delegación**.
+
+- **Mora** (`agent/subagents/mora/`): subagente declarado de Eve para cobranza.
+  Eve delega cuando detecta intención de saldo/pagos; la respuesta de Mora se
+  entrega por el mismo canal de WhatsApp vía Eva. Verifícalo tras cada deploy:
+  `npx eve info` debe reportar `Subagents 1 subagent` y `Diagnostics 0 errors,
+  0 warnings`.
+- La identidad confiable del paciente cruza la frontera de delegación por un
+  binding server-side: el hook `agent/hooks/delegation-identity.ts` persiste
+  `childSessionId → trustedPatientPhone` (tabla `agent_delegation_bindings`,
+  TTL 1 h) al momento de la delegación. Si una delegación llega sin binding,
+  las tools de Mora se niegan a mostrar saldos (fail-closed).
+- En Agent Runs (observabilidad de Vercel) las delegaciones se ven como
+  `subagent.called` / `subagent.completed`; el trace del hijo se sigue con el
+  `childSessionId` del evento.
+- Clara y Nora NO son agentes de WhatsApp: son capacidades admin/jobs (specs
+  `follow-up` y `dashboard-metrics`).
+
 ## Modelo de reenvío (Eve-only)
 
 `app/api/whatsapp/webhook/route.ts`:

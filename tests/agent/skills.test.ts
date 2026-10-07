@@ -48,30 +48,7 @@ describe("Eve stage-4 skills", () => {
     expect(text.includes("no inventes")).toBe(true);
   });
 
-  it("creates the payment-collection skill with intent routing and no-money-movement guardrails", () => {
-    const text = read("payment-collection.md").toLowerCase();
-
-    // Tools referenced
-    for (const tool of ["get-patient-balance", "list-overdue-balances", "register-payment-intent"]) {
-      expect(text.includes(tool), `payment-collection.md must reference ${tool}`).toBe(true);
-    }
-
-    // Guardrails (case-insensitive marker strings).
-    for (const guardrail of [
-      "no negoci",
-      "descuento",
-      "waiver",
-      "links de pago",
-      "stripe",
-      "mercado pago",
-      "saldo",
-      "contacto verificado",
-    ]) {
-      expect(text.includes(guardrail), `payment-collection.md must reference guardrail: ${guardrail}`).toBe(true);
-    }
-  });
-
-  it("updates instructions to reference the four skills and preserve guardrails", () => {
+  it("updates instructions to reference the three Eva skills and preserve guardrails", () => {
     expect(existsSync(INSTRUCTIONS_FILE), "agent/instructions.md must exist").toBe(true);
     const text = readFileSync(INSTRUCTIONS_FILE, "utf-8").toLowerCase();
 
@@ -79,7 +56,6 @@ describe("Eve stage-4 skills", () => {
       "booking-flow.md",
       "clinical-escalation.md",
       "knowledge-answers.md",
-      "payment-collection.md",
     ]) {
       expect(text.includes(skill), `instructions.md must reference ${skill}`).toBe(true);
     }
@@ -89,17 +65,10 @@ describe("Eve stage-4 skills", () => {
       expect(text.includes(needle), `instructions.md must preserve guardrail: ${needle}`).toBe(true);
     }
 
-    // Mora guardrails must be present (case-insensitive markers).
-    for (const moraNeedle of [
-      "colecciones",
-      "no negoci",
-      "no muev",
-      "link",
-      "saldo",
-      "stripe",
-      "listaccountsreceivable",
-    ]) {
-      expect(text.includes(moraNeedle), `instructions.md must include Mora guardrail: ${moraNeedle}`).toBe(true);
+    // Las secciones de cobranza se movieron a Mora: Eva delega y ya no las declara.
+    expect(text.includes("payment-collection.md"), "Eva no debe cargar el skill de cobranza").toBe(false);
+    for (const removed of ["no negoci", "no muev", "stripe", "listaccountsreceivable"]) {
+      expect(text.includes(removed), `Eva no debe conservar el guardrail de cobranza: ${removed}`).toBe(false);
     }
   });
 });

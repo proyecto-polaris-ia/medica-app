@@ -6,9 +6,9 @@ import { parseThresholdDays } from "@/lib/admin/validate";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 
 import {
-  requireTrustedWhatsAppPhone,
-  type TrustedContactToolContext,
-} from "../trusted-contact-context";
+  resolveCollectionsPatientPhone,
+  type CollectionsToolContext,
+} from "../identity";
 
 const SECURITY_REFUSAL =
   "Por seguridad no puedo consultar saldos sin un WhatsApp vinculado al paciente.";
@@ -106,8 +106,8 @@ export default defineTool({
   description:
     "Consulta el saldo pendiente del paciente identificado por el WhatsApp confiable del canal. Solo lectura; los montos vienen de la base de datos y nunca de lo que el paciente escriba en el chat.",
   inputSchema: getPatientBalanceInputSchema,
-  async execute(input: GetPatientBalanceInput, ctx: TrustedContactToolContext) {
-    const trustedPhone = requireTrustedWhatsAppPhone(ctx, SECURITY_REFUSAL);
+  async execute(input: GetPatientBalanceInput, ctx: CollectionsToolContext) {
+    const trustedPhone = await resolveCollectionsPatientPhone(ctx, SECURITY_REFUSAL);
     if ("error" in trustedPhone) {
       return { success: false, error: trustedPhone.error };
     }

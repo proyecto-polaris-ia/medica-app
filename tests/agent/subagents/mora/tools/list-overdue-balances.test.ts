@@ -10,7 +10,7 @@
  *   2. Verified contact — without a trusted WhatsApp phone the tool MUST
  *      return `{ success: false, error }` and MUST NOT query the database.
  *
- * Mock pattern mirrors `tests/agent/tools/get-patient-balance.test.ts` and
+ * Mock pattern mirrors `tests/agent/subagents/mora/tools/get-patient-balance.test.ts` and
  * `src/lib/admin/__tests__/accounts-receivable.test.ts`.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -36,7 +36,7 @@ const getSupabaseAdmin = vi.fn();
 
 vi.mock("@/lib/supabase/server", () => ({ getSupabaseAdmin }));
 
-const { default: tool } = await import("../../../agent/tools/list-overdue-balances");
+const { default: tool } = await import("../../../../../agent/subagents/mora/tools/list-overdue-balances");
 const execute = tool.execute as (
   input: { thresholdDays?: number },
   ctx?: unknown,

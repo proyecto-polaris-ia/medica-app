@@ -61,12 +61,24 @@ de firma de Meta) y refleja la respuesta de Eve. No hay rama legacy ni
 alternativa: si el reenvío falla responde `502` y registra `webhook.failed`.
 
 ### 3.2 Agente Eve (`agent/`)
-Único runtime conversacional de WhatsApp. `agent/agent.ts` configura el agente;
-`agent/instructions.md` define instrucciones y guardrails; `agent/tools/*.ts`
-expone las acciones deterministas (catálogo, disponibilidad, reserva,
-escalación, pagos) y `agent/skills/*.md` los procedimientos. El LLM interpreta y
-redacta; las tools ejecutan contra Supabase. El webhook solo reenvía: el LLM no
-escribe en BD ni envía mensajes por sí mismo.
+Único runtime conversacional de WhatsApp. `agent/agent.ts` configura el agente raíz
+y `agent/instructions.md` define instrucciones y guardrails; `agent/tools/*.ts`
+expone las acciones deterministas (catálogo, disponibilidad, reserva, escalación)
+y `agent/skills/*.md` los procedimientos. El LLM interpreta y redacta; las tools
+ejecutan contra Supabase. El webhook solo reenvía: el LLM no escribe en BD ni
+envía mensajes por sí mismo.
+
+**Topología multiagente (issue #140):** Eva es el único agente ligado al canal de
+WhatsApp (un solo binding). Los agentes especializados son **subagentes
+declarados** de Eve (`agent/subagents/<id>/`), alcanzados solo por delegación:
+el framework lowerea cada subagente a una tool del modelo con
+`{ message, agentId?, outputSchema? }`. Actualmente existe **Mora**
+(`agent/subagents/mora/`): cobranza y saldos, con tools, instrucciones y skill
+propias. La identidad confiable del paciente cruza la frontera de delegación por
+un binding server-side (hook `agent/hooks/delegation-identity.ts` + tabla
+`agent_delegation_bindings`); el teléfono nunca viaja por texto del modelo. Clara
+y Nora NO son subagentes: son capacidades admin/jobs (ver specs `follow-up` y
+`dashboard-metrics`).
 
 ### 3.3 Tipos compartidos de decisión inbound (`lib/whatsapp/inbound-decision.ts`)
 `WhatsAppInboundIntent` y la forma de decisión que consume el store

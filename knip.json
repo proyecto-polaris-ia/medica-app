@@ -6,7 +6,7 @@
     "app/**/route.{ts,tsx}",
     "scripts/**"
   ],
-  "project": ["app/**", "src/**", "scripts/**", "tests/**"],
+  "project": ["app/**", "src/**", "scripts/**", "tests/**", "agent/**"],
   "ignoreBinaries": ["supabase"],
   "ignoreDependencies": ["eslint-config-next", "chat"],
   "ignoreExportsUsedInFile": true
