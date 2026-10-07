@@ -37,15 +37,15 @@
 - [x] T2.5 Commits por unidad: 884cff3 (gap core), 149c06f (loader), a575934 (panel), 0ef9093 (odd doc). Push/PR: decisión del usuario al cerrar fase.
 
 ### Fase 3 — Sugerencias de reacomodo (PR apilado 2)
-- [ ] T3.1 Tests primero (RED) para generador determinista de candidatas contra disponibilidad real
-- [ ] T3.2 Implementación (GREEN) capa de sugerencias determinista
-- [ ] T3.3 Flujo de confirmación humana en panel (aceptar/rechazar propuesta)
-- [ ] T3.4 Aplicar reprogramación SOLO tras confirmación explícita
-- [ ] T3.5 verify completo + PR 2 apilado sobre PR 1
+- [x] T3.1 Tests primero (RED) para generador determinista de candidatas contra disponibilidad real (13 tests)
+- [x] T3.2 Implementación (GREEN) capa de sugerencias determinista (suggestions.ts + migración 20261007190100)
+- [x] T3.3 Flujo de confirmación humana en panel (nora-actions.ts + NoraSuggestionActions.tsx, +27 tests)
+- [x] T3.4 Aplicar reprogramación SOLO tras confirmación explícita (apply.ts, guard optimista sobre rescheduleAppointment)
+- [x] T3.5 verify completo (1546 tests, build exit 0) + PR 2: https://github.com/proyecto-polaris-ia/medica-app/pull/156
 
 ### Fase 4 — Cierre
-- [ ] T4.1 verify-report.md + archive del change
-- [ ] T4.2 Reporte final: checks fallidos/pendientes, siguiente paso
+- [x] T4.1 verify-report.md (PASS WITH WARNINGS, advertencias no bloqueantes) + archive a openspec/changes/archive/2026-10-07-nora-agenda-productiva/ + spec materializada en openspec/specs/nora-agent/spec.md
+- [x] T4.2 Reporte final: 4 errores tsc preexistentes en main (follow-up-drafts, ajenos a Nora, no bloquean build); idempotencia bajo concurrencia real sin UNIQUE parcial (opcional en design); degradación runtime verificada por tests, no con fallo inyectado en vivo
 
 ## Registro de decisiones
 - Review nativo RDD: el envelope de consentimiento expira sin presentarse (defecto conocido del relay, 2 intentos START, lineage_created false, sin mutación). Decisión del usuario: APLAZAR el review al cierre de Fase 1 — START fresco sobre el candidato normalizado tras los commits.
@@ -57,5 +57,6 @@
 
 ## Evidencia de commits
 - SDD artifacts: `docs(nora): add nora-agenda-productiva SDD change artifacts (issue #149)` c1e0e78
-- Fase 1: 884cff3 feat(nora) gap core · 149c06f feat(nora) loader · a575934 feat(nora) panel · 0ef9093 chore(odd) task doc
+- Fase 1 (PR #155, merged): 884cff3 feat(nora) gap core · 149c06f feat(nora) loader · a575934 feat(nora) panel · 0ef9093/15a7c75 chore(odd)
+- Fase 2 (PR #156): b45fc8b feat(nora) migración RLS · dbe2bc6 feat(nora) generador determinista · 167524e feat(nora) persistencia idempotente · 2c0ec74 feat(nora) confirmación humana · cierre SDD (archive + spec materializada)
 - Review nativo: omitido — RDD switch off en este clone (clone-local: off; global: on); registro `disabled/unmanaged`; entrega por política ordinaria.

@@ -1,5 +1,5 @@
 change: nora-agenda-productiva
-status: in_progress
+status: archived
 artifact_store: openspec
 created: 2026-10-07
 issue: 149
@@ -9,6 +9,6 @@ phases:
   spec: complete
   design: complete
   tasks: complete
-  apply: pending
-  verify: pending
-  archive: pending
+  apply: complete
+  verify: complete
+  archive: complete
