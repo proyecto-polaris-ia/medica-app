@@ -1,7 +1,8 @@
 import { EmptyState } from '@/components/admin/EmptyState';
 import type { NoraView } from '@/lib/admin/nora/loader';
-import type { NoraGap } from '@/lib/admin/nora/types';
-import { clinicTimeLabel } from '@/lib/admin/timezone';
+import type { NoraGap, NoraSuggestionReason } from '@/lib/admin/nora/types';
+import { clinicDayKey, clinicTimeLabel } from '@/lib/admin/timezone';
+import { NoraSuggestionActions } from './NoraSuggestionActions';
 
 /**
  * Sección presentacional de agenda productiva (change `nora-agenda-productiva`,
@@ -44,6 +45,18 @@ function formatClinicDay(dayKey: string): string {
   const monthLabel = MONTHS_ES[Number(month) - 1] ?? month;
   return `${Number(day)} ${monthLabel} ${year}`;
 }
+
+/** Instante ISO → `5 oct 2026 10:00`, siempre en la zona de la clínica. */
+function formatClinicInstant(iso: string): string {
+  return `${formatClinicDay(clinicDayKey(iso))} ${clinicTimeLabel(iso)}`;
+}
+
+/** Motivo del reacomodo en español de México. */
+const REASON_LABELS: Record<NoraSuggestionReason, string> = {
+  gap_before: 'Hueco antes de la hora actual',
+  gap_after: 'Hueco después de la hora actual',
+  gap_between: 'Hueco entre dos citas',
+};
 
 function SummaryCard({ label, value }: { label: string; value: string }) {
   return (
@@ -103,6 +116,13 @@ export function NoraSection({ view }: { view: NoraView }) {
   const { metrics } = view;
   const groups = groupGapsByProviderDay(view);
   const totalMinutes = view.gaps.reduce((sum, gap) => sum + gap.minutes, 0);
+  const suggestions = view.suggestions ?? [];
+  const providerNameById = new Map(
+    (metrics?.providers ?? []).map((provider) => [
+      provider.providerId,
+      provider.providerName,
+    ])
+  );
 
   return (
     <section aria-label="Nora — agenda productiva" className="mb-8">
@@ -202,6 +222,39 @@ export function NoraSection({ view }: { view: NoraView }) {
               </table>
             </div>
           )}
+
+          <div className="mt-8">
+            <h3 className="mb-3 text-base font-semibold text-gray-900">
+              Sugerencias de reacomodo
+            </h3>
+            {suggestions.length === 0 ? (
+              <EmptyState message="Sin sugerencias de reacomodo para el rango seleccionado." />
+            ) : (
+              <ul className="space-y-3">
+                {suggestions.map((suggestion) => (
+                  <li
+                    key={suggestion.id}
+                    className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm"
+                  >
+                    <p className="text-sm font-medium text-gray-900">
+                      {`${
+                        providerNameById.get(suggestion.providerId) ??
+                        suggestion.providerId
+                      } · ${REASON_LABELS[suggestion.reasonCode]}`}
+                    </p>
+                    <p className="mt-1 text-sm text-gray-700">
+                      {`${formatClinicInstant(
+                        suggestion.originalStartAt
+                      )} → ${formatClinicInstant(suggestion.suggestedStartAt)}`}
+                    </p>
+                    <div className="mt-3">
+                      <NoraSuggestionActions suggestionId={suggestion.id} />
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
         </>
       )}
     </section>
