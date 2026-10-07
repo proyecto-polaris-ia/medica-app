@@ -8,6 +8,16 @@ const compat = new FlatCompat({ baseDirectory: __dirname });
 const eslintConfig = [
   ...compat.extends("next/core-web-vitals", "next/typescript"),
   {
+    rules: {
+      // Los parámetros con prefijo `_` son convención de "intencionalmente
+      // sin uso" (firmas de mocks, handlers tipados); no reportarlos.
+      "@typescript-eslint/no-unused-vars": [
+        "warn",
+        { argsIgnorePattern: "^_", varsIgnorePattern: "^_" },
+      ],
+    },
+  },
+  {
     ignores: [
       // Next.js build output:
       ".next/**",
