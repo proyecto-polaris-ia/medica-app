@@ -95,6 +95,51 @@ describe('delegation-bindings', () => {
         }),
       ).resolves.toEqual({ ok: false });
     });
+
+    it('opportunistically purges expired bindings after a successful save', async () => {
+      const upsert = vi.fn().mockResolvedValue({ data: null, error: null });
+      const select = vi.fn().mockResolvedValue({ data: ['child-1'], error: null });
+      const lt = vi.fn().mockReturnValue({ select });
+      const del = vi.fn().mockReturnValue({ lt });
+      let call = 0;
+      const from = vi.fn(() => {
+        call += 1;
+        return call === 1 ? { upsert } : { delete: del };
+      });
+      admin.mockReturnValue({ from });
+
+      const result = await saveDelegationBinding({
+        childSessionId: CHILD_SESSION_ID,
+        trustedPatientPhone: TRUSTED_PHONE,
+      });
+
+      expect(result).toEqual({ ok: true });
+      expect(del).toHaveBeenCalledTimes(1);
+      const [, cutoff] = lt.mock.calls[0] as [string, string];
+      expect(new Date(cutoff).getTime()).toBeLessThanOrEqual(Date.now());
+    });
+
+    it('does not fail the save when the opportunistic purge errors', async () => {
+      const upsert = vi.fn().mockResolvedValue({ data: null, error: null });
+      const del = vi.fn().mockReturnValue({
+        lt: vi.fn().mockReturnValue({
+          select: vi.fn().mockRejectedValue(new Error('purge boom')),
+        }),
+      });
+      let call = 0;
+      const from = vi.fn(() => {
+        call += 1;
+        return call === 1 ? { upsert } : { delete: del };
+      });
+      admin.mockReturnValue({ from });
+
+      await expect(
+        saveDelegationBinding({
+          childSessionId: CHILD_SESSION_ID,
+          trustedPatientPhone: TRUSTED_PHONE,
+        }),
+      ).resolves.toEqual({ ok: true });
+    });
   });
 
   describe('resolveDelegationBinding', () => {

@@ -118,6 +118,12 @@ d('delegation bindings data layer', () => {
     const expiredId = 'child-session-expired';
     const freshId = 'child-session-fresh';
 
+    // Seed the fresh binding first: the save now purges opportunistically, so
+    // inserting the expired row afterwards keeps it for the explicit purge.
+    await saveDelegationBinding({
+      childSessionId: freshId,
+      trustedPatientPhone: '+5215533333333',
+    });
     await getSupabaseAdmin()
       .from('agent_delegation_bindings')
       .insert({
@@ -127,10 +133,6 @@ d('delegation bindings data layer', () => {
           Date.now() - (DELEGATION_BINDING_TTL_SECONDS + 60) * 1000,
         ).toISOString(),
       });
-    await saveDelegationBinding({
-      childSessionId: freshId,
-      trustedPatientPhone: '+5215533333333',
-    });
 
     await expect(purgeExpiredDelegationBindings()).resolves.toEqual({
       ok: true,

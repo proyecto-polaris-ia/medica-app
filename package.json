@@ -22,6 +22,7 @@
     "knip": "knip",
     "sanity": "node ../sanity-kit/src/cli.ts run",
     "sanity:fast": "node ../sanity-kit/src/cli.ts run --fast",
+    "sanity:local": "SUPABASE_LOCAL=1 node ../sanity-kit/src/cli.ts run",
     "whatsapp:simulate": "node scripts/whatsapp-simulate-inbound.mjs"
   },
   "dependencies": {

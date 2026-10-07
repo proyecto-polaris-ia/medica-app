@@ -17,14 +17,6 @@ import { saveDelegationBinding } from "@/lib/agent/delegation-bindings";
 
 const MORA_SUBAGENT_NAME = "mora";
 
-type SubagentCalledLike = {
-  data?: {
-    name?: unknown;
-    toolName?: unknown;
-    childSessionId?: unknown;
-  } | null;
-};
-
 type HookAuthContext = {
   session?: {
     auth?: {
@@ -102,13 +94,16 @@ async function handleSubagentCalled(event: unknown, ctx: unknown): Promise<void>
 
     if (!result.ok) {
       console.error(
-        "[delegation-identity] No se pudo persistir el binding de identidad para Mora; sus tools negarán la consulta.",
+        `[delegation-identity] No se pudo persistir el binding de identidad para Mora (childSessionId=${childSessionId}); sus tools negarán la consulta.`,
       );
     }
   } catch (error) {
     // Degradación segura: la delegación continúa; las tools de Mora se niegan.
+    const childSessionId = extractMoraChildSessionId(event);
     console.error(
-      "[delegation-identity] Error al persistir el binding de identidad para Mora; sus tools negarán la consulta.",
+      `[delegation-identity] Error al persistir el binding de identidad para Mora${
+        childSessionId ? ` (childSessionId=${childSessionId})` : ""
+      }; sus tools negarán la consulta.`,
       error,
     );
   }
