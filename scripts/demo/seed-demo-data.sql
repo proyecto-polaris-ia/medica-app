@@ -33,13 +33,14 @@ language sql as $fn$
   on conflict (entity_key) do nothing
 $fn$;
 
--- Resuelve servicios por nombre (local) o por posición en el catálogo
--- (producción), sin depender de UUIDs fijos del catálogo.
+-- Resuelve servicios por patrón de nombre (local y producción) o por
+-- posición en el catálogo, sin depender de UUIDs fijos del catálogo.
 create function pg_temp.demo_service_id(p_idx int) returns uuid
 language sql stable as $fn$
   select coalesce(
     (select id from public.services
-      where lower(btrim(name)) = (array['valoración', 'limpieza', 'resina'])[p_idx + 1]
+      where name ilike (array['%valoració%', '%limpieza%', '%resina%'])[p_idx + 1]
+      order by length(name)
       limit 1),
     (select id from public.services order by duration_minutes, name offset p_idx limit 1)
   )
