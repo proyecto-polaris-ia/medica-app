@@ -16,6 +16,9 @@ export default {
       enabled: true,
       // Baseline ratchet (calibrated 2026-10-04 to current levels):
       // raise only as coverage improves; CI fails on regressions.
+      // Measured honestly (data suites against Supabase local) via
+      // `npm run sanity:local` — plain `npm run sanity` skips the 220+ local
+      // data tests and understates branch coverage by ~16 points.
       minLines: 70,
       minBranches: 74,
       minFunctions: 75,
