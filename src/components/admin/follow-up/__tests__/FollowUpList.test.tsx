@@ -198,6 +198,32 @@ describe('FollowUpList', () => {
     );
   });
 
+  it('relabels the draft button to "Regenerar borrador" once a draft exists and still POSTs', async () => {
+    const fetchMock = setupFetch();
+    render(<FollowUpList />);
+
+    await screen.findByText('María García');
+    await userEvent.click(
+      within(cardFor('María García')).getByRole('button', {
+        name: 'Generar borrador',
+      })
+    );
+
+    const regenerate = await within(cardFor('María García')).findByRole(
+      'button',
+      { name: 'Regenerar borrador' }
+    );
+    await userEvent.click(regenerate);
+
+    await waitFor(() => {
+      const posts = postCallsTo(fetchMock, '/api/admin/follow-up/drafts');
+      expect(posts).toHaveLength(2);
+      expect(JSON.parse((posts[1][1] as RequestInit).body as string)).toEqual({
+        patientId: MARIA_ID,
+      });
+    });
+  });
+
   it('does not reload the follow-up list when generating a draft', async () => {
     const fetchMock = setupFetch();
     render(<FollowUpList />);

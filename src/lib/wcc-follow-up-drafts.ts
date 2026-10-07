@@ -24,6 +24,8 @@ export type WccFollowUpDraftRow = {
   errorMessage: string | null;
   providerMessageId: string | null;
   approvedAt: string | null;
+  editedBy: string | null;
+  editedAt: string | null;
   sentAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -104,6 +106,8 @@ function mapDraft(r: Row, patients: Map<string, PatientInfo>): WccFollowUpDraftR
     errorMessage: (r.error_message as string | null) ?? null,
     providerMessageId: (r.provider_message_id as string | null) ?? null,
     approvedAt: (r.approved_at as string | null) ?? null,
+    editedBy: (r.edited_by as string | null) ?? null,
+    editedAt: (r.edited_at as string | null) ?? null,
     sentAt: (r.sent_at as string | null) ?? null,
     createdAt: r.created_at as string,
     updatedAt: r.updated_at as string,
@@ -129,7 +133,7 @@ export async function getWccFollowUpDrafts(
     const base = d
       .from('follow_up_message_drafts')
       .select(
-        'id, patient_id, body, template_name, status, error_message, provider_message_id, approved_at, sent_at, created_at, updated_at'
+        'id, patient_id, body, template_name, status, error_message, provider_message_id, approved_at, edited_by, edited_at, sent_at, created_at, updated_at'
       );
     const filtered = filters.status
       ? base.eq('status', filters.status)
