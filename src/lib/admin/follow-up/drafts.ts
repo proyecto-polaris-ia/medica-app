@@ -1,5 +1,6 @@
 import { getSupabaseAdmin } from '@/lib/supabase/server';
 import { ConflictError, NotFoundError } from '../errors';
+import { validateFollowUpDraftText } from './draft';
 import type { FollowUpDraft, FollowUpDraftStatus } from './types';
 
 /**
@@ -23,6 +24,8 @@ export const DRAFT_SELECT_COLUMNS = [
   'error_message',
   'approved_by',
   'approved_at',
+  'edited_by',
+  'edited_at',
   'sent_at',
   'created_by',
   'created_at',
@@ -57,6 +60,8 @@ export function mapFollowUpDraftRow(row: Record<string, unknown>): FollowUpDraft
     errorMessage: (row.error_message as string | null) ?? null,
     approvedBy: (row.approved_by as string | null) ?? null,
     approvedAt: (row.approved_at as string | null) ?? null,
+    editedBy: (row.edited_by as string | null) ?? null,
+    editedAt: (row.edited_at as string | null) ?? null,
     sentAt: (row.sent_at as string | null) ?? null,
     createdBy: (row.created_by as string | null) ?? null,
     createdAt: row.created_at as string,
@@ -94,6 +99,21 @@ async function getFollowUpDraftByDedupKey(
   }
 
   return data ? mapFollowUpDraftRow(data as unknown as Record<string, unknown>) : null;
+}
+
+/**
+ * Borrador de un paciente en una ronda (búsqueda publica por `dedup_key`).
+ *
+ * Devuelve `null` cuando no existe: la ruta `POST` decide con ese `null` si
+ * debe generar el texto o si ya hay un borrador que respetar.
+ */
+export async function findFollowUpDraftForRound(input: {
+  patientId: string;
+  roundDate: string;
+}): Promise<FollowUpDraft | null> {
+  return getFollowUpDraftByDedupKey(
+    buildDraftDedupKey(input.patientId, input.roundDate)
+  );
 }
 
 /**
@@ -182,6 +202,52 @@ export async function transitionFollowUpDraft(input: {
     throw new Error(
       (error as { message?: string } | null)?.message ??
         'Failed to update follow-up draft'
+    );
+  }
+
+  return mapFollowUpDraftRow(data as unknown as Record<string, unknown>);
+}
+
+/**
+ * Edición humana del texto de un borrador (único punto de escritura de texto).
+ *
+ * Solo es válida desde `draft`: cualquier otro estado lanza `ConflictError`
+ * (409) sin escribir, para que un borrador ya decidido o enviado sea inmutable.
+ * El texto pasa por `validateFollowUpDraftText` antes de persistir, de modo que
+ * la tabla nunca guarda texto que viole los guardrails, y se registra la
+ * auditoría `edited_by`/`edited_at` sin cambiar el estado. No envía nada.
+ */
+export async function updateFollowUpDraftBody(input: {
+  id: string;
+  body: string;
+  userId: string;
+  now?: Date;
+}): Promise<FollowUpDraft> {
+  const draft = await getFollowUpDraftById(input.id);
+  if (!draft) {
+    throw new NotFoundError('Follow-up draft');
+  }
+
+  if (draft.status !== 'draft') {
+    throw new ConflictError(
+      `Follow-up draft is already ${draft.status}; only draft can be edited.`
+    );
+  }
+
+  const body = validateFollowUpDraftText(input.body);
+  const now = (input.now ?? new Date()).toISOString();
+
+  const { data, error } = await getSupabaseAdmin()
+    .from('follow_up_message_drafts')
+    .update({ body, edited_by: input.userId, edited_at: now })
+    .eq('id', input.id)
+    .select(DRAFT_SELECT_COLUMNS)
+    .single();
+
+  if (error || !data) {
+    throw new Error(
+      (error as { message?: string } | null)?.message ??
+        'Failed to update follow-up draft body'
     );
   }
 
