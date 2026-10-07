@@ -48,6 +48,7 @@
 - [ ] T4.2 Reporte final: checks fallidos/pendientes, siguiente paso
 
 ## Registro de decisiones
+- Review nativo RDD: el envelope de consentimiento expira sin presentarse (defecto conocido del relay, 2 intentos START, lineage_created false, sin mutación). Decisión del usuario: APLAZAR el review al cierre de Fase 1 — START fresco sobre el candidato normalizado tras los commits.
 - Alcance: ambas fases, PRs apilados (usuario, hoy).
 - Design: Nora = capacidad determinista con UI (lib + loader + panel), NO agente LLM. Justificaciones: #89 (Clara determinista), Mora = tools deterministas de solo lectura, el LLM nunca decide disponibilidad ni escribe en Supabase, futura Nora conversacional sería capa de presentación sobre este núcleo.
 - Migración nueva con nomenclatura timestamp (`architecture.md §4`), no secuencial 0012-style.
