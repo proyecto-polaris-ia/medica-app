@@ -15,7 +15,7 @@ Persistencia: openspec (config.yaml: schema spec-driven, artifact_store hybrid, 
 6. [x] Apply — TDD estricto; datos contra Supabase local (`supabase start` + `db reset` + `npm run test:local`). Evidencia: 12 commits de unidad (ad302c5…791dc44), 3 slices, 22+43+21 tests nuevos en verde, suite completa 1227 passed.
 7. [x] Verify — test + lint + build. Evidencia: PASS en `verify-report.md`; `npm run lint` sin errores (2 warnings nuevos de la change, corregidos)
 8. [x] Archive — merge de deltas, mover a `archive/YYYY-MM-DD-clara-follow-up-draft-agent/`. Evidencia: deltas fusionados (3 MODIFIED en `follow-up`, 7 ADDED en `clara-drafting`); cambio movido a `openspec/changes/archive/2026-10-07-clara-follow-up-draft-agent/`
-9. [ ] Commit + push + PR — `Closes #148`
+9. [x] Commit + push + PR — Closes #148. Evidencia: 15 commits de unidad; PRs apilados #151 (base main) → #152 (base #151) → #153 (base #152, Closes #148), etiquetados type:feature; issue de follow-up #154 (plantilla HSM con parámetro de cuerpo).
 
 ## Guardrails innegociables (del issue)
 
