@@ -40,9 +40,8 @@ function draft(overrides: Partial<WccFollowUpDraftRow> = {}): WccFollowUpDraftRo
 }
 
 function setupFetch(status = 200) {
-  const fetchMock = vi.fn(
-    async (_url: string | URL, _init?: RequestInit) =>
-      Response.json({ draft: {} }, { status })
+  const fetchMock = vi.fn(async () =>
+    Response.json({ draft: {} }, { status })
   );
   global.fetch = fetchMock as unknown as typeof fetch;
   return fetchMock;
