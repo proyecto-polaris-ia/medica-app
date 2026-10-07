@@ -30,11 +30,11 @@
 - [x] T1.5 Commit de artefactos SDD (work unit)
 
 ### Fase 2 — Indicadores (PR apilado 1)
-- [ ] T2.1 Tests primero (RED) para superficie de indicadores Nora
-- [ ] T2.2 Implementación (GREEN) reutilizando la lib de métricas existente, sin duplicar
-- [ ] T2.3 Sección en panel con lecturas accionables (huecos, tasas por proveedor/día)
-- [ ] T2.4 verify: `supabase start` + `db reset` + `npm run test:local`, tsc, build
-- [ ] T2.5 Commits por unidad + push + PR 1 (decisión: crear PR al cerrar fase)
+- [x] T2.1 Tests primero (RED) para superficie de indicadores Nora (gaps 12 tests, loader 12, page +7)
+- [x] T2.2 Implementación (GREEN) reutilizando la lib de métricas existente, sin duplicar (gaps.ts, loader.ts)
+- [x] T2.3 Sección en panel con lecturas accionables (huecos, tasas por proveedor/día) (NoraSection.tsx, page.tsx)
+- [ ] T2.4 verify: `supabase start` + `db reset` + `npm run test:local`, tsc, build (verificador muyghi7b-7-4kdo en curso; unit suite ya verde: 1213 tests, tsc limpio)
+- [x] T2.5 Commits por unidad: 884cff3 (gap core), 149c06f (loader), a575934 (panel), 0ef9093 (odd doc). Push/PR: decisión del usuario al cerrar fase.
 
 ### Fase 3 — Sugerencias de reacomodo (PR apilado 2)
 - [ ] T3.1 Tests primero (RED) para generador determinista de candidatas contra disponibilidad real
@@ -56,4 +56,6 @@
 - Capability `nora-agent` (continuidad con #140; el diseño declara que NO es agente).
 
 ## Evidencia de commits
-- SDD artifacts: `docs(nora): add nora-agenda-productiva SDD change artifacts (issue #149)`
+- SDD artifacts: `docs(nora): add nora-agenda-productiva SDD change artifacts (issue #149)` c1e0e78
+- Fase 1: 884cff3 feat(nora) gap core · 149c06f feat(nora) loader · a575934 feat(nora) panel · 0ef9093 chore(odd) task doc
+- Review nativo: omitido — RDD switch off en este clone (clone-local: off; global: on); registro `disabled/unmanaged`; entrega por política ordinaria.
