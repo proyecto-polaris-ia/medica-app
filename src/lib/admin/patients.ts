@@ -65,9 +65,134 @@ function throwPatientError(error: { code?: string; message?: string } | null | u
   if (error?.code === '23505') throw new ConflictError('Contact already registered', 'contact_conflict');
   throw new Error(error?.message ?? fallback);
 }
+export const PATIENTS_DEFAULT_PAGE = 1;
+export const PATIENTS_DEFAULT_PAGE_SIZE = 20;
+export const PATIENTS_MAX_PAGE_SIZE = 100;
+
+export type PatientsPage = {
+  patients: Patient[];
+  page: number;
+  pageSize: number;
+  totalCount: number;
+  totalPages: number;
+};
+
+function parsePositiveInt(value: unknown): number | null {
+  if (typeof value !== 'number' && typeof value !== 'string') return null;
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
+/**
+ * Normaliza los parámetros de paginación de entrada (design.md, Decisión 1).
+ * `null`, `''`, `'abc'`, `0`, negativos y no enteros caen a los defaults;
+ * `pageSize` se satura a `PATIENTS_MAX_PAGE_SIZE`.
+ */
+export function normalizePatientsPagination(
+  page: unknown,
+  pageSize: unknown
+): { page: number; pageSize: number } {
+  const normalizedPage = parsePositiveInt(page) ?? PATIENTS_DEFAULT_PAGE;
+  const requestedSize = parsePositiveInt(pageSize) ?? PATIENTS_DEFAULT_PAGE_SIZE;
+  return {
+    page: normalizedPage,
+    pageSize: Math.min(requestedSize, PATIENTS_MAX_PAGE_SIZE),
+  };
+}
+
+/**
+ * Cita y escapa un término para `ilike` dentro de `.or()` (design.md, Decisión 2).
+ * Devuelve `"%término%"`: las comillas protegen `,`, `(` y `)` del separador de
+ * `.or()` y `%`/`_` se vuelven literales en lugar de comodines LIKE.
+ *
+ * Dos niveles de escape (verificado contra el PostgREST local, tarea 1.5):
+ * 1. el payload de LIKE necesita `\%`, `\_` y `\\` para ser literal;
+ * 2. el valor citado de PostgREST des-escapa un nivel (`\\` → `\`, `\%` → `%`),
+ *    así que cada barra invertida se duplica y la comilla se envía como `\"`.
+ * Con una sola barra, PostgREST la consume y `%`/`_` vuelven a ser comodines.
+ */
+export function escapePostgrestIlikeTerm(value: string): string {
+  const literalLike = value
+    .replace(/\\/g, '\\\\') // barra invertida literal
+    .replace(/%/g, '\\%') // comodín LIKE → literal
+    .replace(/_/g, '\\_'); // comodín LIKE → literal
+  const forQuotedValue = literalLike
+    .replace(/\\/g, '\\\\') // PostgREST des-escapa un nivel dentro de comillas
+    .replace(/"/g, '\\"'); // cierre del valor citado de PostgREST
+  return `"%${forQuotedValue}%"`;
+}
+
+/** Filtro `.or()` compartido por la lectura paginada y por `searchPatients`. */
+function patientsIlikeOrFilter(term: string): string {
+  const escaped = escapePostgrestIlikeTerm(term);
+  return `full_name.ilike.${escaped},phone_e164.ilike.${escaped},email.ilike.${escaped}`;
+}
+
 export async function listPatients(): Promise<Patient[]> { const { data, error } = await getSupabaseAdmin().from('patients').select(SELECT_COLUMNS).order('created_at', { ascending: false }); if (error) throw new Error(error.message); return (data ?? []).map(mapRow); }
+function totalPagesFor(totalCount: number, pageSize: number): number {
+  return Math.max(1, Math.ceil(totalCount / pageSize));
+}
+
+/** Query base del listado con el filtro opcional ya escapado (o sin filtro). */
+function patientsListQuery(term: string, head = false) {
+  const base = getSupabaseAdmin()
+    .from('patients')
+    .select(SELECT_COLUMNS, { count: 'exact', head });
+  return term ? base.or(patientsIlikeOrFilter(term)) : base;
+}
+
+/** Total exacto del listado filtrado, sin traer filas (páginas fuera de rango). */
+async function countPatients(term: string): Promise<number> {
+  const { count, error } = await patientsListQuery(term, true).range(0, 0);
+  if (error) throw new Error(error.message);
+  return count ?? 0;
+}
+
+/**
+ * Lectura paginada y filtrada del listado administrativo (design.md, Decisión 1).
+ *
+ * El filtro se aplica antes de `range()` y `totalCount` sale del `count:'exact'`
+ * del mismo query, de modo que `total`/`totalPages` describen el resultado ya
+ * filtrado. Orden estable: `created_at` desc con desempate `id` desc.
+ */
+export async function listPatientsPage(
+  input: { q?: string; page?: number; pageSize?: number } = {}
+): Promise<PatientsPage> {
+  const { page, pageSize } = normalizePatientsPagination(input.page, input.pageSize);
+  const term = (input.q ?? '').trim();
+  const from = (page - 1) * pageSize;
+  const { data, error, count } = await patientsListQuery(term)
+    .order('created_at', { ascending: false })
+    .order('id', { ascending: false })
+    .range(from, from + pageSize - 1);
+
+  if (error) {
+    // PGRST103: la página solicitada excede el total. No es un error de
+    // negocio: la lectura responde con `patients` vacío y los metadatos reales.
+    if (error.code === 'PGRST103') {
+      const totalCount = await countPatients(term);
+      return {
+        patients: [],
+        page,
+        pageSize,
+        totalCount,
+        totalPages: totalPagesFor(totalCount, pageSize),
+      };
+    }
+    throw new Error(error.message);
+  }
+
+  const totalCount = count ?? 0;
+  return {
+    patients: (data ?? []).map(mapRow),
+    page,
+    pageSize,
+    totalCount,
+    totalPages: totalPagesFor(totalCount, pageSize),
+  };
+}
 export async function getPatient(id: string): Promise<Patient | null> { const parsedId = parseUuid(id, 'id'); const { data, error } = await getSupabaseAdmin().from('patients').select(SELECT_COLUMNS).eq('id', parsedId).maybeSingle(); if (error) throw new Error(error.message); return data ? mapRow(data) : null; }
-export async function searchPatients(q: string): Promise<Patient[]> { const trimmed=q.trim(); if(!trimmed)return []; const {data,error}=await getSupabaseAdmin().from('patients').select(SELECT_COLUMNS).or(`full_name.ilike.%${trimmed}%,phone_e164.ilike.%${trimmed}%,email.ilike.%${trimmed}%`).order('created_at',{ascending:false}); if(error)throw new Error(error.message); return (data??[]).map(mapRow); }
+export async function searchPatients(q: string): Promise<Patient[]> { const trimmed=q.trim(); if(!trimmed)return []; const {data,error}=await getSupabaseAdmin().from('patients').select(SELECT_COLUMNS).or(patientsIlikeOrFilter(trimmed)).order('created_at',{ascending:false}); if(error)throw new Error(error.message); return (data??[]).map(mapRow); }
 export async function createPatient(input: PatientInput): Promise<Patient> { const {data,error}=await getSupabaseAdmin().from('patients').insert(validatePatientInput(input)).select(SELECT_COLUMNS).single(); if(error||!data) throwPatientError(error,'Failed to create patient'); return mapRow(data); }
 export async function updatePatient(id:string,input:PatientInput):Promise<Patient>{const payload=validatePatientInput(input);const parsedId=parseUuid(id,'id');const {data,error}=await getSupabaseAdmin().from('patients').update(payload).eq('id',parsedId).select(SELECT_COLUMNS).single();if(error||!data)throwPatientError(error,'Patient not found');return mapRow(data)}
 /**
