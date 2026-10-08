@@ -23,7 +23,7 @@ vi.mock("@/lib/supabase/server", () => ({
   getSupabaseAdmin: () => ({ from }),
 }));
 
-const { default: tool } = await import("../../../agent/tools/resolve-patient");
+const { default: tool } = await import("../../../agents/eva/agent/tools/resolve-patient");
 const execute = tool.execute as (input: {
   phone: string;
   fullName?: string;

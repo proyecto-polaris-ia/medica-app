@@ -41,7 +41,7 @@ vi.mock("@/lib/whatsapp/eve-escalation", () => ({
   createEveWhatsAppEscalation,
 }));
 
-const { default: tool } = await import("../../../../../agent/subagents/mora/tools/register-payment-intent");
+const { default: tool } = await import("../../../../../agents/eva/agent/subagents/mora/tools/register-payment-intent");
 const execute = tool.execute as (
   input: {
     amount?: number;

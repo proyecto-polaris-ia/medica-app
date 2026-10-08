@@ -10,7 +10,7 @@ import { getSupabaseAdmin } from '@/lib/supabase/server';
 import {
   COLLECTIONS_SECURITY_REFUSAL,
   resolveCollectionsPatientPhone,
-} from '../../../../agent/subagents/mora/identity';
+} from '../../../../agents/eva/agent/subagents/mora/identity';
 import {
   DELEGATION_BINDING_TTL_SECONDS,
   deleteDelegationBinding,

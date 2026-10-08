@@ -14,7 +14,7 @@ const appointmentLimit = vi.fn();
 
 vi.mock("@/lib/supabase/server", () => ({ getSupabaseAdmin: () => ({ from }) }));
 
-const { default: tool } = await import("../../../agent/tools/list-my-appointments");
+const { default: tool } = await import("../../../agents/eva/agent/tools/list-my-appointments");
 const execute = tool.execute as (input: { maxResults?: number }, ctx?: unknown) => Promise<unknown>;
 
 const trustedCtx = {

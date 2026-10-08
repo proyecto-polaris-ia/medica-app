@@ -10,8 +10,8 @@ import { describe, expect, it } from "vitest";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-const SKILLS_DIR = resolve(__dirname, "../../agent/skills");
-const INSTRUCTIONS_FILE = resolve(__dirname, "../../agent/instructions.md");
+const SKILLS_DIR = resolve(__dirname, "../../agents/eva/agent/skills");
+const INSTRUCTIONS_FILE = resolve(__dirname, "../../agents/eva/agent/instructions.md");
 
 function read(rel: string): string {
   const p = resolve(SKILLS_DIR, rel);
@@ -49,7 +49,7 @@ describe("Eve stage-4 skills", () => {
   });
 
   it("updates instructions to reference the three Eva skills and preserve guardrails", () => {
-    expect(existsSync(INSTRUCTIONS_FILE), "agent/instructions.md must exist").toBe(true);
+    expect(existsSync(INSTRUCTIONS_FILE), "agents/eva/agent/instructions.md must exist").toBe(true);
     const text = readFileSync(INSTRUCTIONS_FILE, "utf-8").toLowerCase();
 
     for (const skill of [

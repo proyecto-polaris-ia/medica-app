@@ -21,7 +21,7 @@ import type { FollowUpCase } from './types';
  * la plantilla determinista de `draft.ts`.
  *
  * El provider es propio de la capacidad admin (misma convención de variables
- * que `agent/model.ts`, sin importarlo) y se lee de forma lazy en cada llamada
+ * que `agents/eva/agent/model.ts`, sin importarlo) y se lee de forma lazy en cada llamada
  * para poder rotar el entorno sin redeploy completo.
  */
 
@@ -135,7 +135,7 @@ export function createDraftProviderFromEnv(): FollowUpDraftProvider | null {
 
   if (!apiKey || !baseURL) return null;
 
-  // Misma normalización que `agent/model.ts`: el prefijo `proveedor/modelo`
+  // Misma normalización que `agents/eva/agent/model.ts`: el prefijo `proveedor/modelo`
   // se descarta porque el endpoint ya viene del `baseURL`.
   const modelName = modelId.includes('/')
     ? (modelId.split('/')[1] ?? modelId)

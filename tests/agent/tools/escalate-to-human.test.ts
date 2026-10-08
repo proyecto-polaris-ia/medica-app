@@ -5,7 +5,7 @@ const createEveWhatsAppEscalation = vi.fn();
 
 vi.mock('@/lib/whatsapp/eve-escalation', () => ({ createEveWhatsAppEscalation }));
 
-const { default: tool } = await import('../../../agent/tools/escalate-to-human');
+const { default: tool } = await import('../../../agents/eva/agent/tools/escalate-to-human');
 const execute = tool.execute as (input: {
   patientPhone?: string;
   trustedContactSource?: 'whatsapp';

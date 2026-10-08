@@ -13,7 +13,7 @@ import { describe, expect, it } from "vitest";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-const CHANNEL_FILE = resolve(__dirname, "../../../agent/channels/whatsapp.ts");
+const CHANNEL_FILE = resolve(__dirname, "../../../agents/eva/agent/channels/whatsapp.ts");
 
 describe("Eve WhatsApp channel", () => {
   it("declares a chatSdkChannel bridge and both message handlers", () => {
@@ -57,7 +57,7 @@ describe("Eve WhatsApp channel", () => {
 
 describe("trusted WhatsApp contact context", () => {
   it("formats sender phone and business number as channel-owned context", async () => {
-    const mod = await import("../../../agent/trusted-contact-context");
+    const mod = await import("../../../agents/eva/agent/trusted-contact-context");
 
     const payload = mod.buildTrustedContactSendPayload({
       text: "quiero agendar",

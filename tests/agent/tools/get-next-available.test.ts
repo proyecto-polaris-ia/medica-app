@@ -8,7 +8,7 @@ const findNextAvailable = vi.fn();
 vi.mock("@/lib/booking/catalog", () => ({ resolveServiceByName, resolveProviderByName }));
 vi.mock("@/lib/booking/next-available", () => ({ findNextAvailable }));
 
-const { default: tool } = await import("../../../agent/tools/get-next-available");
+const { default: tool } = await import("../../../agents/eva/agent/tools/get-next-available");
 const execute = tool.execute as (input: {
   serviceName: string;
   providerName: string;

@@ -36,7 +36,7 @@ const getSupabaseAdmin = vi.fn();
 
 vi.mock("@/lib/supabase/server", () => ({ getSupabaseAdmin }));
 
-const { default: tool } = await import("../../../../../agent/subagents/mora/tools/list-overdue-balances");
+const { default: tool } = await import("../../../../../agents/eva/agent/subagents/mora/tools/list-overdue-balances");
 const execute = tool.execute as (
   input: { thresholdDays?: number },
   ctx?: unknown,
