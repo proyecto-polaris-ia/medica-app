@@ -202,6 +202,8 @@ describe('ProviderLegend', () => {
           { id: 'p1', name: 'Dra. Ana', color: '#1f77b4' },
           { id: 'p2', name: 'Dr. Luis', color: null },
         ]}
+        selectedIds={[]}
+        onToggle={vi.fn()}
       />
     );
 
