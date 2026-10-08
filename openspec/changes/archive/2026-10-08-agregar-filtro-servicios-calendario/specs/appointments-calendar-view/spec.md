@@ -1,141 +1,9 @@
-# Appointments Calendar View Specification
+# Delta for Appointments Calendar View
 
-## Purpose
+**Change**: agregar-filtro-servicios-calendario
+**Baseline**: `openspec/specs/appointments-calendar-view/spec.md`
 
-Provide a calendar visualization of appointments reachable from `/appointments`,
-with month/year navigation, provider-color-coded time blocks, and a list/calendar
-toggle that preserves existing list behavior.
-
-## Requirements
-
-### Requirement: View toggle from appointments page
-The `/appointments` page MUST provide a toggle that switches between the existing
-list (`DataTable`) and the new calendar view. The toggle MUST preserve any active
-list filters and MUST share the existing loading and error states. The default
-view SHALL be the list.
-
-#### Scenario: Toggle to calendar preserves filters
-- GIVEN an authenticated admin on `/appointments` with a filter applied
-- WHEN they activate the calendar toggle
-- THEN the calendar MUST render and the applied filter MUST remain active
-
-#### Scenario: Toggle back to list keeps session
-- GIVEN the calendar is shown
-- WHEN they switch back to the list
-- THEN the `DataTable` MUST render with the same filters and no session loss
-
-### Requirement: Calendar month and year navigation
-The calendar MUST support previous/next month navigation and a year selector that
-jumps to any year. Navigation MUST NOT reload the page or drop the session.
-
-#### Scenario: Next and previous month
-- GIVEN the calendar shows March 2026
-- WHEN the user clicks next then previous
-- THEN it MUST show April 2026 then return to March 2026
-
-#### Scenario: Year jump
-- GIVEN the calendar shows 2026
-- WHEN the user selects 2027 in the year selector
-- THEN all month views MUST resolve within 2027
-
-### Requirement: Range-scoped appointment loading
-The calendar MUST load only appointments whose `start` falls within the visible
-month window via a range query (`start`/`end`), and MUST NOT load the full
-appointment table.
-
-#### Scenario: Loads visible month only
-- GIVEN the calendar shows June 2026
-- WHEN it queries the data layer
-- THEN it MUST request appointments within June 1–30 2026 and MUST NOT fetch rows outside the window
-
-### Requirement: Provider-colored appointment time blocks
-Each appointment in the visible range MUST render as a time block in its day
-column, positioned by its start/end time, and colored by its provider's `color`.
-
-#### Scenario: Block reflects provider color
-- GIVEN a provider with color `#1f77b4` has an appointment June 10 09:00–10:00
-- WHEN the calendar renders June 2026
-- THEN the June 10 block MUST appear in the 09:00–10:00 slot using `#1f77b4`
-
-### Requirement: Provider color legend
-El calendario MUST renderizar una leyenda que mapee cada proveedor del mes
-visible a su color, y los colores de la leyenda MUST coincidir con los bloques
-renderizados. La leyenda MUST listar **todos** los proveedores con citas en el
-mes visible, incluidos los que estén deseleccionados, de modo que un proveedor
-inactivo siga visible como control y pueda volver a seleccionarse. Cada entrada
-MUST ser un control de alternancia accesible: un botón con `aria-pressed` que
-refleje su estado de selección y que MUST ser operable por teclado. La entrada de
-un proveedor deseleccionado SHOULD mostrarse visualmente atenuada pero MUST
-permanecer legible. Cuando no haya filtrado de proveedores activo (sin selección
-o equivalente a "todos"), la leyenda MUST comunicar que se muestran todos los
-proveedores, preservando el comportamiento actual.
-
-#### Scenario: La leyenda conserva el universo del mes
-- GIVEN un mes visible con citas de los proveedores A y B
-- AND el proveedor B está deseleccionado
-- WHEN la leyenda renderiza
-- THEN la leyenda MUST listar tanto A como B
-- AND la entrada de B MUST permanecer como control para poder volver a seleccionarlo
-
-#### Scenario: Entrada de la leyenda alterna su estado
-- GIVEN la leyenda muestra el proveedor A como seleccionado
-- WHEN el usuario activa la entrada de A
-- THEN A MUST quedar deseleccionado en la leyenda
-- AND la cuadrícula del calendario MUST reflejar el filtrado correspondiente
-
-#### Scenario: Entrada deseleccionada atenuada pero legible
-- GIVEN un proveedor está deseleccionado
-- WHEN la leyenda renderiza su entrada
-- THEN la entrada SHOULD mostrarse visualmente atenuada
-- AND MUST permanecer legible
-- AND MUST exponer `aria-pressed` en estado no presionado
-
-#### Scenario: Sin filtrado la leyenda comunica que se muestran todos
-- GIVEN no hay filtrado de proveedores activo en el calendario
-- WHEN la leyenda renderiza
-- THEN la leyenda MUST comunicar que se muestran todos los proveedores
-- AND cada entrada MUST reflejar su estado seleccionado
-
-### Requirement: Missing provider-color fallback
-A provider without a `color` MUST fall back to a neutral color in both blocks and
-legend; the calendar MUST remain usable.
-
-#### Scenario: Provider without color
-- GIVEN a provider has no `color` set
-- WHEN the calendar renders that provider's appointments
-- THEN the blocks and legend entry MUST use a defined neutral color
-
-### Requirement: Clinic timezone rendering
-Appointment times MUST be rendered in the clinic timezone `America/Mexico_City`,
-including daylight-saving transitions.
-
-#### Scenario: DST boundary correctness
-- GIVEN an appointment stored as `timestamptz` near a DST change
-- WHEN the calendar renders it
-- THEN the displayed wall-clock time MUST be correct for `America/Mexico_City`
-
-### Requirement: Block opens existing edit flow
-Clicking a time block MUST open the existing appointment edit flow; the calendar
-SHALL NOT edit appointment data inline.
-
-#### Scenario: Click opens edit
-- GIVEN a rendered appointment block
-- WHEN the user clicks it
-- THEN the existing appointment edit UI MUST open for that record
-
-### Requirement: Calendar patient record access
-The calendar view MUST allow authenticated staff to open a read-only patient record modal by activating the patient name within a calendar appointment block.
-
-#### Scenario: Calendar patient name opens record modal
-- GIVEN an authenticated admin is viewing the appointments calendar
-- AND a calendar block is linked to patient `P1`
-- WHEN they activate the patient name inside that block
-- THEN the app MUST open a modal showing patient `P1` record information
-
-#### Scenario: Calendar block still opens appointment edit
-- GIVEN an authenticated admin is viewing the appointments calendar
-- WHEN they activate the appointment block outside the patient-name action
-- THEN the existing appointment edit flow MUST still open
+## MODIFIED Requirements
 
 ### Requirement: Filtrado multi-selección de proveedores en el calendario
 La vista de calendario MUST permitir seleccionar cero, uno o varios proveedores y
@@ -232,6 +100,8 @@ solo valor de la vista de Lista y MUST NOT alterar la semántica ni el valor de 
 - THEN el control MUST ser operable por teclado
 - AND MUST anunciar su estado presionado mediante `aria-pressed`
 - AND el estado anunciado MUST reflejar el cambio aplicado al filtrado
+
+## ADDED Requirements
 
 ### Requirement: Filtrado multi-selección de servicios en el calendario
 La vista de calendario MUST permitir seleccionar cero, uno o varios servicios y

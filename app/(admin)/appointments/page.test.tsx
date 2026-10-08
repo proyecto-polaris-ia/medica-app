@@ -466,7 +466,15 @@ const CAL_PATIENTS = [
   { id: 'patient-c', fullName: 'Paciente C' },
 ];
 
-const CAL_SERVICE = { id: 'service-1', name: 'Limpieza' };
+// Catálogo multi-servicio del calendario (#177). `CAL_SERVICE` se conserva
+// como alias retrocompatible de la primera entrada para las pruebas de #174.
+const CAL_SERVICES = [
+  { id: 'service-1', name: 'Limpieza' },
+  { id: 'service-2', name: 'Ortodoncia' },
+  { id: 'service-3', name: 'Revisión' },
+];
+
+const CAL_SERVICE = CAL_SERVICES[0];
 
 // America/Mexico_City opera en UTC-6 (sin DST): hora clínica + 6 = UTC.
 function clinicHourIso(day: number, hour: number): string {
@@ -481,12 +489,13 @@ function calAppointment(
   providerId: string,
   patientId: string,
   day: number,
-  hour: number
+  hour: number,
+  serviceId: string = CAL_SERVICE.id
 ) {
   return {
     id,
     patientId,
-    serviceId: CAL_SERVICE.id,
+    serviceId,
     providerId,
     startAt: clinicHourIso(day, hour),
     endAt: clinicHourIso(day, hour + 1),
@@ -505,10 +514,12 @@ function buildCalendarFetch({
   appointments = CAL_APPOINTMENTS,
   providers = CAL_PROVIDERS,
   patients = CAL_PATIENTS,
+  services = [CAL_SERVICE],
 }: {
   appointments?: unknown[];
   providers?: unknown[];
   patients?: unknown[];
+  services?: unknown[];
 } = {}) {
   const ok = (body: unknown) =>
     Promise.resolve({ ok: true, json: () => Promise.resolve(body) });
@@ -516,7 +527,7 @@ function buildCalendarFetch({
     if (url.startsWith('/api/admin/appointments')) return ok({ appointments });
     if (url === '/api/admin/patients') return ok({ patients });
     if (url === '/api/admin/providers') return ok({ providers });
-    if (url === '/api/admin/services') return ok({ services: [CAL_SERVICE] });
+    if (url === '/api/admin/services') return ok({ services });
     return ok({});
   });
 }
@@ -903,5 +914,637 @@ describe('/appointments calendar provider filter', () => {
       '/appointments',
       '/appointments?providerId=prov-b,prov-c',
     ]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Filtro multi-selección de servicios en el calendario (issue #177).
+// ---------------------------------------------------------------------------
+function serviceEntry(name: string | RegExp) {
+  return screen.getByRole('button', { name });
+}
+
+describe('/appointments calendar service filter', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    window.alert = vi.fn();
+    window.confirm = vi.fn(() => false);
+    searchParamsRef.value = new URLSearchParams();
+    replaceMock.mockClear();
+  });
+
+  it('3.1 seleccionar solo un servicio muestra únicamente sus citas', async () => {
+    global.fetch = buildCalendarFetch({
+      services: CAL_SERVICES,
+      providers: [CAL_PROVIDERS[0]],
+      patients: [CAL_PATIENTS[0], CAL_PATIENTS[1]],
+      appointments: [
+        calAppointment('appt-x', 'prov-a', 'patient-a', 10, 8, 'service-1'),
+        calAppointment('appt-y', 'prov-a', 'patient-b', 10, 9, 'service-2'),
+      ],
+    });
+    const user = userEvent.setup();
+    render(<AppointmentsPage />);
+
+    await openCalendar(user);
+    await waitFor(() =>
+      expect(calendarBlock(/09:00 Ortodoncia — Paciente B/)).toBeInTheDocument()
+    );
+
+    // Desde "todos" ([]) se deselecciona Y: la cuadrícula queda solo con X.
+    await user.click(serviceEntry('Ortodoncia'));
+
+    await waitFor(() => {
+      expect(calendarBlock(/08:00 Limpieza — Paciente A/)).toBeInTheDocument();
+      expect(
+        calendarBlock(/09:00 Ortodoncia — Paciente B/)
+      ).not.toBeInTheDocument();
+    });
+  });
+
+  it('3.1 con tres servicios, desactivar el intermedio deja los otros dos', async () => {
+    global.fetch = buildCalendarFetch({
+      services: CAL_SERVICES,
+      providers: [CAL_PROVIDERS[0]],
+      patients: CAL_PATIENTS,
+      appointments: [
+        calAppointment('appt-x', 'prov-a', 'patient-a', 10, 8, 'service-1'),
+        calAppointment('appt-y', 'prov-a', 'patient-b', 10, 9, 'service-2'),
+        calAppointment('appt-z', 'prov-a', 'patient-c', 10, 10, 'service-3'),
+      ],
+    });
+    const user = userEvent.setup();
+    render(<AppointmentsPage />);
+
+    await openCalendar(user);
+    await waitFor(() =>
+      expect(calendarBlock(/10:00 Revisión — Paciente C/)).toBeInTheDocument()
+    );
+
+    await user.click(serviceEntry('Ortodoncia'));
+
+    await waitFor(() => {
+      expect(calendarBlock(/08:00 Limpieza — Paciente A/)).toBeInTheDocument();
+      expect(calendarBlock(/10:00 Revisión — Paciente C/)).toBeInTheDocument();
+      expect(
+        calendarBlock(/09:00 Ortodoncia — Paciente B/)
+      ).not.toBeInTheDocument();
+    });
+  });
+
+  it('3.1 desmarcar hasta [] restaura todo y comunica "todos"', async () => {
+    global.fetch = buildCalendarFetch({
+      services: CAL_SERVICES,
+      providers: [CAL_PROVIDERS[0]],
+      patients: CAL_PATIENTS,
+      appointments: [
+        calAppointment('appt-x', 'prov-a', 'patient-a', 10, 8, 'service-1'),
+        calAppointment('appt-y', 'prov-a', 'patient-b', 10, 9, 'service-2'),
+        calAppointment('appt-z', 'prov-a', 'patient-c', 10, 10, 'service-3'),
+      ],
+    });
+    const user = userEvent.setup();
+    render(<AppointmentsPage />);
+
+    await openCalendar(user);
+    await waitFor(() =>
+      expect(calendarBlock(/09:00 Ortodoncia — Paciente B/)).toBeInTheDocument()
+    );
+
+    await user.click(serviceEntry('Ortodoncia'));
+    await waitFor(() =>
+      expect(
+        calendarBlock(/09:00 Ortodoncia — Paciente B/)
+      ).not.toBeInTheDocument()
+    );
+    expect(
+      screen.queryByText('Mostrando todos los servicios')
+    ).not.toBeInTheDocument();
+
+    await user.click(serviceEntry('Ortodoncia'));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText('Mostrando todos los servicios')
+      ).toBeInTheDocument();
+    });
+    expect(calendarBlock(/08:00 Limpieza — Paciente A/)).toBeInTheDocument();
+    expect(calendarBlock(/09:00 Ortodoncia — Paciente B/)).toBeInTheDocument();
+    expect(calendarBlock(/10:00 Revisión — Paciente C/)).toBeInTheDocument();
+  });
+
+  it('3.2 el filtro de servicios se compone con AND con el de proveedores', async () => {
+    global.fetch = buildCalendarFetch({
+      services: CAL_SERVICES,
+      providers: [CAL_PROVIDERS[0], CAL_PROVIDERS[1]],
+      patients: CAL_PATIENTS,
+      appointments: [
+        calAppointment('appt-xa', 'prov-a', 'patient-a', 10, 8, 'service-1'),
+        calAppointment('appt-xb', 'prov-b', 'patient-b', 10, 9, 'service-1'),
+        calAppointment('appt-ya', 'prov-a', 'patient-c', 10, 10, 'service-2'),
+      ],
+    });
+    const user = userEvent.setup();
+    render(<AppointmentsPage />);
+
+    await openCalendar(user);
+    await waitFor(() =>
+      expect(calendarBlock(/10:00 Ortodoncia — Paciente C/)).toBeInTheDocument()
+    );
+
+    // Seleccionar X: deseleccionar Y.
+    await user.click(serviceEntry('Ortodoncia'));
+    await waitFor(() =>
+      expect(
+        calendarBlock(/10:00 Ortodoncia — Paciente C/)
+      ).not.toBeInTheDocument()
+    );
+
+    // Seleccionar A: deseleccionar B.
+    await user.click(legendEntry(/Dr\. Beto/));
+
+    await waitFor(() => {
+      expect(calendarBlock(/08:00 Limpieza — Paciente A/)).toBeInTheDocument();
+      expect(
+        calendarBlock(/09:00 Limpieza — Paciente B/)
+      ).not.toBeInTheDocument();
+      expect(
+        calendarBlock(/10:00 Ortodoncia — Paciente C/)
+      ).not.toBeInTheDocument();
+    });
+  });
+
+  it('3.2 el filtrado de servicios precede al agrupamiento por día', async () => {
+    global.fetch = buildCalendarFetch({
+      services: CAL_SERVICES,
+      providers: [CAL_PROVIDERS[0], CAL_PROVIDERS[1]],
+      patients: [CAL_PATIENTS[0], CAL_PATIENTS[1]],
+      appointments: [
+        calAppointment('appt-a', 'prov-a', 'patient-a', 12, 9, 'service-1'),
+        calAppointment('appt-b', 'prov-b', 'patient-b', 12, 11, 'service-2'),
+      ],
+    });
+    const user = userEvent.setup();
+    render(<AppointmentsPage />);
+
+    await openCalendar(user);
+    await waitFor(() =>
+      expect(
+        calendarBlock(/11:00 Ortodoncia — Paciente B/)
+      ).toBeInTheDocument()
+    );
+
+    await user.click(serviceEntry('Ortodoncia'));
+    await user.click(legendEntry(/Dr\. Beto/));
+
+    await waitFor(() => {
+      expect(calendarBlock(/09:00 Limpieza — Paciente A/)).toBeInTheDocument();
+      expect(
+        calendarBlock(/11:00 Ortodoncia — Paciente B/)
+      ).not.toBeInTheDocument();
+    });
+  });
+
+  it('3.3 refleja la selección de servicios en la URL con ids unidos por coma', async () => {
+    global.fetch = buildCalendarFetch({
+      services: CAL_SERVICES,
+      providers: [CAL_PROVIDERS[0]],
+      patients: CAL_PATIENTS,
+      appointments: [
+        calAppointment('appt-x', 'prov-a', 'patient-a', 10, 8, 'service-1'),
+        calAppointment('appt-y', 'prov-a', 'patient-b', 10, 9, 'service-2'),
+        calAppointment('appt-z', 'prov-a', 'patient-c', 10, 10, 'service-3'),
+      ],
+    });
+    const user = userEvent.setup();
+    render(<AppointmentsPage />);
+
+    await openCalendar(user);
+    await waitFor(() =>
+      expect(calendarBlock(/10:00 Revisión — Paciente C/)).toBeInTheDocument()
+    );
+
+    await user.click(serviceEntry('Revisión'));
+
+    await waitFor(() => {
+      expect(replaceMock).toHaveBeenCalledWith(
+        '/appointments?serviceId=service-1,service-2'
+      );
+    });
+  });
+
+  it('3.3 restaura la selección de servicios desde un deep link', async () => {
+    searchParamsRef.value = new URLSearchParams('serviceId=service-1,service-2');
+    global.fetch = buildCalendarFetch({
+      services: CAL_SERVICES,
+      providers: [CAL_PROVIDERS[0]],
+      patients: CAL_PATIENTS,
+      appointments: [
+        calAppointment('appt-x', 'prov-a', 'patient-a', 10, 8, 'service-1'),
+        calAppointment('appt-y', 'prov-a', 'patient-b', 10, 9, 'service-2'),
+        calAppointment('appt-z', 'prov-a', 'patient-c', 10, 10, 'service-3'),
+      ],
+    });
+    const user = userEvent.setup();
+    render(<AppointmentsPage />);
+
+    await openCalendar(user);
+    await waitFor(() =>
+      expect(calendarBlock(/08:00 Limpieza — Paciente A/)).toBeInTheDocument()
+    );
+
+    expect(serviceEntry('Limpieza')).toHaveAttribute('aria-pressed', 'true');
+    expect(serviceEntry('Ortodoncia')).toHaveAttribute('aria-pressed', 'true');
+    expect(serviceEntry('Revisión')).toHaveAttribute('aria-pressed', 'false');
+    expect(
+      calendarBlock(/10:00 Revisión — Paciente C/)
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText('Mostrando todos los servicios')
+    ).not.toBeInTheDocument();
+  });
+
+  it('3.3 compone providerId primero y serviceId después', async () => {
+    global.fetch = buildCalendarFetch({
+      services: CAL_SERVICES,
+      providers: [CAL_PROVIDERS[0], CAL_PROVIDERS[1]],
+      patients: CAL_PATIENTS,
+      appointments: [
+        calAppointment('appt-xa', 'prov-a', 'patient-a', 10, 8, 'service-1'),
+        calAppointment('appt-xb', 'prov-b', 'patient-b', 10, 9, 'service-1'),
+        calAppointment('appt-ya', 'prov-a', 'patient-c', 10, 10, 'service-2'),
+        calAppointment('appt-za', 'prov-a', 'patient-c', 10, 11, 'service-3'),
+      ],
+    });
+    const user = userEvent.setup();
+    render(<AppointmentsPage />);
+
+    await openCalendar(user);
+    await waitFor(() =>
+      expect(calendarBlock(/11:00 Revisión — Paciente C/)).toBeInTheDocument()
+    );
+
+    // Seleccionar X e Y: deseleccionar Z (Revisión).
+    await user.click(serviceEntry('Revisión'));
+    await waitFor(() =>
+      expect(replaceMock).toHaveBeenLastCalledWith(
+        '/appointments?serviceId=service-1,service-2'
+      )
+    );
+
+    // Seleccionar A: deseleccionar B.
+    await user.click(legendEntry(/Dr\. Beto/));
+
+    await waitFor(() => {
+      expect(replaceMock).toHaveBeenLastCalledWith(
+        '/appointments?providerId=prov-a&serviceId=service-1,service-2'
+      );
+    });
+  });
+
+  it('3.3 el deep link con ambos parámetros restaura ambos filtros', async () => {
+    searchParamsRef.value = new URLSearchParams(
+      'providerId=prov-a&serviceId=service-1,service-2'
+    );
+    global.fetch = buildCalendarFetch({
+      services: CAL_SERVICES,
+      providers: [CAL_PROVIDERS[0], CAL_PROVIDERS[1]],
+      patients: CAL_PATIENTS,
+      appointments: [
+        calAppointment('appt-xa', 'prov-a', 'patient-a', 10, 8, 'service-1'),
+        calAppointment('appt-xb', 'prov-b', 'patient-b', 10, 9, 'service-1'),
+        calAppointment('appt-ya', 'prov-a', 'patient-c', 10, 10, 'service-3'),
+        calAppointment('appt-yb', 'prov-b', 'patient-b', 10, 11, 'service-2'),
+      ],
+    });
+    const user = userEvent.setup();
+    render(<AppointmentsPage />);
+
+    await openCalendar(user);
+    await waitFor(() =>
+      expect(calendarBlock(/08:00 Limpieza — Paciente A/)).toBeInTheDocument()
+    );
+
+    expect(serviceEntry('Limpieza')).toHaveAttribute('aria-pressed', 'true');
+    expect(serviceEntry('Ortodoncia')).toHaveAttribute('aria-pressed', 'true');
+    expect(legendEntry(/Dra\. Ana/)).toHaveAttribute('aria-pressed', 'true');
+    expect(legendEntry(/Dr\. Beto/)).toHaveAttribute('aria-pressed', 'false');
+    expect(
+      calendarBlock(/09:00 Limpieza — Paciente B/)
+    ).not.toBeInTheDocument();
+    expect(
+      calendarBlock(/10:00 Revisión — Paciente C/)
+    ).not.toBeInTheDocument();
+    expect(
+      calendarBlock(/11:00 Ortodoncia — Paciente B/)
+    ).not.toBeInTheDocument();
+  });
+
+  it('3.4 la selección de servicios sobrevive el cambio Lista ↔ Calendario', async () => {
+    searchParamsRef.value = new URLSearchParams(
+      'providerId=prov-a&serviceId=service-1,service-2'
+    );
+    global.fetch = buildCalendarFetch({
+      services: CAL_SERVICES,
+      providers: [CAL_PROVIDERS[0], CAL_PROVIDERS[1]],
+      patients: CAL_PATIENTS,
+      appointments: [
+        calAppointment('appt-xa', 'prov-a', 'patient-a', 10, 8, 'service-1'),
+        calAppointment('appt-xb', 'prov-b', 'patient-b', 10, 9, 'service-1'),
+        calAppointment('appt-ya', 'prov-a', 'patient-c', 10, 10, 'service-2'),
+        calAppointment('appt-za', 'prov-a', 'patient-b', 10, 11, 'service-3'),
+      ],
+    });
+    const user = userEvent.setup();
+    render(<AppointmentsPage />);
+
+    await openCalendar(user);
+    await waitFor(() =>
+      expect(calendarBlock(/08:00 Limpieza — Paciente A/)).toBeInTheDocument()
+    );
+    const replaceCallsBefore = replaceMock.mock.calls.length;
+
+    await user.click(screen.getByRole('button', { name: /^Lista$/ }));
+    await waitFor(() =>
+      expect(screen.getAllByRole('combobox').length).toBeGreaterThan(0)
+    );
+    await user.click(screen.getByRole('button', { name: /^Calendario$/ }));
+    await waitFor(
+      () => {
+        expect(screen.getAllByTestId('weekday-label')).toHaveLength(7);
+      },
+      { timeout: 10000 }
+    );
+
+    await waitFor(() =>
+      expect(calendarBlock(/08:00 Limpieza — Paciente A/)).toBeInTheDocument()
+    );
+    expect(serviceEntry('Limpieza')).toHaveAttribute('aria-pressed', 'true');
+    expect(serviceEntry('Ortodoncia')).toHaveAttribute('aria-pressed', 'true');
+    expect(serviceEntry('Revisión')).toHaveAttribute('aria-pressed', 'false');
+    expect(legendEntry(/Dra\. Ana/)).toHaveAttribute('aria-pressed', 'true');
+    expect(calendarBlock(/10:00 Ortodoncia — Paciente C/)).toBeInTheDocument();
+    expect(
+      calendarBlock(/11:00 Revisión — Paciente B/)
+    ).not.toBeInTheDocument();
+    expect(replaceMock.mock.calls.length).toBe(replaceCallsBefore);
+  });
+
+  it('3.5 "Limpiar filtros" reinicia ambos filtros con una sola escritura', async () => {
+    searchParamsRef.value = new URLSearchParams(
+      'providerId=prov-a&serviceId=service-1'
+    );
+    global.fetch = buildCalendarFetch({
+      services: CAL_SERVICES,
+      providers: [CAL_PROVIDERS[0], CAL_PROVIDERS[1]],
+      patients: CAL_PATIENTS,
+      appointments: [
+        calAppointment('appt-xa', 'prov-a', 'patient-a', 10, 8, 'service-1'),
+        calAppointment('appt-xb', 'prov-b', 'patient-b', 10, 9, 'service-1'),
+        calAppointment('appt-ya', 'prov-a', 'patient-c', 10, 10, 'service-2'),
+      ],
+    });
+    const user = userEvent.setup();
+    render(<AppointmentsPage />);
+
+    await openCalendar(user);
+    await waitFor(() =>
+      expect(calendarBlock(/08:00 Limpieza — Paciente A/)).toBeInTheDocument()
+    );
+    expect(
+      calendarBlock(/10:00 Ortodoncia — Paciente C/)
+    ).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Limpiar filtros' }));
+
+    await waitFor(() => {
+      expect(replaceMock).toHaveBeenCalledWith('/appointments');
+    });
+    expect(replaceMock.mock.calls).toEqual([['/appointments']]);
+    expect(calendarBlock(/08:00 Limpieza — Paciente A/)).toBeInTheDocument();
+    expect(calendarBlock(/09:00 Limpieza — Paciente B/)).toBeInTheDocument();
+    expect(calendarBlock(/10:00 Ortodoncia — Paciente C/)).toBeInTheDocument();
+  });
+
+  it('3.5 el botón aparece solo con filtro activo (solo servicio)', async () => {
+    global.fetch = buildCalendarFetch({
+      services: CAL_SERVICES,
+      providers: [CAL_PROVIDERS[0]],
+      patients: [CAL_PATIENTS[0], CAL_PATIENTS[1]],
+      appointments: [
+        calAppointment('appt-x', 'prov-a', 'patient-a', 10, 8, 'service-1'),
+        calAppointment('appt-y', 'prov-a', 'patient-b', 10, 9, 'service-2'),
+      ],
+    });
+    const user = userEvent.setup();
+    render(<AppointmentsPage />);
+
+    await openCalendar(user);
+    await waitFor(() =>
+      expect(calendarBlock(/09:00 Ortodoncia — Paciente B/)).toBeInTheDocument()
+    );
+
+    expect(
+      screen.queryByRole('button', { name: 'Limpiar filtros' })
+    ).not.toBeInTheDocument();
+
+    await user.click(serviceEntry('Ortodoncia'));
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole('button', { name: 'Limpiar filtros' })
+      ).toBeInTheDocument();
+    });
+  });
+
+  it('3.6 la lista conserva su filtro de servicio de un solo valor', async () => {
+    searchParamsRef.value = new URLSearchParams('serviceId=service-1,service-2');
+    global.fetch = buildCalendarFetch({
+      services: CAL_SERVICES,
+      providers: [CAL_PROVIDERS[0]],
+      patients: [CAL_PATIENTS[0], CAL_PATIENTS[1]],
+      appointments: [
+        calAppointment('appt-x', 'prov-a', 'patient-a', 10, 8, 'service-1'),
+        calAppointment('appt-y', 'prov-a', 'patient-b', 10, 9, 'service-2'),
+      ],
+    });
+    const user = userEvent.setup();
+    render(<AppointmentsPage />);
+
+    await waitFor(() =>
+      expect(screen.getAllByRole('row').length).toBeGreaterThan(1)
+    );
+    const serviceSelect = screen.getAllByRole('combobox')[0] as HTMLSelectElement;
+    expect(serviceSelect).toHaveValue('');
+    const rowsBefore = screen.getAllByRole('row').length;
+
+    await user.selectOptions(serviceSelect, 'service-2');
+
+    await waitFor(() =>
+      expect(screen.getAllByRole('row').length).toBe(rowsBefore - 1)
+    );
+    expect(serviceSelect).toHaveValue('service-2');
+    expect(replaceMock).not.toHaveBeenCalled();
+  });
+
+  it('3.6 ids desconocidos en la URL no rompen el calendario', async () => {
+    searchParamsRef.value = new URLSearchParams('serviceId=service-1,desconocido');
+    global.fetch = buildCalendarFetch({
+      services: CAL_SERVICES,
+      providers: [CAL_PROVIDERS[0]],
+      patients: [CAL_PATIENTS[0], CAL_PATIENTS[1]],
+      appointments: [
+        calAppointment('appt-x', 'prov-a', 'patient-a', 10, 8, 'service-1'),
+        calAppointment('appt-y', 'prov-a', 'patient-b', 10, 9, 'service-2'),
+      ],
+    });
+    const user = userEvent.setup();
+    render(<AppointmentsPage />);
+
+    await openCalendar(user);
+    await waitFor(() =>
+      expect(calendarBlock(/08:00 Limpieza — Paciente A/)).toBeInTheDocument()
+    );
+
+    // El control conserva el universo del mes: X e Y siguen como controles.
+    expect(serviceEntry('Limpieza')).toHaveAttribute('aria-pressed', 'true');
+    expect(serviceEntry('Ortodoncia')).toHaveAttribute('aria-pressed', 'false');
+    expect(
+      calendarBlock(/09:00 Ortodoncia — Paciente B/)
+    ).not.toBeInTheDocument();
+  });
+
+  it('3.6 la fila con el control de servicios es usable y conserva el layout', async () => {
+    global.fetch = buildCalendarFetch({
+      services: CAL_SERVICES,
+      providers: [CAL_PROVIDERS[0]],
+      patients: [CAL_PATIENTS[0], CAL_PATIENTS[1]],
+      appointments: [
+        calAppointment('appt-x', 'prov-a', 'patient-a', 10, 8, 'service-1'),
+        calAppointment('appt-y', 'prov-a', 'patient-b', 10, 9, 'service-2'),
+      ],
+    });
+    const user = userEvent.setup();
+    render(<AppointmentsPage />);
+
+    await openCalendar(user);
+
+    expect(screen.getByText('Servicios:')).toBeInTheDocument();
+    expect(legendEntry(/Dra\. Ana/)).toBeInTheDocument();
+
+    const nav = screen.getByRole('button', { name: 'Mes anterior' });
+    const row = nav.parentElement!.parentElement!;
+    expect(row.className).toContain('flex-col');
+    expect(row.className).toContain('gap-4');
+    expect(row.className).toContain('sm:flex-row');
+    expect(row.className).toContain('sm:items-center');
+    expect(row.className).toContain('sm:justify-between');
+  });
+
+  it('3.7 el centinela serviceId=all se parsea a "todos"', async () => {
+    searchParamsRef.value = new URLSearchParams('serviceId=all');
+    global.fetch = buildCalendarFetch({
+      services: CAL_SERVICES,
+      providers: [CAL_PROVIDERS[0]],
+      patients: [CAL_PATIENTS[0], CAL_PATIENTS[1]],
+      appointments: [
+        calAppointment('appt-x', 'prov-a', 'patient-a', 10, 8, 'service-1'),
+        calAppointment('appt-y', 'prov-a', 'patient-b', 10, 9, 'service-2'),
+      ],
+    });
+    const user = userEvent.setup();
+    render(<AppointmentsPage />);
+
+    await openCalendar(user);
+    await waitFor(() =>
+      expect(calendarBlock(/09:00 Ortodoncia — Paciente B/)).toBeInTheDocument()
+    );
+
+    expect(
+      screen.getByText('Mostrando todos los servicios')
+    ).toBeInTheDocument();
+    expect(serviceEntry('Limpieza')).toHaveAttribute('aria-pressed', 'true');
+    expect(serviceEntry('Ortodoncia')).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.queryByRole('button', { name: 'all' })).not.toBeInTheDocument();
+  });
+  it('13.1 alternar servicios consecutivos escribe la unión en orden sin repetir la última', async () => {
+    global.fetch = buildCalendarFetch({
+      services: CAL_SERVICES,
+      providers: [CAL_PROVIDERS[0]],
+      patients: CAL_PATIENTS,
+      appointments: [
+        calAppointment('appt-x', 'prov-a', 'patient-a', 10, 8, 'service-1'),
+        calAppointment('appt-y', 'prov-a', 'patient-b', 10, 9, 'service-2'),
+        calAppointment('appt-z', 'prov-a', 'patient-c', 10, 10, 'service-3'),
+      ],
+    });
+    const user = userEvent.setup();
+    render(<AppointmentsPage />);
+
+    await openCalendar(user);
+    await waitFor(() =>
+      expect(calendarBlock(/10:00 Revisión — Paciente C/)).toBeInTheDocument()
+    );
+
+    // Desactivar Z -> selección [X, Y].
+    await user.click(serviceEntry('Revisión'));
+    await waitFor(() =>
+      expect(replaceMock).toHaveBeenLastCalledWith(
+        '/appointments?serviceId=service-1,service-2'
+      )
+    );
+
+    // Reactivar Z -> [X, Y, Z] equivale a "todos" -> se guarda [].
+    await user.click(serviceEntry('Revisión'));
+    await waitFor(() =>
+      expect(replaceMock).toHaveBeenLastCalledWith('/appointments')
+    );
+
+    // Desactivar X -> [Y, Z].
+    await user.click(serviceEntry('Limpieza'));
+    await waitFor(() =>
+      expect(replaceMock).toHaveBeenLastCalledWith(
+        '/appointments?serviceId=service-2,service-3'
+      )
+    );
+
+    expect(replaceMock.mock.calls.map((call) => call[0])).toEqual([
+      '/appointments?serviceId=service-1,service-2',
+      '/appointments',
+      '/appointments?serviceId=service-2,service-3',
+    ]);
+  });
+
+  it('13.1 "Limpiar filtros" con solo servicio activo deja la URL en /appointments', async () => {
+    global.fetch = buildCalendarFetch({
+      services: CAL_SERVICES,
+      providers: [CAL_PROVIDERS[0]],
+      patients: [CAL_PATIENTS[0], CAL_PATIENTS[1]],
+      appointments: [
+        calAppointment('appt-x', 'prov-a', 'patient-a', 10, 8, 'service-1'),
+        calAppointment('appt-y', 'prov-a', 'patient-b', 10, 9, 'service-2'),
+      ],
+    });
+    const user = userEvent.setup();
+    render(<AppointmentsPage />);
+
+    await openCalendar(user);
+    await waitFor(() =>
+      expect(calendarBlock(/09:00 Ortodoncia — Paciente B/)).toBeInTheDocument()
+    );
+
+    await user.click(serviceEntry('Ortodoncia'));
+    await waitFor(() =>
+      expect(replaceMock).toHaveBeenLastCalledWith(
+        '/appointments?serviceId=service-1'
+      )
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Limpiar filtros' }));
+
+    await waitFor(() =>
+      expect(replaceMock).toHaveBeenLastCalledWith('/appointments')
+    );
+    expect(calendarBlock(/09:00 Ortodoncia — Paciente B/)).toBeInTheDocument();
   });
 });
