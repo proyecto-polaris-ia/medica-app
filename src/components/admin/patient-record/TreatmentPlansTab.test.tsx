@@ -45,8 +45,13 @@ const PLAN_WITH_ITEMS: TreatmentPlanWithItems = {
   ],
 };
 
-function buildFetchMock(overrides: { providers?: unknown[] } = {}) {
+function buildFetchMock(
+  overrides: { providers?: unknown[]; treatmentPlansById?: Record<string, TreatmentPlanWithItems> } = {}
+) {
   const providers = overrides.providers ?? [PROVIDER];
+  const treatmentPlansById = overrides.treatmentPlansById ?? { [PLAN_ID]: PLAN_WITH_ITEMS };
+  const detailPrefix = `/api/admin/patients/${PATIENT_ID}/treatment-plans/`;
+
   return vi.fn().mockImplementation((url: string | URL, init?: RequestInit) => {
     const urlString = url.toString();
 
@@ -54,12 +59,20 @@ function buildFetchMock(overrides: { providers?: unknown[] } = {}) {
       return Promise.resolve({ ok: true, json: () => Promise.resolve({ providers }) });
     }
 
-    if (urlString === `/api/admin/patients/${PATIENT_ID}/treatment-plans/${PLAN_ID}` && !init?.method) {
-      return Promise.resolve({ ok: true, json: () => Promise.resolve({ treatmentPlan: PLAN_WITH_ITEMS }) });
-    }
+    if (urlString.startsWith(detailPrefix)) {
+      const planId = urlString.slice(detailPrefix.length);
 
-    if (urlString === `/api/admin/patients/${PATIENT_ID}/treatment-plans/${PLAN_ID}` && init?.method === 'DELETE') {
-      return Promise.resolve({ ok: true, status: 204 });
+      if (!init?.method) {
+        const treatmentPlan = treatmentPlansById[planId];
+        if (treatmentPlan) {
+          return Promise.resolve({ ok: true, json: () => Promise.resolve({ treatmentPlan }) });
+        }
+        return Promise.resolve({ ok: false, status: 404, json: () => Promise.resolve({}) });
+      }
+
+      if (init.method === 'DELETE') {
+        return Promise.resolve({ ok: true, status: 204 });
+      }
     }
 
     return Promise.resolve({ ok: false, status: 404, text: () => Promise.resolve('Not found') });
@@ -223,6 +236,176 @@ describe('TreatmentPlansTab', () => {
     await waitFor(() => {
       expect(screen.getByText('Editar plan de tratamiento')).toBeInTheDocument();
     });
+  });
+
+  it('opens the detail modal for the clicked plan card', async () => {
+    const fetchMock = buildFetchMock();
+    global.fetch = fetchMock;
+    const user = userEvent.setup();
+
+    render(
+      <TreatmentPlansTab
+        patientId={PATIENT_ID}
+        treatmentPlans={[BASE_PLAN]}
+        onPlansChanged={vi.fn()}
+        loading={false}
+        error={null}
+      />
+    );
+
+    const card = await screen.findByRole('button', { name: /ver detalle del plan plan inicial/i });
+    await user.click(within(card).getByText('Plan inicial'));
+
+    expect(await screen.findByText('Limpieza')).toBeInTheDocument();
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith(
+      `/api/admin/patients/${PATIENT_ID}/treatment-plans/${PLAN_ID}`
+    );
+  });
+
+  it('opens the correct plan detail when several plans are listed', async () => {
+    const presentedPlan: TreatmentPlan = {
+      ...BASE_PLAN,
+      id: 'plan-2',
+      name: 'Plan presentado',
+      status: 'presented',
+    };
+    const presentedPlanWithItems: TreatmentPlanWithItems = {
+      ...presentedPlan,
+      items: [{ ...PLAN_WITH_ITEMS.items[0], id: 'item-2', treatmentPlanId: 'plan-2', description: 'Ortodoncia' }],
+    };
+
+    const fetchMock = buildFetchMock({
+      treatmentPlansById: { [PLAN_ID]: PLAN_WITH_ITEMS, 'plan-2': presentedPlanWithItems },
+    });
+    global.fetch = fetchMock;
+    const user = userEvent.setup();
+
+    render(
+      <TreatmentPlansTab
+        patientId={PATIENT_ID}
+        treatmentPlans={[BASE_PLAN, presentedPlan]}
+        onPlansChanged={vi.fn()}
+        loading={false}
+        error={null}
+      />
+    );
+
+    const presentedCard = await screen.findByRole('button', {
+      name: /ver detalle del plan plan presentado/i,
+    });
+    await user.click(within(presentedCard).getByText('Plan presentado'));
+
+    expect(await screen.findByText('Ortodoncia')).toBeInTheDocument();
+    expect(screen.queryByText('Limpieza')).not.toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith(
+      `/api/admin/patients/${PATIENT_ID}/treatment-plans/plan-2`
+    );
+  });
+
+  it('opens the detail modal from the Ver detalle button with the keyboard', async () => {
+    global.fetch = buildFetchMock();
+    const user = userEvent.setup();
+
+    render(
+      <TreatmentPlansTab
+        patientId={PATIENT_ID}
+        treatmentPlans={[BASE_PLAN]}
+        onPlansChanged={vi.fn()}
+        loading={false}
+        error={null}
+      />
+    );
+
+    const detailButton = await screen.findByRole('button', { name: 'Ver detalle' });
+    detailButton.focus();
+    expect(detailButton).toHaveFocus();
+
+    await user.keyboard('{Enter}');
+
+    expect(await screen.findByText('Limpieza')).toBeInTheDocument();
+  });
+
+  it('opens the edit form from the detail view of a draft plan and closes the detail', async () => {
+    global.fetch = buildFetchMock();
+    const user = userEvent.setup();
+
+    render(
+      <TreatmentPlansTab
+        patientId={PATIENT_ID}
+        treatmentPlans={[BASE_PLAN]}
+        onPlansChanged={vi.fn()}
+        loading={false}
+        error={null}
+      />
+    );
+
+    await user.click(await screen.findByRole('button', { name: 'Ver detalle' }));
+    await screen.findByText('Limpieza');
+
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Editar' }));
+
+    expect(await screen.findByText('Editar plan de tratamiento')).toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.queryByText('Limpieza')).not.toBeInTheDocument();
+  });
+
+  it('keeps a non-draft plan read-only in the card and in the detail view', async () => {
+    const acceptedPlan: TreatmentPlan = {
+      ...BASE_PLAN,
+      name: 'Plan aceptado',
+      status: 'accepted',
+    };
+    const acceptedPlanWithItems: TreatmentPlanWithItems = { ...PLAN_WITH_ITEMS, ...acceptedPlan };
+
+    global.fetch = buildFetchMock({ treatmentPlansById: { [PLAN_ID]: acceptedPlanWithItems } });
+    const user = userEvent.setup();
+
+    render(
+      <TreatmentPlansTab
+        patientId={PATIENT_ID}
+        treatmentPlans={[acceptedPlan]}
+        onPlansChanged={vi.fn()}
+        loading={false}
+        error={null}
+      />
+    );
+
+    const card = await screen.findByRole('button', {
+      name: /ver detalle del plan plan aceptado/i,
+    });
+    expect(within(card).queryByRole('button', { name: /editar/i })).not.toBeInTheDocument();
+    expect(within(card).queryByRole('button', { name: /eliminar/i })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Ver detalle' }));
+
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).queryByRole('button', { name: 'Editar' })).not.toBeInTheDocument();
+    expect(within(dialog).queryByRole('button', { name: 'Eliminar' })).not.toBeInTheDocument();
+  });
+
+  it('keeps the plans list intact after closing the detail view', async () => {
+    global.fetch = buildFetchMock();
+    const user = userEvent.setup();
+
+    render(
+      <TreatmentPlansTab
+        patientId={PATIENT_ID}
+        treatmentPlans={[BASE_PLAN]}
+        onPlansChanged={vi.fn()}
+        loading={false}
+        error={null}
+      />
+    );
+
+    await user.click(await screen.findByRole('button', { name: 'Ver detalle' }));
+    await screen.findByText('Limpieza');
+
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Cerrar' }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(screen.getByText('Plan inicial')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Ver detalle' })).toBeInTheDocument();
   });
 
   it('deletes a draft plan and refreshes the list', async () => {
