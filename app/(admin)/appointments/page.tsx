@@ -94,26 +94,6 @@ function formatDate(iso: string): string {
   return APPOINTMENT_DATE_FORMATTER.format(new Date(iso));
 }
 
-function statusLabel(status: Appointment['status']): string {
-  switch (status) {
-    case 'confirmed':
-      return 'Confirmada';
-    case 'requested':
-    case 'pending':
-      return 'Sin confirmar';
-    case 'cancelled':
-      return 'Cancelada';
-    case 'rescheduled':
-      return 'Reagendada';
-    case 'no_show':
-      return 'No asistió';
-    case 'attended':
-      return 'Atendida';
-    default:
-      return status;
-  }
-}
-
 // Nunca muestra una fecha de recordatorio inexistente: cuando no hay `sentAt`
 // cae en el estado correspondiente (programado/falló/simulado).
 function reminderLabel(reminder: AppointmentReminderSummary): string {
@@ -264,9 +244,11 @@ export default function AppointmentsPage() {
       startAt: appointment.startAt,
       endAt: appointment.endAt,
       status: appointment.status,
+      providerName: refName(providers, appointment.providerId),
+      notes: appointment.notes,
     }));
     return groupAppointmentsByDay(enriched, providerColor);
-  }, [calendarAppointments, patients, services, providerColor]);
+  }, [calendarAppointments, patients, services, providers, providerColor]);
 
   const visibleProviders = useMemo(() => {
     const providerIds = new Set(appointments.map((a) => a.providerId));

@@ -238,6 +238,10 @@ export type CalendarBlock = {
   startLabel: string;
   color: string;
   status: import('./types').AppointmentStatus;
+  // Opcionales: los consumidores que ya los tienen a la mano los copian para
+  // mostrarlos en el modal de citas del día.
+  providerName?: string;
+  notes?: string | null;
 };
 
 export function groupAppointmentsByDay(
@@ -250,6 +254,8 @@ export function groupAppointmentsByDay(
     endAt: string;
     status: import('./types').AppointmentStatus;
     patientId?: string | null;
+    providerName?: string;
+    notes?: string | null;
   }>,
   providerColor: (providerId: string) => string,
   timeZone: string = CLINIC_TZ
@@ -268,6 +274,14 @@ export function groupAppointmentsByDay(
       color: providerColor(appointment.providerId),
       status: appointment.status,
     };
+
+    // Se copian solo si vienen presentes: no se inventan valores.
+    if (appointment.providerName !== undefined) {
+      block.providerName = appointment.providerName;
+    }
+    if (appointment.notes !== undefined) {
+      block.notes = appointment.notes;
+    }
 
     if (!groups[dayKey]) {
       groups[dayKey] = [];
