@@ -10,12 +10,12 @@ tools conversacionales para doctores.
 
 1. [x] Explorar lógica existente y patrón de agentes raíz (sdd-explore) — Ready for Proposal: yes
 2. [x] SDD: proposal + spec (nora-agent, nora-discord-channel, nora-metrics-tools) + design + tasks
-3. [ ] Aplicar: estructura `agents/nora/agent/` (agent.ts, model.ts, instructions.md, channels/discord.ts)
-4. [ ] Aplicar: tools de Nora (dashboard-summary, provider-metrics, occupancy, no-shows, appointment-stats)
-5. [ ] Aplicar: skills e instructions con guardrails de dominio
-6. [ ] Aplicar: tests RED→GREEN + despliegue (vercel.json, docs)
-7. [ ] Verificar suites (tsc, next build, test, test:local, eve build/info 4 agentes)
-8. [ ] Archivar SDD + PR
+3. [x] Aplicar: estructura `agents/nora/agent/` (agent.ts, model.ts, instructions.md, access.ts, channels/discord.ts) — 23 tests en verde; commits 92c1bad (docs) + cd5edba (feat)
+4. [x] Aplicar: tools de Nora (5 tools, 31 tests, proyecciones del motor) — commit 32a761a
+5. [x] Aplicar: skills e instructions — metrics-reporting.md, data-interpretation.md — commit fadc527
+6. [x] Aplicar: despliegue (vercel.json eve-nora, docs/nora-discord-setup.md, architecture, runbook) — commit 714bdce
+7. [x] Verificar suites — tsc OK (fix c6986f4), test 1697, test:local 1968, eve info 4 agentes, builds OK
+8. [x] Archivar SDD — archive/2026-10-09-fase-5-nora-agente-raiz-discord + deltas promovidos (nora-agent, nora-discord-channel, nora-metrics-tools)
 
 ## Evidence
 
