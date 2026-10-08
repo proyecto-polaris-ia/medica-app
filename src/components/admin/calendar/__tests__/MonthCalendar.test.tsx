@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MonthCalendar } from '../MonthCalendar';
 import { CalendarNav } from '../CalendarNav';
@@ -156,6 +156,89 @@ describe('MonthCalendar', () => {
 
     const chip = screen.getByRole('button', { name: /11:00 Cancelada/ });
     expect(chip.className).toContain('opacity');
+  });
+
+  const overflowDayKey = '2026-06-15';
+  const overflowBlocks: CalendarBlock[] = [
+    '08:00',
+    '09:00',
+    '10:00',
+    '11:00',
+    '12:00',
+    '13:00',
+  ].map((startLabel, index) => ({
+    id: `overflow-${index + 1}`,
+    label: `Servicio ${index + 1} — Paciente ${index + 1}`,
+    patientId: `patient-${index + 1}`,
+    patientName: `Paciente ${index + 1}`,
+    serviceName: `Servicio ${index + 1}`,
+    startLabel,
+    color: '#1f77b4',
+    status: 'confirmed' as const,
+    providerName: 'Dra. Ana',
+  }));
+
+  it('renders the overflow as an accessible native button', () => {
+    render(
+      <MonthCalendar
+        year={2026}
+        month={6}
+        blocksByDay={{ [overflowDayKey]: overflowBlocks }}
+        onSelectBlock={vi.fn()}
+      />
+    );
+
+    const overflow = screen.getByRole('button', { name: /citas más/ });
+    expect(overflow.tagName).toBe('BUTTON');
+    expect(overflow).toHaveTextContent('+2 más');
+  });
+
+  it('opens the day modal with every block, visible and hidden', async () => {
+    render(
+      <MonthCalendar
+        year={2026}
+        month={6}
+        blocksByDay={{ [overflowDayKey]: overflowBlocks }}
+        onSelectBlock={vi.fn()}
+      />
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: /citas más/ }));
+
+    const dialog = screen.getByRole('dialog');
+    const times = within(dialog)
+      .getAllByRole('button')
+      .map((element) => element.getAttribute('aria-label') ?? '')
+      .map((label) => label.slice(0, 5))
+      .filter((time) => /^\d{2}:\d{2}$/.test(time));
+    expect(times).toEqual([
+      '08:00',
+      '09:00',
+      '10:00',
+      '11:00',
+      '12:00',
+      '13:00',
+    ]);
+  });
+
+  it('selects a block from the day modal and closes it', async () => {
+    const onSelectBlock = vi.fn();
+    render(
+      <MonthCalendar
+        year={2026}
+        month={6}
+        blocksByDay={{ [overflowDayKey]: overflowBlocks }}
+        onSelectBlock={onSelectBlock}
+      />
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: /citas más/ }));
+    const dialog = screen.getByRole('dialog');
+    const row = within(dialog).getByRole('button', { name: /10:00/ });
+    await userEvent.click(within(row).getByText('10:00'));
+
+    expect(onSelectBlock).toHaveBeenCalledWith('overflow-3');
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 });
 

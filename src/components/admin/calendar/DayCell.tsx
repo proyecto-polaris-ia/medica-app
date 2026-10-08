@@ -7,12 +7,22 @@ const MAX_VISIBLE_BLOCKS = 4;
 type DayCellProps = {
   day: number;
   inMonth: boolean;
+  dayKey: string | null;
   blocks: CalendarBlock[];
   onSelectBlock: (id: string) => void;
   onSelectPatient?: (patientId: string) => void;
+  onSelectDay?: (dayKey: string) => void;
 };
 
-export function DayCell({ day, inMonth, blocks, onSelectBlock, onSelectPatient }: DayCellProps) {
+export function DayCell({
+  day,
+  inMonth,
+  dayKey,
+  blocks,
+  onSelectBlock,
+  onSelectPatient,
+  onSelectDay,
+}: DayCellProps) {
   const visibleBlocks = blocks.slice(0, MAX_VISIBLE_BLOCKS);
   const overflowCount = blocks.length - visibleBlocks.length;
 
@@ -71,7 +81,16 @@ export function DayCell({ day, inMonth, blocks, onSelectBlock, onSelectPatient }
           </div>
         ))}
         {overflowCount > 0 && (
-          <span className="text-xs text-gray-500">+{overflowCount} más</span>
+          <button
+            type="button"
+            onClick={() => {
+              if (dayKey) onSelectDay?.(dayKey);
+            }}
+            aria-label={`Ver ${overflowCount} citas más de este día`}
+            className="cursor-pointer text-left text-xs font-medium text-blue-600 underline underline-offset-2 hover:text-blue-800"
+          >
+            +{overflowCount} más
+          </button>
         )}
       </div>
     </div>

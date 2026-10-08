@@ -1,6 +1,8 @@
+import { useState } from 'react';
 import { getCalendarGrid } from '@/lib/admin/timezone';
 import type { CalendarBlock } from '@/lib/admin/timezone';
 import { DayCell } from './DayCell';
+import { DayAppointmentsModal } from './DayAppointmentsModal';
 
 const WEEKDAY_LABELS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
 
@@ -20,6 +22,8 @@ export function MonthCalendar({
   onSelectPatient,
 }: MonthCalendarProps) {
   const grid = getCalendarGrid(year, month);
+  // Día cuyo desbordamiento "+N más" está abierto en el modal, o `null`.
+  const [overflowDayKey, setOverflowDayKey] = useState<string | null>(null);
 
   return (
     <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
@@ -40,12 +44,24 @@ export function MonthCalendar({
             key={index}
             day={cell.day}
             inMonth={cell.inMonth}
+            dayKey={cell.dayKey}
             blocks={cell.dayKey ? blocksByDay[cell.dayKey] ?? [] : []}
             onSelectBlock={onSelectBlock}
             onSelectPatient={onSelectPatient}
+            onSelectDay={setOverflowDayKey}
           />
         ))}
       </div>
+
+      {overflowDayKey && (
+        <DayAppointmentsModal
+          dayKey={overflowDayKey}
+          blocks={blocksByDay[overflowDayKey] ?? []}
+          onClose={() => setOverflowDayKey(null)}
+          onSelectBlock={onSelectBlock}
+          onSelectPatient={onSelectPatient}
+        />
+      )}
     </div>
   );
 }
