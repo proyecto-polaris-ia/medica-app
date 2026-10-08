@@ -105,32 +105,32 @@ seguimiento", "Tool de lectura de la lista diaria", "Tool de reglas de
 segmentación", "Tool de lectura del borrador existente" y "Solo datos de la base
 y sin fuga entre pacientes".
 
-- [ ] 3.1 **RED:** crear `tests/agent/clara/tools/list-follow-up-cases.test.ts`.
+- [x] 3.1 **RED:** crear `tests/agent/clara/tools/list-follow-up-cases.test.ts`.
   Casos: devuelve los casos con `reason` / `reasonLabel` / `roundDate`; sin
   autorización ⇒ error y **cero** consultas a Supabase; falla de lectura ⇒
   `{ success: false, error }` sin datos inventados; los contactados/descartados
   de la ronda no aparecen.
-- [ ] 3.2 **GREEN:** crear `agents/clara/agent/tools/list-follow-up-cases.ts`
+- [x] 3.2 **GREEN:** crear `agents/clara/agent/tools/list-follow-up-cases.ts`
   envolviendo `listDailyFollowUpCases` (`src/lib/admin/follow-up/follow-up.ts:190`),
   `input: z.object({})`, salida de §4.1. `resolveClaraAccess` como primer paso.
-- [ ] 3.3 **RED:** crear `tests/agent/clara/tools/get-follow-up-rules.test.ts`.
+- [x] 3.3 **RED:** crear `tests/agent/clara/tools/get-follow-up-rules.test.ts`.
   Casos: los valores coinciden con `src/lib/admin/follow-up/config.ts`
   (`NO_SHOW_WINDOW_DAYS=90`, `STALLED_TREATMENT_DAYS=45`,
   `INACTIVE_PATIENT_MONTHS=6` / `INACTIVE_PATIENT_DAYS=180`,
   `UNANSWERED_QUOTE_DAYS=21`, `FOLLOW_UP_REASON_PRIORITY`); `reasonPriority`
   respeta el orden; las etiquetas coinciden con `followUpReasonLabel`
   (`rules.ts:176`); `roundDate` con `currentRoundDate` (`follow-up.ts:179`).
-- [ ] 3.4 **GREEN:** crear `agents/clara/agent/tools/get-follow-up-rules.ts`
+- [x] 3.4 **GREEN:** crear `agents/clara/agent/tools/get-follow-up-rules.ts`
   con `input: z.object({})` y salida de §4.1, leyendo las constantes importadas
   sin repetirlas en texto literal.
-- [ ] 3.5 **RED:** crear `tests/agent/clara/tools/get-follow-up-draft.test.ts`.
+- [x] 3.5 **RED:** crear `tests/agent/clara/tools/get-follow-up-draft.test.ts`.
   Casos: con borrador ⇒ `found: true` con estado y texto; sin borrador ⇒
   `found: false`; nombre ambiguo ⇒ `candidates`; sin autorización ⇒ error **sin**
   consulta; nunca crea ni modifica.
-- [ ] 3.6 **GREEN:** crear `agents/clara/agent/tools/get-follow-up-draft.ts`
+- [x] 3.6 **GREEN:** crear `agents/clara/agent/tools/get-follow-up-draft.ts`
   envolviendo `findFollowUpDraftForRound` (`src/lib/admin/follow-up/drafts.ts:110`)
   y `resolvePatient` (§D3), schema y salidas de §4.1.
-- [ ] 3.7 **TRIANGULATE lectura:** comparar la lista devuelta por
+- [x] 3.7 **TRIANGULATE lectura:** comparar la lista devuelta por
   `list-follow-up-cases` con `listDailyFollowUpCases` para la misma fecha de
   referencia (identidad con el panel admin, mismos pacientes/motivos/orden);
   verificar que una consulta por paciente no expone datos de otros pacientes.
@@ -143,7 +143,7 @@ borrador", "Tool de transición de borrador limitada a aprobado o rechazado",
 del estado de contacto y de los borradores" y "El envío queda fuera del set de
 tools"; `clara-drafting` → "Sin canal de WhatsApp ni capacidad de envío".
 
-- [ ] 4.1 **RED:** crear
+- [x] 4.1 **RED:** crear
   `tests/agent/clara/tools/draft-follow-up-message.test.ts`. Casos: sin llaves
   del LLM ⇒ persiste plantilla (`source: "template"`) y no falla; LLM que lanza
   ⇒ plantilla; LLM que excede timeout (`DRAFT_LLM_TIMEOUT_MS`, 8 s) ⇒ plantilla;
@@ -152,25 +152,25 @@ tools"; `clara-drafting` → "Sin canal de WhatsApp ni capacidad de envío".
   cambios; borrador `approved` ⇒ se devuelve sin llamar al LLM y sin escribir;
   caso fuera de la lista del día ⇒ `{ success: false, error }`; sin actor mapeado
   ⇒ error sin escritura.
-- [ ] 4.2 **GREEN:** crear `agents/clara/agent/tools/draft-follow-up-message.ts`
+- [x] 4.2 **GREEN:** crear `agents/clara/agent/tools/draft-follow-up-message.ts`
   con la secuencia de §4.2 y §D5: autorización → `requireClaraActor` →
   `resolveRoundCase({ patientId })` → `findFollowUpDraftForRound` →
   `generateFollowUpDraftText` (`draft-llm.ts:172`) →
   `validateFollowUpDraftText` (`draft.ts:101`) inmediatamente antes de persistir
   → `createFollowUpDraft` (`drafts.ts:126`) o
   `updateFollowUpDraftBody` (`drafts.ts:220`). Nunca en lote.
-- [ ] 4.3 **RED:** crear
+- [x] 4.3 **RED:** crear
   `tests/agent/clara/tools/transition-follow-up-draft.test.ts`. Casos:
   `approved`/`rejected` desde `draft` ⇒ estado nuevo y sin envío; `decision:
   "sent"`/`"sent_failed"` es rechazada por el schema; borrador ya decidido ⇒
   error y sin cambios; sin actor ⇒ error sin escritura; no existe fila nueva en
   `whatsapp_messages`.
-- [ ] 4.4 **GREEN:** crear
+- [x] 4.4 **GREEN:** crear
   `agents/clara/agent/tools/transition-follow-up-draft.ts` con
   `decision: z.enum(["approved", "rejected"])` (§D6) delegando en
   `transitionFollowUpDraft` (`drafts.ts:170`) y traduciendo `ConflictError` /
   `NotFoundError` (`src/lib/admin/errors.ts`) a `{ success: false, error }`.
-- [ ] 4.5 **RED:** crear
+- [x] 4.5 **RED:** crear
   `tests/agent/clara/tools/mark-contact-attempted.test.ts`. Casos: persiste
   `contacted` con `contacted_at` y `created_by` = UUID del mapa; el paciente
   desaparece de la lista de la ronda; segunda marca ⇒ mismo registro (upsert en
@@ -178,16 +178,16 @@ tools"; `clara-drafting` → "Sin canal de WhatsApp ni capacidad de envío".
   la ronda ⇒ error sin escritura; sin actor mapeado ⇒ error sin escritura; sin
   autorización ⇒ error sin lectura ni escritura; `note` mayor a
   `MAX_NOTES_LENGTH` (1000) ⇒ `ValidationError` reportado como error de tool.
-- [ ] 4.6 **GREEN:** crear `agents/clara/agent/tools/mark-contact-attempted.ts`
+- [x] 4.6 **GREEN:** crear `agents/clara/agent/tools/mark-contact-attempted.ts`
   envolviendo `markFollowUpContact` (`follow-up.ts:290`) con `status:
   "contacted"` fijo, secuencia y schema de §4.2.
-- [ ] 4.7 **RED:** crear
+- [x] 4.7 **RED:** crear
   `tests/agent/clara/tools/dismiss-follow-up.test.ts`. Casos: persiste
   `dismissed` con `dismissed_at` y actor; idempotencia; mismos negativos que
   4.5.
-- [ ] 4.8 **GREEN:** crear `agents/clara/agent/tools/dismiss-follow-up.ts` con
+- [x] 4.8 **GREEN:** crear `agents/clara/agent/tools/dismiss-follow-up.ts` con
   `status: "dismissed"` fijo, misma firma, módulo e idempotencia que 4.6.
-- [ ] 4.9 **TRIANGULATE escritura:** confirmar con los tests (y un grep
+- [x] 4.9 **TRIANGULATE escritura:** confirmar con los tests (y un grep
   estructural en 1.1) que ninguna tool importa `claimFollowUpDraftForSend`,
   `markFollowUpDraftSent`, `markFollowUpDraftSentFailed`, `sendFollowUpDraft`
   (`src/lib/follow-up/send-follow-up-draft.ts:173`) ni
@@ -202,7 +202,7 @@ obligatorio a humano", "Sin canal de WhatsApp y sin capacidad de envío", "Skill
 de apoyo cargables", "Idioma y tono de las respuestas" y "Alcance limitado al
 seguimiento de pacientes".
 
-- [ ] 5.1 **RED:** extender `tests/agent/clara/structure.test.ts` con los
+- [x] 5.1 **RED:** extender `tests/agent/clara/structure.test.ts` con los
   guardrails textuales de las instrucciones y las skills (patrón de
   `tests/agent/mora/structure.test.ts`): presencia de "no diagnostico", "no
   receto", "precio", "disponibilidad", escalamiento (dolor fuerte, urgencia,
@@ -210,17 +210,17 @@ seguimiento de pacientes".
   `drafting-guidelines.md` documente `MAX_DRAFT_LENGTH` (600), el fallback
   determinista y el ciclo `draft → approved | rejected`; que ninguna skill
   introduzca umbrales/prioridades propios. Capturar el fallo observado.
-- [ ] 5.2 **GREEN (instrucciones):** crear
+- [x] 5.2 **GREEN (instrucciones):** crear
   `agents/clara/agent/instructions.md` con el outline de §9 (identidad y alcance,
   guardrails innegociables, escalamiento, datos y autorización, ciclo del
   borrador, routing de tools, formato Discord ≤ 1,500 caracteres, habilidades y
   límites de superficie).
-- [ ] 5.3 **GREEN (skills):** crear
+- [x] 5.3 **GREEN (skills):** crear
   `agents/clara/agent/skills/follow-up-workflow.md` y
   `agents/clara/agent/skills/drafting-guidelines.md` con el outline de §10
   (markdown plano, sin frontmatter, primera línea como intención de activación;
   sin redefinir reglas, umbrales, deduplicación, prioridad ni orden).
-- [ ] 5.4 **TRIANGULATE/REFACTOR docs del agente:** `npx vitest run
+- [x] 5.4 **TRIANGULATE/REFACTOR docs del agente:** `npx vitest run
   tests/agent/clara` completo y confirmar que `structure.test.ts` queda verde
   (todos los archivos de §2 existen, el set de tools es exacto y no hay
   `package.json` ni `subagents/`).
@@ -230,20 +230,20 @@ seguimiento de pacientes".
 Verifica `clara-discord-channel` → "Canal Discord propio con ruta y comando
 propios" y la degradación graceful de credenciales (§D11, §8).
 
-- [ ] 6.1 `.eve/vercel-services/eve-clara/README.md` con el mismo texto de
+- [x] 6.1 `.eve/vercel-services/eve-clara/README.md` con el mismo texto de
   `.eve/vercel-services/eve-mora/README.md` (scaffold del servicio).
-- [ ] 6.2 `.gitignore`: agregar `!/.eve/vercel-services/eve-clara/` a
+- [x] 6.2 `.gitignore`: agregar `!/.eve/vercel-services/eve-clara/` a
   continuación de las líneas de `eve-eva` / `eve-mora`. Sin esta excepción
   Vercel no puede materializar el `root` del servicio.
-- [ ] 6.3 `vercel.json`: servicio `eve-clara` (framework `eve`, `root
+- [x] 6.3 `vercel.json`: servicio `eve-clara` (framework `eve`, `root
   ".eve/vercel-services/eve-clara"`, `buildCommand` desde `agents/clara` con
   `EVE_PUBLIC_ROUTE_PREFIX='/clara'`) con `routes` `^/clara/eve/v1/(.*)$`, y
   rewrite `/clara/eve/v1/(.*)` → servicio `eve-clara` **antes** del catch-all
   `web`, exactamente como §8. `middleware.ts` no se toca.
-- [ ] 6.4 (Opcional, no requerido por la spec) agregar en `.env.local.example`,
+- [ ] 6.4 (OMITIDA - opcional, no requerida por la spec; ver nota) agregar en `.env.local.example`,
   después de `CLARA_DRAFTING_ENABLED=false` (línea 39), `CLARA_DISCORD_STAFF_IDS`
   y `CLARA_DISCORD_ACTOR_MAP` vacías con comentario de fail-closed.
-- [ ] 6.5 Documentar en el propio change (§7 del design) la tabla de variables
+- [x] 6.5 Documentar en el propio change (§7 del design) la tabla de variables
   del servicio `eve-clara`: `DISCORD_APPLICATION_ID`, `DISCORD_BOT_TOKEN`,
   `DISCORD_PUBLIC_KEY`, `CLARA_DISCORD_STAFF_IDS`, `CLARA_DISCORD_ACTOR_MAP`,
   `WHATSAPP_AGENT_LLM_API_KEY`, `WHATSAPP_AGENT_LLM_MODEL`,
@@ -256,18 +256,18 @@ propios" y la degradación graceful de credenciales (§D11, §8).
 Verifica §12 y §D14 del design; sostiene el requirement "Canal Discord propio"
 en operación.
 
-- [ ] 7.1 Crear `docs/clara-discord-setup.md` con los 7 pasos de §11 (Developer
+- [x] 7.1 Crear `docs/clara-discord-setup.md` con los 7 pasos de §11 (Developer
   Portal, credenciales, slash command `/clara` con opción `message`, Interactions
   Endpoint URL `https://<dominio>/clara/eve/v1/discord`, variables de entorno del
   servicio, instalación OAuth2 con scopes `applications.commands` + `bot`, y la
   validación §13.2). Cerrar con la nota fail-closed y la aclaración de canal de
   staff, no de pacientes. Patrón de `docs/mora-discord-setup.md`.
-- [ ] 7.2 `docs/eve-runbook.md`: (a) insertar el bullet de Clara en la topología
+- [x] 7.2 `docs/eve-runbook.md`: (a) insertar el bullet de Clara en la topología
   después de la línea 21; (b) corregir las líneas 28-29 ("Clara y Nora NO son
   agentes de WhatsApp" ⇒ Nora no es agente raíz y Clara sí es agente raíz con
   canal Discord de staff); (c) después de la línea 31 agregar el enlace a
   `docs/clara-discord-setup.md`. Ediciones exactas de §12.1.
-- [ ] 7.3 `architecture.md` §3.2: (a) línea 66, agregar `eve-clara` →
+- [x] 7.3 `architecture.md` §3.2: (a) línea 66, agregar `eve-clara` →
   `/clara/eve/v1/*`; (b) insertar el bullet de Clara después de la línea 78
   (canal `/clara/eve/v1/discord`, las 7 tools, las 2 skills, `access.ts` con
   allowlist + mapa de actor, y "no atiende WhatsApp, no atiende pacientes, no
@@ -279,26 +279,26 @@ en operación.
 Verificación de cierre del change; todos los comandos se corren uno a la vez y
 en primer plano (`design.md` §13 y §13.1).
 
-- [ ] 8.1 `npx tsc --noEmit` sin errores.
-- [ ] 8.2 `npm run lint` sin errores nuevos.
-- [ ] 8.3 `npm run test` en verde (incluye `tests/agent/clara/**` y conserva
+- [x] 8.1 `npx tsc --noEmit` sin errores.
+- [x] 8.2 `npm run lint` sin errores nuevos.
+- [x] 8.3 `npm run test` en verde (incluye `tests/agent/clara/**` y conserva
   las suites de Eva/Mora y de `src/lib/admin/follow-up/` sin duplicarlas).
-- [ ] 8.4 `npx vitest run tests/agent/clara` en verde (contrato estructural,
+- [x] 8.4 `npx vitest run tests/agent/clara` en verde (contrato estructural,
   acceso, canal y las 7 tools).
-- [ ] 8.5 `eve build` de Clara con el prefijo del servicio:
+- [x] 8.5 `eve build` de Clara con el prefijo del servicio:
   `cd agents/clara && EVE_PUBLIC_ROUTE_PREFIX='/clara' EVE_INTERNAL_AGENT_WORKSPACE_MEMBER=1 node ../../node_modules/eve/bin/eve.js build`.
   Debe terminar sin diagnósticos y dejar `eve/v1/discord` registrada, **sin**
   credenciales `DISCORD_*` (prueba de degradación graceful).
-- [ ] 8.6 `npx eve info --agent clara` reporta la ruta `eve/v1/discord` y
+- [x] 8.6 `npx eve info --agent clara` reporta la ruta `eve/v1/discord` y
   `Diagnostics 0 errors, 0 warnings`.
-- [ ] 8.7 Regresión de agentes raíz: `npx eve info --agent eva` y
+- [x] 8.7 Regresión de agentes raíz: `npx eve info --agent eva` y
   `npx eve info --agent mora` siguen con `Diagnostics 0 errors, 0 warnings`; el
   workspace reporta tres agentes raíz (eva, mora, clara).
-- [ ] 8.8 Invariantes manuales del §4.3: ninguna tool expone envío ni reclamo
+- [x] 8.8 Invariantes manuales del §4.3: ninguna tool expone envío ni reclamo
   para envío; ningún archivo de `src/lib/admin/follow-up/*`,
   `src/lib/follow-up/send-follow-up-draft.ts`, `agents/eva/agent/*`,
   `agents/mora/agent/*`, `middleware.ts` ni migraciones se modificó.
-- [ ] 8.9 Verificación manual post-deploy (§13.2, fuera del repo, la ejecuta el
+- [ ] 8.9 (POST-DEPLOY: a ejecutar por el propietario del despliegue) Verificación manual post-deploy (§13.2, fuera del repo, la ejecuta el
   responsable del despliegue): lista con usuario autorizado, silencio con usuario
   no autorizado, borrador con `created_by` del mapa, aprobación sin filas nuevas
   en `whatsapp_messages`, marca `contacted`, lectura con el kill switch apagado y
