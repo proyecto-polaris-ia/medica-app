@@ -5,8 +5,18 @@ import {
   clinicLocalInputToUtc,
   clinicMonthRangeUtc,
   clinicTimeLabel,
+  getCalendarGrid,
+  getCurrentClinicMonth,
+  groupAppointmentsByDay,
+  isValidIanaTimeZone,
+  resolveTimeZone,
   toClinicLocalInput,
 } from '../timezone';
+
+// Zona no clínica para probar la parametrización. America/Los_Angeles observa
+// PDT (UTC-7) en verano y PST (UTC-8) en invierno, así que los mismos instantes
+// fijos también ejercitan el cálculo del offset dependiente de DST.
+const LOS_ANGELES = 'America/Los_Angeles';
 
 describe('timezone helpers', () => {
   it('exports the clinic timezone', () => {
@@ -86,5 +96,145 @@ describe('timezone helpers', () => {
   it('clinic local input round-trips through UTC', () => {
     const input = '2026-09-16T17:00';
     expect(toClinicLocalInput(clinicLocalInputToUtc(input))).toBe(input);
+  });
+
+  describe('explicit non-clinic time zone', () => {
+    it('clinicDayKey shifts the day when the observer zone is behind the clinic', () => {
+      // 06:30 UTC on the 10th is 00:30 in Mexico City but 23:30 on the 9th in LA (PDT).
+      const instant = '2026-06-10T06:30:00.000Z';
+      expect(clinicDayKey(instant)).toBe('2026-06-10');
+      expect(clinicDayKey(instant, LOS_ANGELES)).toBe('2026-06-09');
+    });
+
+    it('clinicTimeLabel uses the observer zone offset (PDT, UTC-7)', () => {
+      expect(clinicTimeLabel('2026-09-16T23:00:00.000Z', LOS_ANGELES)).toBe(
+        '16:00'
+      );
+    });
+
+    it('clinicTimeLabel uses the observer zone offset (PST, UTC-8)', () => {
+      expect(clinicTimeLabel('2026-01-15T16:00:00.000Z', LOS_ANGELES)).toBe(
+        '08:00'
+      );
+    });
+
+    it('toClinicLocalInput formats in the observer zone, not the clinic zone', () => {
+      expect(toClinicLocalInput('2026-09-16T23:00:00.000Z', LOS_ANGELES)).toBe(
+        '2026-09-16T16:00'
+      );
+    });
+
+    it('clinicLocalInputToUtc interprets the input in the observer zone (PDT)', () => {
+      expect(clinicLocalInputToUtc('2026-09-16T16:00', LOS_ANGELES)).toBe(
+        '2026-09-16T23:00:00.000Z'
+      );
+    });
+
+    it('clinicLocalInputToUtc interprets the input in the observer zone (PST)', () => {
+      expect(clinicLocalInputToUtc('2026-01-15T08:00', LOS_ANGELES)).toBe(
+        '2026-01-15T16:00:00.000Z'
+      );
+    });
+
+    it('observer-zone local input round-trips through UTC', () => {
+      const input = '2026-09-16T16:00';
+      expect(toClinicLocalInput(clinicLocalInputToUtc(input, LOS_ANGELES), LOS_ANGELES)).toBe(
+        input
+      );
+    });
+
+    it('clinicMonthRangeUtc uses the observer zone DST offset (PDT)', () => {
+      const { startAt, endAt } = clinicMonthRangeUtc(2026, 6, LOS_ANGELES);
+      expect(startAt).toBe('2026-06-01T07:00:00.000Z');
+      expect(endAt).toBe('2026-07-01T07:00:00.000Z');
+    });
+
+    it('clinicMonthRangeUtc uses the observer zone DST offset (PST)', () => {
+      const { startAt, endAt } = clinicMonthRangeUtc(2026, 1, LOS_ANGELES);
+      expect(startAt).toBe('2026-01-01T08:00:00.000Z');
+      expect(endAt).toBe('2026-02-01T08:00:00.000Z');
+    });
+
+    it('getCalendarGrid keeps wall-clock cells with a non-clinic zone', () => {
+      // July 1, 2026 is a Wednesday: two leading pad cells, then the month.
+      const grid = getCalendarGrid(2026, 7, LOS_ANGELES);
+
+      expect(grid).toHaveLength(42);
+      expect(grid[0]).toEqual({ day: 0, inMonth: false, dayKey: null });
+      expect(grid[1]).toEqual({ day: 0, inMonth: false, dayKey: null });
+      expect(grid[2]).toEqual({
+        day: 1,
+        inMonth: true,
+        dayKey: '2026-07-01',
+      });
+      expect(grid[32]).toEqual({
+        day: 31,
+        inMonth: true,
+        dayKey: '2026-07-31',
+      });
+    });
+
+    it('groupAppointmentsByDay buckets and labels in the observer zone', () => {
+      const groups = groupAppointmentsByDay(
+        [
+          {
+            id: 'a1',
+            patientName: 'Ana',
+            serviceName: 'Limpieza',
+            providerId: 'p1',
+            startAt: '2026-06-10T06:30:00.000Z',
+            endAt: '2026-06-10T07:00:00.000Z',
+            status: 'confirmed',
+          },
+        ],
+        () => '#000000',
+        LOS_ANGELES
+      );
+
+      expect(Object.keys(groups)).toEqual(['2026-06-09']);
+      expect(groups['2026-06-09']).toHaveLength(1);
+      expect(groups['2026-06-09'][0].startLabel).toBe('23:30');
+    });
+
+    it('getCurrentClinicMonth honors an explicit observer zone', () => {
+      const formatter = new Intl.DateTimeFormat('en-US', {
+        timeZone: LOS_ANGELES,
+        year: 'numeric',
+        month: '2-digit',
+      });
+      const parts = formatter.formatToParts(new Date());
+      const year = Number(parts.find((p) => p.type === 'year')?.value);
+      const month = Number(parts.find((p) => p.type === 'month')?.value);
+
+      expect(getCurrentClinicMonth(LOS_ANGELES)).toEqual({ year, month });
+    });
+  });
+
+  describe('isValidIanaTimeZone', () => {
+    it('accepts a valid IANA zone', () => {
+      expect(isValidIanaTimeZone('America/Los_Angeles')).toBe(true);
+      expect(isValidIanaTimeZone('UTC')).toBe(true);
+    });
+
+    it('rejects an unknown zone', () => {
+      expect(isValidIanaTimeZone('Not/AZone')).toBe(false);
+    });
+
+    it('rejects an empty string', () => {
+      expect(isValidIanaTimeZone('')).toBe(false);
+    });
+  });
+
+  describe('resolveTimeZone', () => {
+    it('returns a valid zone unchanged', () => {
+      expect(resolveTimeZone(LOS_ANGELES)).toBe(LOS_ANGELES);
+    });
+
+    it('falls back to the clinic zone for null, undefined and invalid values', () => {
+      expect(resolveTimeZone(null)).toBe(CLINIC_TZ);
+      expect(resolveTimeZone(undefined)).toBe(CLINIC_TZ);
+      expect(resolveTimeZone('Not/AZone')).toBe(CLINIC_TZ);
+      expect(resolveTimeZone('')).toBe(CLINIC_TZ);
+    });
   });
 });
