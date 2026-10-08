@@ -30,6 +30,23 @@
           ]
         }
       ]
+    },
+    "eve-mora": {
+      "framework": "eve",
+      "root": ".eve/vercel-services/eve-mora",
+      "buildCommand": "cd '../../../agents/mora' && export EVE_INTERNAL_BUILD_OUTPUT_DIRECTORY='../../.eve/vercel-services/eve-mora/.vercel/output' && export EVE_INTERNAL_HOST_BUILD_OUTPUT_DIRECTORY='../../.vercel/output' && export EVE_PUBLIC_ROUTE_PREFIX='/mora' && export EVE_INTERNAL_AGENT_WORKSPACE_MEMBER=1 && node '../../node_modules/eve/bin/eve.js' build",
+      "routes": [
+        {
+          "src": "^/mora/eve/v1/(.*)$",
+          "transforms": [
+            {
+              "args": "/eve/v1/$1",
+              "op": "set",
+              "type": "request.path"
+            }
+          ]
+        }
+      ]
     }
   },
   "rewrites": [
@@ -37,6 +54,12 @@
       "source": "/eva/eve/v1/(.*)",
       "destination": {
         "service": "eve-eva"
+      }
+    },
+    {
+      "source": "/mora/eve/v1/(.*)",
+      "destination": {
+        "service": "eve-mora"
       }
     },
     {

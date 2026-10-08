@@ -3,17 +3,26 @@ import { z } from "zod";
 
 import { getPatientReceivableSummary } from "@/lib/admin/accounts-receivable";
 import { parseThresholdDays } from "@/lib/admin/validate";
-import { getSupabaseAdmin } from "@/lib/supabase/server";
 
 import {
-  resolveCollectionsPatientPhone,
-  type CollectionsToolContext,
-} from "../identity";
-
-const SECURITY_REFUSAL =
-  "Por seguridad no puedo consultar saldos sin un WhatsApp vinculado al paciente.";
+  authorizeAndResolvePatient,
+  buildPatientNotResolvedError,
+  type DoctorAccessContext,
+} from "../access";
 
 const listOverdueBalancesInputSchema = z.object({
+  patientPhone: z
+    .string()
+    .trim()
+    .optional()
+    .describe(
+      "Teléfono registrado del paciente en el consultorio (cualquier formato; se normaliza a E.164)",
+    ),
+  patientName: z
+    .string()
+    .trim()
+    .optional()
+    .describe("Nombre del paciente tal como está registrado en el consultorio"),
   thresholdDays: z
     .number()
     .int()
@@ -23,11 +32,6 @@ const listOverdueBalancesInputSchema = z.object({
 });
 
 type ListOverdueBalancesInput = z.infer<typeof listOverdueBalancesInputSchema>;
-
-type PatientRow = {
-  id: string;
-  full_name: string;
-};
 
 type OverduePlanView = {
   treatmentPlanId: string;
@@ -39,17 +43,6 @@ type OverduePlanView = {
   daysPastDue: number;
   isPastDue: true;
 };
-
-async function findPatientByTrustedPhone(phone: string): Promise<PatientRow | null> {
-  const { data, error } = await getSupabaseAdmin()
-    .from("patients")
-    .select("id, full_name")
-    .eq("phone_e164", phone)
-    .maybeSingle();
-
-  if (error) throw new Error(`No se pudo buscar el paciente: ${error.message}`);
-  return (data as PatientRow | null) ?? null;
-}
 
 function buildOverduePlanView(plan: {
   treatmentPlanId: string;
@@ -75,33 +68,29 @@ function buildOverduePlanView(plan: {
 
 function buildOverdueMessage(patientName: string, count: number): string {
   if (count === 0) {
-    return `Hola, ${patientName}. No tienes planes vencidos en este momento.`;
+    return `${patientName} no tiene planes vencidos en este momento.`;
   }
-  return `Hola, ${patientName}. Tienes ${count} ${count === 1 ? "plan vencido" : "planes vencidos"} en el consultorio.`;
+  return `${patientName} tiene ${count} ${count === 1 ? "plan vencido" : "planes vencidos"} en el consultorio.`;
 }
 
 export default defineTool({
   description:
-    "Lista los planes vencidos del paciente identificado por el WhatsApp confiable del canal. Solo lectura; los montos y filtros de vencido se calculan en la base de datos. Nunca usa datos de otros pacientes.",
+    "Lista los planes vencidos del paciente que el doctor indica por teléfono registrado o nombre. Exclusiva para doctores autorizados; solo lectura; los montos y filtros de vencido se calculan en la base de datos.",
   inputSchema: listOverdueBalancesInputSchema,
-  async execute(input: ListOverdueBalancesInput, ctx: CollectionsToolContext) {
-    const trustedPhone = await resolveCollectionsPatientPhone(ctx, SECURITY_REFUSAL);
-    if ("error" in trustedPhone) {
-      return { success: false, error: trustedPhone.error };
+  async execute(input: ListOverdueBalancesInput, ctx: DoctorAccessContext) {
+    const target = await authorizeAndResolvePatient(ctx, {
+      patientPhone: input.patientPhone,
+      patientName: input.patientName,
+    });
+    if ("error" in target) {
+      return { success: false, error: target.error };
     }
+    if (!("patient" in target)) {
+      return buildPatientNotResolvedError(target);
+    }
+    const patient = target.patient;
 
     try {
-      const patient = await findPatientByTrustedPhone(trustedPhone.phone);
-      if (!patient) {
-        return {
-          success: true,
-          patientFound: false,
-          overduePlans: [],
-          message:
-            "No encontré un paciente vinculado a este WhatsApp. Para revisar tus planes vencidos necesito que el número esté registrado en el consultorio.",
-        };
-      }
-
       const thresholdDays = parseThresholdDays(input.thresholdDays);
       const summary = await getPatientReceivableSummary(patient.id, {
         thresholdDays,

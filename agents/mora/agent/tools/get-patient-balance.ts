@@ -3,17 +3,26 @@ import { z } from "zod";
 
 import { getPatientReceivableSummary } from "@/lib/admin/accounts-receivable";
 import { parseThresholdDays } from "@/lib/admin/validate";
-import { getSupabaseAdmin } from "@/lib/supabase/server";
 
 import {
-  resolveCollectionsPatientPhone,
-  type CollectionsToolContext,
-} from "../identity";
-
-const SECURITY_REFUSAL =
-  "Por seguridad no puedo consultar saldos sin un WhatsApp vinculado al paciente.";
+  authorizeAndResolvePatient,
+  buildPatientNotResolvedError,
+  type DoctorAccessContext,
+} from "../access";
 
 const getPatientBalanceInputSchema = z.object({
+  patientPhone: z
+    .string()
+    .trim()
+    .optional()
+    .describe(
+      "Teléfono registrado del paciente en el consultorio (cualquier formato; se normaliza a E.164)",
+    ),
+  patientName: z
+    .string()
+    .trim()
+    .optional()
+    .describe("Nombre del paciente tal como está registrado en el consultorio"),
   thresholdDays: z
     .number()
     .int()
@@ -23,11 +32,6 @@ const getPatientBalanceInputSchema = z.object({
 });
 
 type GetPatientBalanceInput = z.infer<typeof getPatientBalanceInputSchema>;
-
-type PatientRow = {
-  id: string;
-  full_name: string;
-};
 
 type PlanBalanceView = {
   treatmentPlanId: string;
@@ -39,25 +43,6 @@ type PlanBalanceView = {
   daysPastDue: number;
   isPastDue: boolean;
 };
-
-function formatMoney(value: number): string {
-  return new Intl.NumberFormat("es-MX", {
-    style: "currency",
-    currency: "MXN",
-    minimumFractionDigits: 2,
-  }).format(value);
-}
-
-async function findPatientByTrustedPhone(phone: string): Promise<PatientRow | null> {
-  const { data, error } = await getSupabaseAdmin()
-    .from("patients")
-    .select("id, full_name")
-    .eq("phone_e164", phone)
-    .maybeSingle();
-
-  if (error) throw new Error(`No se pudo buscar el paciente: ${error.message}`);
-  return (data as PatientRow | null) ?? null;
-}
 
 function buildPlanBalanceView(plan: {
   treatmentPlanId: string;
@@ -89,48 +74,52 @@ function buildBalanceMessage(params: {
 }): string {
   const { patientName, balance, creditAmount, planBalances } = params;
   if (balance <= 0 && creditAmount === 0) {
-    return `Hola, ${patientName}. No tienes saldo pendiente en el consultorio.`;
+    return `${patientName} no tiene saldo pendiente en el consultorio.`;
   }
   if (balance < 0) {
-    return `Hola, ${patientName}. Tienes un crédito a tu favor de ${formatMoney(creditAmount)} en el consultorio.`;
+    return `${patientName} tiene un crédito a su favor de ${formatMoney(creditAmount)} en el consultorio.`;
   }
   const overdueCount = planBalances.filter((plan) => plan.isPastDue).length;
   const overdueNote =
     overdueCount > 0
       ? ` De ellos, ${overdueCount} ${overdueCount === 1 ? "está vencido" : "están vencidos"}.`
       : "";
-  return `Hola, ${patientName}. Tu saldo pendiente actual es de ${formatMoney(balance)}, distribuido en ${planBalances.length} ${planBalances.length === 1 ? "plan aceptado" : "planes aceptados"}.${overdueNote}`;
+  return `El saldo pendiente de ${patientName} es de ${formatMoney(balance)}, distribuido en ${planBalances.length} ${planBalances.length === 1 ? "plan aceptado" : "planes aceptados"}.${overdueNote}`;
+}
+
+function formatMoney(value: number): string {
+  return new Intl.NumberFormat("es-MX", {
+    style: "currency",
+    currency: "MXN",
+    minimumFractionDigits: 2,
+  }).format(value);
 }
 
 export default defineTool({
   description:
-    "Consulta el saldo pendiente del paciente identificado por el WhatsApp confiable del canal. Solo lectura; los montos vienen de la base de datos y nunca de lo que el paciente escriba en el chat.",
+    "Consulta el saldo pendiente del paciente que el doctor indica por teléfono registrado o nombre. Exclusiva para doctores autorizados; solo lectura; los montos vienen de la base de datos y nunca de lo que el doctor escriba en el chat.",
   inputSchema: getPatientBalanceInputSchema,
-  async execute(input: GetPatientBalanceInput, ctx: CollectionsToolContext) {
-    const trustedPhone = await resolveCollectionsPatientPhone(ctx, SECURITY_REFUSAL);
-    if ("error" in trustedPhone) {
-      return { success: false, error: trustedPhone.error };
+  async execute(input: GetPatientBalanceInput, ctx: DoctorAccessContext) {
+    const target = await authorizeAndResolvePatient(ctx, {
+      patientPhone: input.patientPhone,
+      patientName: input.patientName,
+    });
+    if ("error" in target) {
+      return { success: false, error: target.error };
     }
+    if (!("patient" in target)) {
+      return buildPatientNotResolvedError(target);
+    }
+    const patient = target.patient;
 
     try {
-      const patient = await findPatientByTrustedPhone(trustedPhone.phone);
-      if (!patient) {
-        return {
-          success: true,
-          patientFound: false,
-          planBalances: [],
-          message:
-            "No encontré un paciente vinculado a este WhatsApp. Para revisar tu saldo necesito que el número esté registrado en el consultorio.",
-        };
-      }
-
       const thresholdDays = parseThresholdDays(input.thresholdDays);
       const summary = await getPatientReceivableSummary(patient.id, {
         thresholdDays,
       });
 
       const planBalances = summary.planBalances.map(buildPlanBalanceView);
-      const result = {
+      return {
         success: true,
         patientFound: true,
         patientName: patient.full_name,
@@ -147,7 +136,6 @@ export default defineTool({
           planBalances,
         }),
       };
-      return result;
     } catch (error) {
       return {
         success: false,

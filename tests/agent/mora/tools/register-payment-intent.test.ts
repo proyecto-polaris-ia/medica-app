@@ -41,9 +41,12 @@ vi.mock("@/lib/whatsapp/eve-escalation", () => ({
   createEveWhatsAppEscalation,
 }));
 
-const { default: tool } = await import("../../../../../agents/eva/agent/subagents/mora/tools/register-payment-intent");
+const { DOCTOR_ACCESS_REFUSAL } = await import("../../../../agents/mora/agent/access");
+const { default: tool } = await import("../../../../agents/mora/agent/tools/register-payment-intent");
 const execute = tool.execute as (
   input: {
+    patientPhone?: string;
+    patientName?: string;
     amount?: number;
     treatmentPlanName?: string;
     commitment?: string;
@@ -61,14 +64,16 @@ const PLAN_ID = "660e8400-e29b-41d4-a716-446655440000";
 const OTHER_PLAN_ID = "660e8400-e29b-41d4-a716-446655440099";
 const INTENT_ID = "880e8400-e29b-41d4-a716-446655440000";
 
-const trustedCtx = {
+const DOCTOR_DISCORD_ID = "111222333444555666";
+
+const doctorCtx = {
   session: {
     auth: {
       current: {
-        attributes: {
-          trustedContactSource: "whatsapp",
-          trustedPatientPhone: TRUSTED_PHONE,
-        },
+        principalId: DOCTOR_DISCORD_ID,
+        principalType: "user",
+        authenticator: "discord",
+        attributes: { channel_id: "chan-1", guild_id: "guild-1" },
       },
       initiator: null,
     },
@@ -98,7 +103,7 @@ function buildQuery(): Query {
         patient_id: PATIENT_ID,
         treatment_plan_id: null,
         whatsapp_contact_id: null,
-        intent_source: "whatsapp",
+        intent_source: "discord",
         amount: null,
         commitment_text: null,
         method: null,
@@ -178,6 +183,7 @@ function setupTrustedPatient(planOverrides: Array<Record<string, unknown>> = [])
 describe("register-payment-intent tool", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    process.env.MORA_DISCORD_DOCTOR_IDS = DOCTOR_DISCORD_ID;
     createEveWhatsAppEscalation.mockResolvedValue({
       escalationId: "esc-1",
       created: true,
@@ -189,27 +195,55 @@ describe("register-payment-intent tool", () => {
     });
   });
 
-  it("refuses the lookup when no trusted WhatsApp phone is present", async () => {
+  it("refuses an unauthorized doctor without querying the database", async () => {
+    const outsiderCtx = {
+      session: {
+        auth: {
+          current: {
+            principalId: "000000000000000000",
+            principalType: "user",
+            authenticator: "discord",
+            attributes: {},
+          },
+          initiator: null,
+        },
+      },
+    };
     const { from } = mockTablesByQueue({});
 
-    const result = (await execute({ commitment: "La próxima semana" })) as {
-      success: boolean;
-      error?: string;
-    };
+    const result = (await execute(
+      { patientPhone: TRUSTED_PHONE, commitment: "La próxima semana" },
+      outsiderCtx,
+    )) as { success: boolean; error?: string };
 
     expect(result).toEqual({
       success: false,
-      error:
-        "No puedo registrar una intención de pago sin un teléfono confiable de WhatsApp.",
+      error: DOCTOR_ACCESS_REFUSAL,
     });
 
     expect(from).not.toHaveBeenCalled();
     expect(createEveWhatsAppEscalation).not.toHaveBeenCalled();
   });
 
-  it("never accepts a chat-typed phone as the patient phone", () => {
-    expect(JSON.stringify(tool.inputSchema)).not.toContain("patientPhone");
-    expect(JSON.stringify(tool.inputSchema)).not.toContain("phone");
+  it("requires an explicit patient reference from the doctor", async () => {
+    const { from } = mockTablesByQueue({});
+
+    const result = (await execute(
+      { commitment: "La próxima semana" },
+      doctorCtx,
+    )) as { success: boolean; error?: string };
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain("No encontré un paciente con esa referencia.");
+
+    expect(from).not.toHaveBeenCalled();
+    expect(createEveWhatsAppEscalation).not.toHaveBeenCalled();
+  });
+
+  it("accepts the doctor-supplied patient phone as the lookup key", () => {
+    const schema = JSON.stringify(tool.inputSchema);
+    expect(schema).toContain("patientPhone");
+    expect(schema).toContain("patientName");
   });
 
   it("inserts a payment_intents row and escalates, never touching the payments table", async () => {
@@ -217,12 +251,13 @@ describe("register-payment-intent tool", () => {
 
     const result = (await execute(
       {
+        patientPhone: TRUSTED_PHONE,
         amount: 500,
         commitment: "La próxima semana",
         method: "cash",
         notes: "Pago en una sola exhibición",
       },
-      trustedCtx,
+      doctorCtx,
     )) as {
       success: boolean;
       intent: { id: string; status: string };
@@ -254,7 +289,7 @@ describe("register-payment-intent tool", () => {
     const insertedPayload = (insert.insert.mock.calls[0]?.[0] ?? {}) as Record<string, unknown>;
     expect(insertedPayload).toMatchObject({
       patient_id: PATIENT_ID,
-      intent_source: "whatsapp",
+      intent_source: "discord",
       amount: 500,
       commitment_text: "La próxima semana",
       method: "cash",
@@ -277,10 +312,11 @@ describe("register-payment-intent tool", () => {
 
     const result = (await execute(
       {
+        patientPhone: TRUSTED_PHONE,
         treatmentPlanName: "Plan tentativo",
         commitment: "Después de la valoración",
       },
-      trustedCtx,
+      doctorCtx,
     )) as {
       success: boolean;
       intent: { id: string };
@@ -308,9 +344,10 @@ describe("register-payment-intent tool", () => {
 
     const result = (await execute(
       {
+        patientPhone: TRUSTED_PHONE,
         treatmentPlanName: "Ortodoncia",
       },
-      trustedCtx,
+      doctorCtx,
     )) as {
       success: boolean;
     };
@@ -326,10 +363,11 @@ describe("register-payment-intent tool", () => {
 
     await execute(
       {
+        patientPhone: TRUSTED_PHONE,
         treatmentPlanName: "Ortodoncia",
         amount: 500,
       },
-      trustedCtx,
+      doctorCtx,
     );
 
     const insertedPayload = (insert.insert.mock.calls[0]?.[0] ?? {}) as Record<string, unknown>;
@@ -339,7 +377,7 @@ describe("register-payment-intent tool", () => {
   it("does not move money or generate a payment link", async () => {
     const { from } = setupTrustedPatient();
 
-    const result = (await execute({ amount: 100 }, trustedCtx)) as {
+    const result = (await execute({ amount: 100 , patientPhone: TRUSTED_PHONE }, doctorCtx)) as {
       success: boolean;
       message: string;
     };
