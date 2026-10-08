@@ -20,7 +20,7 @@ sistema de facturación externo.
 3. [x] Apply: migración 0024 (+down), tipos, servicio, API POST/GET, formulario, historial, estado. Test-first RED/GREEN por fase.
 4. [x] Verify: `gentle-ai-verify` independiente → **PASS** (`test:local` 1732 tests, `test` 1474 passed/258 skipped, `tsc --noEmit` limpio, `lint` 0 errores/25 warnings preexistentes). 6/6 criterios de aceptación.
 5. [x] Archive change + commits de unidad de trabajo.
-6. [ ] Crear PR (decisión del usuario).
+6. [x] Crear PR — https://github.com/proyecto-polaris-ia/medica-app/pull/207 (label type:feature).
 
 ## Evidencia (commits)
 
