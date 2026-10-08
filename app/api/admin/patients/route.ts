@@ -1,8 +1,8 @@
 import { requireUser } from '../_lib/auth';
 import {
   createPatient,
-  listPatients,
-  searchPatients,
+  listPatientsPage,
+  normalizePatientsPagination,
 } from '@/lib/admin/patients';
 import { parseJsonBody, handleAdminRequest } from '../_lib/responses';
 
@@ -12,12 +12,21 @@ export async function GET(request: Request): Promise<Response> {
   return handleAdminRequest(async () => {
     await requireUser();
     const { searchParams } = new URL(request.url);
-    const q = searchParams.get('q');
+    const q = (searchParams.get('q') ?? '').trim();
+    const { page, pageSize } = normalizePatientsPagination(
+      searchParams.get('page'),
+      searchParams.get('pageSize')
+    );
 
-    const patients =
-      q === null || q === '' ? await listPatients() : await searchPatients(q);
+    const result = await listPatientsPage({ q, page, pageSize });
 
-    return Response.json({ patients });
+    return Response.json({
+      patients: result.patients,
+      page: result.page,
+      pageSize: result.pageSize,
+      total: result.totalCount,
+      totalPages: result.totalPages,
+    });
   });
 }
 
