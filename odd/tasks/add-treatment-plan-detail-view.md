@@ -15,7 +15,7 @@ Vista de detalle para planes de tratamiento en el expediente del paciente.
 4. [x] Tasks (tasks.md con forecast)
 5. [ ] Apply: TreatmentPlanDetailModal + cambios en TreatmentPlansTab (TDD)
 6. [ ] Verify: npm run test + tsc + build
-7. [ ] Archive + commit + push + PR
+7. [x] Archive + commit + push + PR
 
 ## Decisiones
 - Desglose financiero: Subtotal (Σ quantity × unitPrice) + Total (`totalAmount` snapshot). Sin líneas de descuento/impuesto (no existen en el modelo; el issue las marca "si aplican").
@@ -25,4 +25,6 @@ Vista de detalle para planes de tratamiento en el expediente del paciente.
 - Cierre: X, click fuera y Escape (criterio de aceptación; FormModal no lo soporta, el modal nuevo sí).
 
 ## Commits
-- (pending)
+- 7e7f3dc docs(openspec): add add-treatment-plan-detail-view change (#178)
+- 7e5893f feat(patients): add treatment plan detail modal in patient record (#178)
+- 3ee2326 fix(patients): guard plan card keydown to its own target (#178)

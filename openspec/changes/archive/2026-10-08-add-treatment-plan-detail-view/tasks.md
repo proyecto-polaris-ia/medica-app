@@ -87,18 +87,18 @@ ya existe y devuelve `{ treatmentPlan: TreatmentPlanWithItems }`.
 
 ## Phase 3: Verificación
 
-- [ ] 3.1 Ejecutar `npm run test` — suites completas en verde (reportar cualquier fallo preexistente ajeno al cambio, por nombre).
-- [ ] 3.2 Ejecutar `npx tsc --noEmit` — sin errores de tipos.
-- [ ] 3.3 Ejecutar `npm run build` — build de producción exitoso.
-- [ ] 3.4 Cross-check de escenarios: recorrer `specs/treatment-plans/spec.md` y confirmar que cada escenario nuevo tiene al menos un caso de prueba que lo cubre; anotar el mapeo.
-- [ ] 3.5 Confirmar presupuesto de review: si el diff supera ~400 líneas, proceder con el split opcional (PR 1 modal + tests, PR 2 cableado + tests).
-- [ ] 3.6 Escribir `openspec/changes/add-treatment-plan-detail-view/verify-report.md` con comandos exactos y resultados observados.
+- [x] 3.1 Ejecutar `npm run test` — suites completas en verde (reportar cualquier fallo preexistente ajeno al cambio, por nombre).
+- [x] 3.2 Ejecutar `npx tsc --noEmit` — sin errores de tipos.
+- [x] 3.3 Ejecutar `npm run build` — build de producción exitoso.
+- [x] 3.4 Cross-check de escenarios: recorrer `specs/treatment-plans/spec.md` y confirmar que cada escenario nuevo tiene al menos un caso de prueba que lo cubre; anotar el mapeo.
+- [x] 3.5 Confirmar presupuesto de review: si el diff supera ~400 líneas, proceder con el split opcional (PR 1 modal + tests, PR 2 cableado + tests).
+- [x] 3.6 Escribir `openspec/changes/add-treatment-plan-detail-view/verify-report.md` con comandos exactos y resultados observados.
 
 ---
 
 ## Phase 4: Archive + PR
 
-- [ ] 4.1 Mover el delta a la spec principal: actualizar el requerimiento "Treatment plan tab in patient record" en `openspec/specs/treatment-plans/spec.md` con el texto y los escenarios del delta, y archivar la carpeta como `openspec/changes/archive/YYYY-MM-DD-add-treatment-plan-detail-view/` (fecha ISO del archive; preservar como audit trail).
-- [ ] 4.2 Actualizar `odd/tasks/add-treatment-plan-detail-view.md` (marcar tareas del ciclo SDD completadas) solo si el orchestrador lo autoriza.
+- [x] 4.1 Mover el delta a la spec principal: actualizar el requerimiento "Treatment plan tab in patient record" en `openspec/specs/treatment-plans/spec.md` con el texto y los escenarios del delta, y archivar la carpeta como `openspec/changes/archive/YYYY-MM-DD-add-treatment-plan-detail-view/` (fecha ISO del archive; preservar como audit trail).
+- [x] 4.2 Actualizar `odd/tasks/add-treatment-plan-detail-view.md` (marcar tareas del ciclo SDD completadas) solo si el orchestrador lo autoriza.
 - [ ] 4.3 Commit(s) por work unit: (a) modal + su suite, (b) cableado de la pestaña + casos de pestaña, (c) artefactos OpenSpec. Nunca mezclar tests de otra unidad con código no relacionado.
 - [ ] 4.4 Push de la rama `eliumontoya/agregar-vista-de-detalle-para-planes-de-tratamie` y abrir PR referenciando el issue #178 (`Closes #178`), con plan de rollback (`git revert`) y evidencia de verificación.
