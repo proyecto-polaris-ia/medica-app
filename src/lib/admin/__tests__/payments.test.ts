@@ -208,6 +208,66 @@ d('payments data layer', () => {
     expect(row.method).toBe('transfer');
   });
 
+  it('defaults the invoice flag to false when the input omits it', async () => {
+    const patient = await seedPatient();
+
+    const payment = await createPayment(
+      patient.id,
+      {
+        amount: 100,
+        method: 'cash',
+        paidAt: '2026-09-15T10:00:00Z',
+      },
+      USER_ID
+    );
+
+    expect(payment.requiresInvoice).toBe(false);
+    const row = await readPaymentRow(payment.id);
+    expect(row.requires_invoice).toBe(false);
+  });
+
+  it('persists the invoice flag and returns it through the read contract', async () => {
+    const patient = await seedPatient();
+
+    const payment = await createPayment(
+      patient.id,
+      {
+        amount: 350,
+        method: 'card',
+        paidAt: '2026-09-15T10:00:00Z',
+        requiresInvoice: true,
+      },
+      USER_ID
+    );
+
+    expect(payment.requiresInvoice).toBe(true);
+    const row = await readPaymentRow(payment.id);
+    expect(row.requires_invoice).toBe(true);
+
+    const [listed] = await listPayments(patient.id);
+    expect(listed.id).toBe(payment.id);
+    expect(listed.requiresInvoice).toBe(true);
+  });
+
+  it('normalizes any value other than true to false', async () => {
+    const patient = await seedPatient();
+
+    const payment = await createPayment(
+      patient.id,
+      {
+        amount: 100,
+        method: 'cash',
+        paidAt: '2026-09-15T10:00:00Z',
+        requiresInvoice: 'si' as unknown as boolean,
+      },
+      USER_ID
+    );
+
+    expect(payment.requiresInvoice).toBe(false);
+    const row = await readPaymentRow(payment.id);
+    expect(row.requires_invoice).toBe(false);
+  });
+
   it('rejects creating a payment for a treatment plan owned by another patient', async () => {
     const patient = await seedPatient();
     const otherPatient = await seedPatient('Otro Paciente', '+5215599999999');
@@ -241,6 +301,7 @@ d('payments data layer', () => {
         paidAt: '2026-09-15T10:00:00Z',
         reference: 'REC-1',
         notes: 'Inicial',
+        requiresInvoice: true,
       },
       USER_ID
     );
@@ -259,6 +320,9 @@ d('payments data layer', () => {
     expect(Number(row.amount)).toBe(100.5);
     expect(row.method).toBe('cash');
     expect(row.voided_at).toBeNull();
+    // La marca de factura es de solo creación: la actualización no la altera.
+    expect(payment.requiresInvoice).toBe(true);
+    expect(row.requires_invoice).toBe(true);
   });
 
   it('rejects updating a reversed payment', async () => {

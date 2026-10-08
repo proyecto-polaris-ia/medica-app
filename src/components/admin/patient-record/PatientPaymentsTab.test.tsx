@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { PatientPaymentsTab } from './PatientPaymentsTab';
 import type { PatientReceivableSummary, Payment } from '@/lib/admin/types';
@@ -52,6 +52,7 @@ const payments: Payment[] = [
     paidAt: '2026-09-15T10:00:00Z',
     reference: 'REC-001',
     notes: 'Primer abono',
+    requiresInvoice: true,
     createdBy: 'user-1',
     voidedAt: null,
     voidedBy: null,
@@ -68,6 +69,7 @@ const payments: Payment[] = [
     paidAt: '2026-09-14T10:00:00Z',
     reference: null,
     notes: 'Anticipo general',
+    requiresInvoice: false,
     createdBy: 'user-1',
     voidedAt: null,
     voidedBy: null,
@@ -84,6 +86,7 @@ const payments: Payment[] = [
     paidAt: '2026-09-13T10:00:00Z',
     reference: null,
     notes: null,
+    requiresInvoice: true,
     createdBy: 'user-1',
     voidedAt: '2026-09-16T10:00:00Z',
     voidedBy: 'user-2',
@@ -107,6 +110,11 @@ function renderTab(overrides: Partial<React.ComponentProps<typeof PatientPayment
     />
   );
   return { onPaymentsChanged };
+}
+
+function historySection(): HTMLElement {
+  const heading = screen.getByText('Historial de pagos');
+  return heading.closest('section') as HTMLElement;
 }
 
 describe('PatientPaymentsTab', () => {
@@ -229,5 +237,58 @@ describe('PatientPaymentsTab', () => {
       reason: 'Pago capturado por error',
     });
     expect(onPaymentsChanged).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows the invoice checkbox unchecked by default with an accessible label', () => {
+    renderTab();
+
+    expect(screen.getByLabelText('Requiere factura')).not.toBeChecked();
+  });
+
+  it('submits requiresInvoice true and resets the checkbox after a successful payment', async () => {
+    const user = userEvent.setup();
+    renderTab();
+
+    await user.type(screen.getByLabelText('Monto'), '150.50');
+    await user.click(screen.getByLabelText('Requiere factura'));
+    expect(screen.getByLabelText('Requiere factura')).toBeChecked();
+    await user.click(screen.getByRole('button', { name: 'Registrar pago' }));
+
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalledWith(
+        `/api/admin/patients/${PATIENT_ID}/payments`,
+        expect.objectContaining({ method: 'POST' })
+      );
+    });
+    const [, init] = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(JSON.parse(init.body as string)).toMatchObject({ requiresInvoice: true });
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('Requiere factura')).not.toBeChecked();
+    });
+  });
+
+  it('shows the invoice badge only for payments whose flag is true', () => {
+    renderTab();
+
+    // payment-1 (activo) y payment-3 (reversado) tienen la marca; payment-2 no.
+    expect(within(historySection()).getAllByText('Requiere factura')).toHaveLength(2);
+  });
+
+  it('does not show the invoice badge when no payment requires an invoice', () => {
+    renderTab({
+      payments: payments.map((payment) => ({ ...payment, requiresInvoice: false })),
+    });
+
+    expect(within(historySection()).queryByText('Requiere factura')).not.toBeInTheDocument();
+  });
+
+  it('keeps the invoice badge alongside the reversed state', () => {
+    renderTab();
+
+    const reversedArticle = screen.getByText('Captura duplicada').closest('article') as HTMLElement;
+    expect(reversedArticle).not.toBeNull();
+    expect(within(reversedArticle).getByText('Reversado')).toBeInTheDocument();
+    expect(within(reversedArticle).getByText('Requiere factura')).toBeInTheDocument();
   });
 });

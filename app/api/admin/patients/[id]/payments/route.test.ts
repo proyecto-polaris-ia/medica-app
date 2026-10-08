@@ -40,6 +40,7 @@ const PAYMENT = {
   paidAt: '2026-09-15T10:00:00.000Z',
   reference: 'REC-1',
   notes: 'Abono inicial',
+  requiresInvoice: false,
   createdBy: USER.id,
   voidedAt: null,
   voidedBy: null,
@@ -151,7 +152,53 @@ describe('POST /api/admin/patients/[id]/payments', () => {
         paidAt: '2026-09-15T10:00:00.000Z',
         reference: 'REC-1',
         notes: 'Abono inicial',
+        requiresInvoice: false,
       },
+      USER.id
+    );
+  });
+
+  it('propagates requiresInvoice true to the payment service', async () => {
+    (createPayment as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ...PAYMENT,
+      requiresInvoice: true,
+    });
+
+    const res = await POST(
+      paymentsRequest('POST', {
+        amount: 100.5,
+        method: 'cash',
+        paidAt: '2026-09-15T10:00:00.000Z',
+        requiresInvoice: true,
+      }),
+      { params: Promise.resolve({ id: PATIENT_ID }) }
+    );
+
+    expect(res.status).toBe(201);
+    expect(createPayment).toHaveBeenCalledWith(
+      PATIENT_ID,
+      expect.objectContaining({ requiresInvoice: true }),
+      USER.id
+    );
+  });
+
+  it('normalizes any requiresInvoice value other than true to false', async () => {
+    (createPayment as ReturnType<typeof vi.fn>).mockResolvedValue(PAYMENT);
+
+    const res = await POST(
+      paymentsRequest('POST', {
+        amount: 100.5,
+        method: 'cash',
+        paidAt: '2026-09-15T10:00:00.000Z',
+        requiresInvoice: 'si',
+      }),
+      { params: Promise.resolve({ id: PATIENT_ID }) }
+    );
+
+    expect(res.status).toBe(201);
+    expect(createPayment).toHaveBeenCalledWith(
+      PATIENT_ID,
+      expect.objectContaining({ requiresInvoice: false }),
       USER.id
     );
   });

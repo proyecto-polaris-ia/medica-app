@@ -14,6 +14,7 @@ function parsePaymentBody(body: Record<string, unknown>): PaymentInput {
     paidAt: body.paidAt as string,
     reference: body.reference as string | null | undefined,
     notes: body.notes as string | null | undefined,
+    requiresInvoice: body.requiresInvoice === true,
   };
 }
 
