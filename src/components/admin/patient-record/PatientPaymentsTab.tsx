@@ -52,6 +52,7 @@ export function PatientPaymentsTab({
   const [treatmentPlanId, setTreatmentPlanId] = useState('');
   const [reference, setReference] = useState('');
   const [notes, setNotes] = useState('');
+  const [requiresInvoice, setRequiresInvoice] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [reversingPaymentId, setReversingPaymentId] = useState<string | null>(null);
@@ -86,6 +87,7 @@ export function PatientPaymentsTab({
           treatmentPlanId: treatmentPlanId || null,
           reference: reference.trim() || null,
           notes: notes.trim() || null,
+          requiresInvoice,
         }),
       });
 
@@ -96,6 +98,7 @@ export function PatientPaymentsTab({
       setTreatmentPlanId('');
       setReference('');
       setNotes('');
+      setRequiresInvoice(false);
       onPaymentsChanged();
     } catch (err) {
       setFormError(err instanceof Error ? err.message : 'Error desconocido');
@@ -233,6 +236,18 @@ export function PatientPaymentsTab({
             />
           </label>
           {formError && <p className="text-sm text-red-700 sm:col-span-2">{formError}</p>}
+          <div className="flex items-center sm:col-span-2">
+            <input
+              id="requires-invoice"
+              type="checkbox"
+              checked={requiresInvoice}
+              onChange={(event) => setRequiresInvoice(event.target.checked)}
+              className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+            />
+            <label htmlFor="requires-invoice" className="ml-2 text-sm font-medium text-gray-700">
+              Requiere factura
+            </label>
+          </div>
           <div className="sm:col-span-2">
             <button
               type="submit"
@@ -303,6 +318,11 @@ export function PatientPaymentsTab({
                         <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${isVoided ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'}`}>
                           {isVoided ? 'Reversado' : 'Activo'}
                         </span>
+                        {payment.requiresInvoice && (
+                          <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
+                            Requiere factura
+                          </span>
+                        )}
                         <span className="text-sm text-gray-500">{formatDate(payment.paidAt)}</span>
                       </div>
                       <p className="font-semibold text-gray-900">{formatCurrency(payment.amount)} · {METHOD_LABELS[payment.method]}</p>
