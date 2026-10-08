@@ -31,5 +31,19 @@
         }
       ]
     }
-  }
+  },
+  "rewrites": [
+    {
+      "source": "/eva/eve/v1/(.*)",
+      "destination": {
+        "service": "eve-eva"
+      }
+    },
+    {
+      "source": "/(.*)",
+      "destination": {
+        "service": "web"
+      }
+    }
+  ]
 }
