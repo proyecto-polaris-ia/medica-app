@@ -27,16 +27,21 @@ columnas (`start_at` por defecto `desc`, `created_at`).
 
 ## Tareas
 
-1. [ ] Change OpenSpec: `openspec/changes/agregar-paginacion-citas/`
-   (proposal.md, design.md, specs delta, tasks.md).
-2. [ ] Backend: `listAppointmentsPaged` en `src/lib/admin/appointments.ts`
+1. [x] Change OpenSpec: `openspec/changes/agregar-paginacion-citas/`
+   (proposal.md, design.md, specs delta, tasks.md). — commit `4888930`.
+2. [x] Backend: `listAppointmentsPaged` en `src/lib/admin/appointments.ts`
    (filtros + orden + count + paginación, reusando `withReminders`);
    `route.ts` con `page` (default 1), `pageSize` (default 20, max 100) y
    metadatos `{ total, page, pageSize, totalPages }`; prueba unitaria mockeada
-   actualizada.
-3. [ ] Pruebas de datos contra Supabase local
-   (`src/lib/admin/__tests__/`): filtros, total filtrado, orden, límites de
-   `page`/`pageSize`.
+   actualizada (30/30 GREEN). Whitelist de orden: 7 llaves (empírico, embed
+   PostgREST; `patients(full_name)`); fallback 416/PGRST103; desempate por `id`;
+   alias `sortBy` aceptado.
+3. [x] Pruebas de datos contra Supabase local
+   (`src/lib/admin/__tests__/appointments-pagination.test.ts`): 13/13 GREEN
+   tras `db:start` + `db:reset`. Pendiente externo: `npm run test:local` completo
+   tiene ~14 fallas preexistentes por timeouts del advisory lock en suites
+   ajenas (probadas no relacionadas en aislamiento; rama hermana
+   `test-local-falla-deterministicamente-8-tests-pat` ya la trackea).
 4. [ ] Frontend: `Pagination` reutilizable en `src/components/admin/`;
    integración en `/appointments` (filtros al API, URL `?page=n`, reset a
    página 1 al cambiar filtros, empty state, preservar página lista↔calendario
@@ -47,4 +52,6 @@ columnas (`start_at` por defecto `desc`, `created_at`).
 
 ## Evidencia de commits
 
-(por completar)
+- `4888930` docs(openspec): propose agregar-paginacion-citas change for issue #168 — artefactos OpenSpec + rastreo de feature (tarea 1).
+- Revisión nativa del candidato documental cerrada: lineage `review-f71be7c46b849ea4`, riesgo bajo, autoridad quemada.
+- Backend (tareas 2–3): evidence RED route 23 fail → 30/30 GREEN; RED data 11 fail → 13/13 GREEN; typecheck limpio; lint 0 errores (25 warnings preexistentes).

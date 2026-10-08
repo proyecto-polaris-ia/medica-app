@@ -149,21 +149,31 @@ documentado en el delta spec.
 
 ### 1.4 Ordenamiento server-side con whitelist
 
-- Parámetro `sort`, whitelist: `start_at` (default) y `created_at`.
+- Parámetro `sort` (canonical; `sortBy` se acepta como alias con validación
+  idéntica), whitelist de **siete** llaves: `start_at` (default), `end_at`,
+  `status`, `created_at`, `patient`, `service`, `provider`.
 - Parámetro `sortDir`: `asc` | `desc`; default `desc`.
-- Mapeo en la capa de datos: `sort` → columna (`start_at` | `created_at`) y
-  `sortDir` → `ascending: sortDir === 'asc'`.
+- Mapeo en la capa de datos: columnas directas con `.order(columna, ...)`;
+  `patient`, `service` y `provider` usan orden por recurso embebido de PostgREST
+  (`.order('patients(full_name)', ...)`, `.order('services(name)', ...)`,
+  `.order('providers(name)', ...)`), **verificado empíricamente** contra
+  Supabase local (Postgres 16.4) con rango + `count=exact` y resultado
+  determinista (ver suite de datos `appointments-pagination.test.ts`).
+- Tras el orden primario se aplica un desempate estable `.order('id', {
+  ascending: true })` para que la paginación sea determinista ante valores
+  iguales (por ejemplo, servicios/proveedores con el mismo nombre).
 - Cualquier `sort`/`sortDir` fuera del whitelist o del dominio responde `400` con
   `ValidationError` (ver §2.2), igual que un rango inválido.
 
-**Punto abierto (documentado, no inventado).** La UI actual ofrece seis columnas
-ordenables (`SortField`: `startAt`, `endAt`, `patient`, `service`, `provider`,
-`status`). El whitelist server-side solo cubre `start_at` y `created_at`. Este
-change **no** agrega endpoints ni columnas al whitelist; la fase apply debe
-reconciliar los headers restantes (por ejemplo, limitar los controles de orden a
-los campos soportados o dejar su ordenamiento fuera de la paginación). Mientras no
-se resuelva, ordenar por un campo no soportado no debe producir un request con un
-`sort` inválido. Ver §7 "Open Questions".
+**Resolución del punto abierto.** La UI podrá conservar sus seis columnas
+ordenables (`SortField`): el whitelist server-side las cubre todas (las
+llaves `patient`/`service`/`provider` se mapean a las columnas de nombre embebidas).
+Nota: `patients` no tiene columna `name` sino `full_name` (verificado en la
+base local); el embed usa `patients(full_name)`.
+
+> Registro de implementación (resolución de §7 OQ1): el whitelist final es el
+> de esta sección; el punto abierto original (solo `start_at`/`created_at`)
+> quedó resuelto por verificación empírica, no por limitación.
 
 ### 1.5 Componente `Pagination` reutilizable
 
@@ -232,11 +242,18 @@ Se sigue el patrón ya validado del filtro de calendario
 `src/lib/admin/appointments.ts` agrega:
 
 ```ts
-export type AppointmentSortColumn = 'start_at' | 'created_at';
+export type AppointmentSortColumn =
+  | 'start_at'
+  | 'end_at'
+  | 'status'
+  | 'created_at'
+  | 'patient'
+  | 'service'
+  | 'provider';
 
 export type ListAppointmentsPagedParams = {
-  page: number;          // 1-based, ya validado por la ruta
-  pageSize: number;      // ya validado (1..100)
+  page?: number;         // default 1; la ruta valida, la lib valida defensivamente
+  pageSize?: number;     // default 20; validado 1..100
   serviceId?: string;
   patientId?: string;
   providerId?: string;
@@ -264,10 +281,15 @@ Implementación:
 - Si vienen `start`/`end`, valida con `validateDateRange` (reutiliza la regla de
   máximo 62 días) y aplica `.gte('start_at', ...)` + `.lt('start_at', ...)`,
   igual que `listAppointmentsRange` (`:127-145`).
-- Ordena con `.order(sort ?? 'start_at', { ascending: (sortDir ?? 'desc') ===
-  'asc' })`; el whitelist se garantiza en la ruta (§2.2) y el tipo lo acota.
+- Ordena con `.order(expr, { ascending })` según §1.4; el whitelist se garantiza
+  en la ruta (§2.2) y la lib valida defensivamente; el tipo lo acota.
 - Aplica `.range(from, to)` con `from = (page - 1) * pageSize` y `to = from +
   pageSize - 1`.
+- **Fallback página fuera de rango:** cuando el rango solicitado excede el total,
+  PostgREST responde HTTP `416` (`PGRST103`) como error en lugar de página vacía;
+  la función hace un segundo `range(0, 0)` solo para obtener el conteo y devuelve
+  `appointments: []` con metadatos intactos (página fuera de rango NO recorta
+  `page` ni `total`).
 - Devuelve `{ appointments: await withReminders((data ?? []).map(mapRow)),
   total: count ?? 0 }`, reutilizando `withReminders` (`:78-86`) y sin N+1.
 
@@ -291,7 +313,8 @@ conservan** para no romper consumidores ni pruebas existentes.
    `400`, ver `app/api/admin/_lib/responses.ts`):
    - `page`: entero ≥ 1; default `1`.
    - `pageSize`: entero entre `1` y `100`; default `20`.
-   - `sort`: `start_at` | `created_at`; default `start_at`.
+   - `sort`: whitelist de siete llaves (§1.4); default `start_at`; `sortBy`
+     aceptado como alias de `sort`.
    - `sortDir`: `asc` | `desc`; default `desc`.
    - `start`/`end`: si uno viene sin el otro en modo lista, `400`; si ambos
      vienen, `validateDateRange` valida orden y máximo 62 días.
@@ -501,12 +524,12 @@ npm run build                              # build de Next.js
 
 ## 7. Open Questions
 
-1. **Reconciliación del ordenamiento por columna.** El whitelist server-side
-   cubre `start_at` y `created_at`, pero la UI ofrece seis columnas ordenables
-   (`SortField`). ¿La fase apply debe limitar los controles de orden a los campos
-   soportados, retirar los no soportados o dejarlos documentados como limitación?
-   Este change no inventa un whitelist más amplio. **Impacto:** solo en las
-   columnas de orden no cubiertas; no bloquea la paginación ni los filtros.
+1. **~Resuelta en implementación (ver §1.4).** El whitelist server-side cubre
+   las seis columnas de `SortField` de la UI: columnas directas (`start_at`,
+   `end_at`, `status`, `created_at`) más orden por nombre embebido
+   (`patient`/`service`/`provider`), verificado empíricamente contra Supabase
+   local con paginación determinista (desempate por `id`). La UI no necesita
+   limitar sus controles de orden.
 2. **`pageSize` configurable en la UI.** El contrato fija el default `20` (máx
    `100`). No se especifica un selector de tamaño de página; se asume constante
    `20` en la lista. Si se quiere exponer, es un alcance adicional, no requerido
