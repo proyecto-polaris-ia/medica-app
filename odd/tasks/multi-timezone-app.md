@@ -33,9 +33,30 @@ Estrategia: Stacked PRs to main — 3 PRs encadenados (decisión del usuario).
      amplificación de fallo de BD en layout, hooks de suite skipped).
    - Nota: falta route.test.ts dedicado para la API (fuera de superficies del
      worker) — follow-up.
-6. [ ] Chain 3 — presentación por vista → PR 3 (`eliumontoya/user-tz-presentation`):
-   appointments, calendario, snapshot, WCC, expediente.
-7. [ ] Archive + cierre del issue (PR final con 'Closes #163').
+6. [x] Chain 3 — presentación por vista → PR #190 (`eliumontoya/user-tz-presentation`, Closes #163):
+   - `7107a81` feat(admin): agenda /appointments en zona del observador
+   - `066073f` feat(admin): snapshot, Nora, expediente, follow-up, WCC
+   - Desviación aprobada: ProviderSnapshot/NoraSection como cliente con
+     useViewerTimezone() (enmienda D4 en design.md). WCC appointments cierra el
+     escenario de spec con "En tu zona" (server + getViewerTimezone).
+   - Verificación: 56 tests enfocados RED→GREEN, npm run test 1347 passed,
+     WCC local-db 8 passed, tsc/lint/build limpios.
+   - Review nativa aprobada y quemada (review-e9e43fd623223fb7, 3 advisory).
+   - `docs(openspec)`: state.yaml apply/verify complete.
+7. [ ] Archive + cierre del issue: tras fusionarse #185 → #186 → #190, mover el
+   change a `openspec/changes/archive/2026-..-user-timezone-preferences/`,
+   fusionar deltas en `openspec/specs/` y abrir PR de archive.
+
+## Follow-ups (hallazgos advisory acumulados, no bloqueantes)
+
+- R3-layout-db-failure-amplification: el layout amplifica fallos de BD al leer
+  preferencia (layout.tsx:17-22) — WARNING recurrente.
+- R3-timezone-route-untested: API `/api/admin/settings/timezone` sin
+  route.test.ts dedicado — SUGGESTION recurrente.
+- R3-datetime-local-hour-rollover / R3-dst-ambiguous-capture-unspecified:
+  semántica de hora 24/DST ambigua en captura datetime-local.
+- R3-nora-mixed-day-semantics: mezcla de semánticas de día en NoraSection.
+- Doble constante clínica (CLINIC_TZ / CLINIC_TIME_ZONE) — deuda menor (D5).
 
 ## Decisiones
 

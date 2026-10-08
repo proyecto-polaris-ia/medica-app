@@ -2,17 +2,16 @@
 
 import Link from 'next/link';
 import type { FollowUpCase } from '@/lib/admin/follow-up/types';
+import { useViewerTimezone } from '@/components/admin/TimezoneProvider';
 
-const reasonDateFormatter = new Intl.DateTimeFormat('es-MX', {
-  timeZone: 'America/Mexico_City',
-  day: 'numeric',
-  month: 'long',
-  year: 'numeric',
-});
-
-/** Fecha del motivo presentada en `America/Mexico_City`. */
-export function formatReasonDate(iso: string): string {
-  return reasonDateFormatter.format(new Date(iso));
+/** Fecha del motivo presentada en la zona del observador. */
+export function formatReasonDate(iso: string, timeZone: string): string {
+  return new Intl.DateTimeFormat('es-MX', {
+    timeZone,
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  }).format(new Date(iso));
 }
 
 /**
@@ -37,6 +36,8 @@ export function FollowUpCaseCard({
   onGenerateDraft: (patientId: string) => void;
   draftGenerated?: boolean;
 }) {
+  const viewerTz = useViewerTimezone();
+
   return (
     <article className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -54,7 +55,7 @@ export function FollowUpCaseCard({
             dateTime={followUpCase.reasonDate}
             className="text-xs text-gray-500"
           >
-            {formatReasonDate(followUpCase.reasonDate)}
+            {formatReasonDate(followUpCase.reasonDate, viewerTz)}
           </time>
         </div>
         <div className="flex flex-wrap gap-2">

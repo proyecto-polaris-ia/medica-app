@@ -1,4 +1,4 @@
-import { clinicDayKey, clinicTimeLabel } from '@/lib/admin/timezone';
+import { CLINIC_TZ, clinicDayKey, clinicTimeLabel } from '@/lib/admin/timezone';
 import {
   createWccClient,
   isSupabaseConfigured as hasSupabaseConfig,
@@ -91,11 +91,15 @@ export function resolveWccAppointmentsWindowHours(value?: number): number {
 }
 
 /**
- * Fecha y hora de inicio en la zona clínica (`America/Mexico_City`), nunca en
- * la zona del servidor. Formato `YYYY-MM-DD HH:mm`.
+ * Fecha y hora de inicio en la zona del observador (default:
+ * `America/Mexico_City`), nunca en la zona del servidor. Formato
+ * `YYYY-MM-DD HH:mm`.
  */
-export function formatWccAppointmentStart(startAt: string): string {
-  return `${clinicDayKey(startAt)} ${clinicTimeLabel(startAt)}`;
+export function formatWccAppointmentStart(
+  startAt: string,
+  timeZone: string = CLINIC_TZ
+): string {
+  return `${clinicDayKey(startAt, timeZone)} ${clinicTimeLabel(startAt, timeZone)}`;
 }
 
 type PatientInfo = { name: string; phone: string | null };

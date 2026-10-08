@@ -114,8 +114,15 @@ cruza el límite servidor/cliente):
   preferencia: `const timezone = await getViewerTimezone();` y
   `<TimezoneProvider timezone={timezone}>…</TimezoneProvider>`.
 - **Componentes servidor** (`NoraSection.tsx`, `ProviderSnapshot` y la página
-  del command center): reciben `timezone` como prop desde su página, o leen
+  del command center): recibirán `timezone` como prop desde su página, o leen
   `getViewerTimezone()`.
+- **Enmienda de implementación (chain 3):** `NoraSection` y `ProviderSnapshot`
+  quedaron como componentes cliente que consumen `useViewerTimezone()` del
+  contexto (el layout ya monta `TimezoneProvider` para todo el árbol admin).
+  Comportamiento observable idéntico al diseño D4; se eligió así porque las
+  páginas que los renderizan (`dashboard/page.tsx`, `providers/[id]/page.tsx`)
+  quedaron fuera de la chain y jsdom no renderiza RSCs asíncronos en pruebas.
+  La página del command center de citas (server) sí usa `getViewerTimezone()`.
 - `src/lib/admin/viewer-timezone.ts` (server-only) expone
   `getViewerTimezone = cache(async () => getUserTimezone((await requireUser()).id))`
   usando `cache` de React para deduplicar dentro del mismo request.

@@ -14,13 +14,12 @@ import { CalendarNav } from '@/components/admin/calendar/CalendarNav';
 import { ProviderLegend } from '@/components/admin/calendar/ProviderLegend';
 import { ServiceFilter } from '@/components/admin/calendar/ServiceFilter';
 import { PatientRecordModal } from '@/components/admin/PatientRecordModal';
+import { useViewerTimezone } from '@/components/admin/TimezoneProvider';
 import type { Appointment, AppointmentReminderSummary, Provider } from '@/lib/admin/types';
-import { statusLabel } from '@/lib/admin/appointment-labels';
 import {
   clinicLocalInputToUtc,
   clinicMonthRangeUtc,
   clinicTimeLabel,
-  CLINIC_TZ,
   FALLBACK_COLOR,
   getCurrentClinicMonth,
   groupAppointmentsByDay,
@@ -76,55 +75,73 @@ const emptyAppointment = {
   notes: '',
 };
 
-// La captura y el despliegue de horas de la cita usan SIEMPRE la zona
-// clínica (America/Mexico_City), nunca la zona del navegador.
-function toLocalInput(iso: string): string {
-  return toClinicLocalInput(iso);
+// La captura y el despliegue de horas de la cita usan la zona del observador
+// (preferencia del usuario), nunca la zona del navegador. El default de
+// `useViewerTimezone()` es `America/Mexico_City`.
+function toLocalInput(iso: string, timeZone: string): string {
+  return toClinicLocalInput(iso, timeZone);
 }
 
-function fromLocalInput(value: string): string {
-  return clinicLocalInputToUtc(value);
+function fromLocalInput(value: string, timeZone: string): string {
+  return clinicLocalInputToUtc(value, timeZone);
 }
 
-// Fecha/hora del envío del recordatorio SIEMPRE en la zona clínica
-// (America/Mexico_City), nunca en la zona del navegador. Produce
-// "3 oct 2026, 09:15".
-const REMINDER_DATE_FORMATTER = new Intl.DateTimeFormat('es-MX', {
-  timeZone: 'America/Mexico_City',
-  day: 'numeric',
-  month: 'short',
-  year: 'numeric',
-  hour: '2-digit',
-  minute: '2-digit',
-  hour12: false,
-});
-
-function formatReminderSentAt(iso: string): string {
-  return REMINDER_DATE_FORMATTER.format(new Date(iso));
+// Fecha/hora del envío del recordatorio en la zona del observador (nunca la
+// del navegador). Produce "3 oct 2026, 09:15".
+function formatReminderSentAt(iso: string, timeZone: string): string {
+  return new Intl.DateTimeFormat('es-MX', {
+    timeZone,
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(new Date(iso));
 }
 
-// Fecha/hora de la cita en la lista: SIEMPRE en la zona clínica
-// (America/Mexico_City), nunca en la zona del navegador.
-const APPOINTMENT_DATE_FORMATTER = new Intl.DateTimeFormat('es-MX', {
-  timeZone: CLINIC_TZ,
-  dateStyle: 'medium',
-  timeStyle: 'short',
-});
+// Fecha/hora de la cita en la lista, en la zona del observador.
+function formatDate(iso: string, timeZone: string): string {
+  return new Intl.DateTimeFormat('es-MX', {
+    timeZone,
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(new Date(iso));
+}
 
-function formatDate(iso: string): string {
-  return APPOINTMENT_DATE_FORMATTER.format(new Date(iso));
+function statusLabel(status: Appointment['status']): string {
+  switch (status) {
+    case 'confirmed':
+      return 'Confirmada';
+    case 'requested':
+    case 'pending':
+      return 'Sin confirmar';
+    case 'cancelled':
+      return 'Cancelada';
+    case 'rescheduled':
+      return 'Reagendada';
+    case 'no_show':
+      return 'No asistió';
+    case 'attended':
+      return 'Atendida';
+    default:
+      return status;
+  }
 }
 
 // Nunca muestra una fecha de recordatorio inexistente: cuando no hay `sentAt`
 // cae en el estado correspondiente (programado/falló/simulado).
-function reminderLabel(reminder: AppointmentReminderSummary): string {
+function reminderLabel(
+  reminder: AppointmentReminderSummary,
+  timeZone: string
+): string {
   if (reminder.dryRun && reminder.status === 'scheduled') {
     return 'Simulado (dry-run)';
   }
   if (reminder.status === 'sent' && reminder.sentAt) {
     return reminder.cadence === 'h24'
-      ? `Recordatorio H-24 enviado el ${formatReminderSentAt(reminder.sentAt)}`
-      : `Recordatorio día mismo enviado el ${formatReminderSentAt(reminder.sentAt)}`;
+      ? `Recordatorio H-24 enviado el ${formatReminderSentAt(reminder.sentAt, timeZone)}`
+      : `Recordatorio día mismo enviado el ${formatReminderSentAt(reminder.sentAt, timeZone)}`;
   }
   if (reminder.status === 'failed') {
     return reminder.cadence === 'h24'
@@ -259,6 +276,7 @@ export default function AppointmentsPage() {
   // La lista solo honra un id único; `a,b` es del calendario y no le corresponde.
   const urlProviderFilter =
     rawProviderId && !rawProviderId.includes(',') ? rawProviderId : undefined;
+  const viewerTz = useViewerTimezone();
 
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [patients, setPatients] = useState<Reference[]>([]);
@@ -271,7 +289,9 @@ export default function AppointmentsPage() {
   const [form, setForm] = useState(emptyAppointment);
   const [submitting, setSubmitting] = useState(false);
   const [view, setView] = useState<ViewMode>('list');
-  const [visibleMonth, setVisibleMonth] = useState(getCurrentClinicMonth());
+  const [visibleMonth, setVisibleMonth] = useState(() =>
+    getCurrentClinicMonth(viewerTz)
+  );
   const [recordPatientId, setRecordPatientId] = useState<string | null>(null);
   
   const [serviceFilter, setServiceFilter] = useState('');
@@ -329,11 +349,9 @@ export default function AppointmentsPage() {
       startAt: appointment.startAt,
       endAt: appointment.endAt,
       status: appointment.status,
-      providerName: refName(providers, appointment.providerId),
-      notes: appointment.notes,
     }));
-    return groupAppointmentsByDay(enriched, providerColor);
-  }, [calendarAppointments, patients, services, providers, providerColor]);
+    return groupAppointmentsByDay(enriched, providerColor, viewerTz);
+  }, [calendarAppointments, patients, services, providerColor, viewerTz]);
 
   const visibleProviders = useMemo(() => {
     const providerIds = new Set(appointments.map((a) => a.providerId));
@@ -414,7 +432,8 @@ export default function AppointmentsPage() {
           ? (() => {
               const { startAt, endAt } = clinicMonthRangeUtc(
                 visibleMonth.year,
-                visibleMonth.month
+                visibleMonth.month,
+                viewerTz
               );
               return `/api/admin/appointments?start=${encodeURIComponent(startAt)}&end=${encodeURIComponent(endAt)}`;
             })()
@@ -470,6 +489,7 @@ export default function AppointmentsPage() {
   }, [
     view,
     visibleMonth,
+    viewerTz,
     page,
     serviceFilter,
     patientFilter,
@@ -496,8 +516,8 @@ export default function AppointmentsPage() {
       patientId: appointment.patientId ?? '',
       serviceId: appointment.serviceId,
       providerId: appointment.providerId,
-      startAt: toLocalInput(appointment.startAt),
-      endAt: toLocalInput(appointment.endAt),
+      startAt: toLocalInput(appointment.startAt, viewerTz),
+      endAt: toLocalInput(appointment.endAt, viewerTz),
       status: appointment.status,
       notes: appointment.notes ?? '',
     });
@@ -533,8 +553,8 @@ export default function AppointmentsPage() {
       const payload = {
         ...form,
         patientId: form.patientId || null,
-        startAt: fromLocalInput(form.startAt),
-        endAt: fromLocalInput(form.endAt),
+        startAt: fromLocalInput(form.startAt, viewerTz),
+        endAt: fromLocalInput(form.endAt, viewerTz),
       };
       const res = await fetch(url, {
         method,
@@ -839,7 +859,7 @@ export default function AppointmentsPage() {
                   )}
                 </button>
               ),
-              cell: (a) => formatDate(a.startAt)
+              cell: (a) => formatDate(a.startAt, viewerTz)
             },
             { 
               header: (
@@ -853,7 +873,7 @@ export default function AppointmentsPage() {
                   )}
                 </button>
               ),
-              cell: (a) => formatDate(a.endAt)
+              cell: (a) => formatDate(a.endAt, viewerTz)
             },
             { 
               header: (
@@ -933,7 +953,7 @@ export default function AppointmentsPage() {
                         key={`${reminder.cadence}-${reminder.createdAt}-${index}`}
                         className="inline-flex w-fit rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-900"
                       >
-                        {reminderLabel(reminder)}
+                        {reminderLabel(reminder, viewerTz)}
                       </span>
                     ))}
                   </div>
@@ -967,6 +987,7 @@ export default function AppointmentsPage() {
           year={visibleMonth.year}
           month={visibleMonth.month}
           blocksByDay={blocksByDay}
+          timeZone={viewerTz}
           onSelectBlock={handleSelectBlock}
           onSelectPatient={openPatientRecord}
         />
@@ -1055,6 +1076,7 @@ export default function AppointmentsPage() {
               />
             </div>
           </div>
+          <p className="text-xs text-gray-500">Zona horaria: {viewerTz}</p>
           <div>
             <label className="block text-sm font-medium text-gray-700">
               Estado

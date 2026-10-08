@@ -1,0 +1,11 @@
+change: user-timezone-preferences
+status: complete
+artifact_store: openspec
+created: 2026-10-08
+phases:
+  proposal: complete
+  spec: complete
+  design: complete
+  tasks: complete
+  archive: complete
+  verify: complete

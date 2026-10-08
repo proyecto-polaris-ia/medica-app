@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { getCalendarGrid } from '@/lib/admin/timezone';
+import { CLINIC_TZ, getCalendarGrid } from '@/lib/admin/timezone';
 import type { CalendarBlock } from '@/lib/admin/timezone';
 import { DayCell } from './DayCell';
 import { DayAppointmentsModal } from './DayAppointmentsModal';
@@ -10,6 +10,8 @@ type MonthCalendarProps = {
   year: number;
   month: number;
   blocksByDay: Record<string, CalendarBlock[]>;
+  /** Zona del observador para la grilla; default: zona de la clínica. */
+  timeZone?: string;
   onSelectBlock: (id: string) => void;
   onSelectPatient?: (patientId: string) => void;
 };
@@ -18,10 +20,11 @@ export function MonthCalendar({
   year,
   month,
   blocksByDay,
+  timeZone = CLINIC_TZ,
   onSelectBlock,
   onSelectPatient,
 }: MonthCalendarProps) {
-  const grid = getCalendarGrid(year, month);
+  const grid = getCalendarGrid(year, month, timeZone);
   // Día cuyo desbordamiento "+N más" está abierto en el modal, o `null`.
   const [overflowDayKey, setOverflowDayKey] = useState<string | null>(null);
 

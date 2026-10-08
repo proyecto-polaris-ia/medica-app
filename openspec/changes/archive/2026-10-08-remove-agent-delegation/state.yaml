@@ -1,11 +1,11 @@
-change: user-timezone-preferences
+change: remove-agent-delegation
 status: in_progress
 artifact_store: openspec
 created: 2026-10-08
 phases:
   proposal: complete
-  spec: complete
+  spec: not_applicable
   design: complete
   tasks: complete
-  apply: in_progress
+  apply: pending
   verify: pending

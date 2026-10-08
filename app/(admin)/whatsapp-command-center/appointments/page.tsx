@@ -1,11 +1,39 @@
 import { formatRelativeTime } from '@/lib/date-format';
 import {
+  CLINIC_TZ,
+  clinicDayKey,
+  clinicTimeLabel,
+} from '@/lib/admin/timezone';
+import { getViewerTimezone } from '@/lib/admin/viewer-timezone';
+import {
   getWccUnconfirmedAppointments,
   type WccAppointmentReminderRow,
 } from '@/lib/wcc-appointments';
 import { WccEmptyState, WccNotice } from '../components';
 
 export const dynamic = 'force-dynamic';
+
+/**
+ * Zona del observador para los instantes absolutos de las citas. El layout
+ * administrativo ya valida la sesión y resuelve la preferencia; si aquí no se
+ * puede resolver, se conserva la zona de la clínica (misma degradación
+ * defensiva que el data layer de `wcc-appointments`).
+ */
+async function resolveViewerTimezone(): Promise<string> {
+  try {
+    return await getViewerTimezone();
+  } catch {
+    return CLINIC_TZ;
+  }
+}
+
+/** Fecha y hora absoluta de la cita en la zona del observador (`YYYY-MM-DD HH:mm`). */
+function formatViewerAppointmentStart(
+  startAt: string,
+  timeZone: string
+): string {
+  return `${clinicDayKey(startAt, timeZone)} ${clinicTimeLabel(startAt, timeZone)}`;
+}
 
 function reminderLabel(reminder: WccAppointmentReminderRow): string {
   if (reminder.dryRun && reminder.status === 'scheduled') {
@@ -50,7 +78,10 @@ function ReminderBadge({ reminder }: { reminder: WccAppointmentReminderRow }) {
 }
 
 export default async function Page() {
-  const queue = await getWccUnconfirmedAppointments();
+  const [queue, viewerTz] = await Promise.all([
+    getWccUnconfirmedAppointments(),
+    resolveViewerTimezone(),
+  ]);
 
   return (
     <main>
@@ -103,7 +134,11 @@ export default async function Page() {
                   {appointment.providerName}
                 </span>
               </div>
-              <p className="mt-2 text-xs text-gray-500">
+              <p className="mt-2 text-xs font-medium text-gray-700">
+                En tu zona:{' '}
+                {formatViewerAppointmentStart(appointment.startAt, viewerTz)}
+              </p>
+              <p className="mt-1 text-xs text-gray-500">
                 {formatRelativeTime(appointment.startAt)} · en{' '}
                 {appointment.hoursUntilStart} h
               </p>
