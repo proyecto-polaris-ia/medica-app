@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import AppointmentsPage from './page';
 
@@ -123,12 +123,15 @@ describe('/appointments integration', () => {
       expect(screen.getAllByTestId('weekday-label')).toHaveLength(7);
     }, { timeout: 10000 });
 
-    const rangeCall = fetchMock.mock.calls.find((call) =>
-      (call[0] as string).startsWith('/api/admin/appointments?')
-    );
+    const rangeCall = fetchMock.mock.calls.find((call) => {
+      const url = call[0] as string;
+      return (
+        url.startsWith('/api/admin/appointments?') &&
+        url.includes('start=') &&
+        url.includes('end=')
+      );
+    });
     expect(rangeCall).toBeDefined();
-    expect(rangeCall![0]).toContain('start=');
-    expect(rangeCall![0]).toContain('end=');
   });
 
   it('opens the edit flow when a calendar block is clicked', async () => {
@@ -179,7 +182,7 @@ describe('/appointments integration', () => {
   it('renders the Notas column with a truncated preview', async () => {
     const fetchMock = buildFetchMock();
     fetchMock.mockImplementation((url: string) => {
-      if (url === '/api/admin/appointments') {
+      if (url.startsWith('/api/admin/appointments?')) {
         return Promise.resolve({
           ok: true,
           json: () => Promise.resolve({
@@ -212,7 +215,7 @@ describe('/appointments integration', () => {
   it('binds notes to the edit modal textarea', async () => {
     const fetchMock = buildFetchMock();
     fetchMock.mockImplementation((url: string) => {
-      if (url === '/api/admin/appointments') {
+      if (url.startsWith('/api/admin/appointments?')) {
         return Promise.resolve({
           ok: true,
           json: () => Promise.resolve({
@@ -242,7 +245,7 @@ describe('/appointments integration', () => {
   it('sends an empty notes value when cleared in the modal', async () => {
     let savedBody: Record<string, unknown> | null = null;
     const fetchMock = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
-      if (url === '/api/admin/appointments') {
+      if (url.startsWith('/api/admin/appointments?')) {
         return Promise.resolve({
           ok: true,
           json: () => Promise.resolve({
@@ -1359,14 +1362,38 @@ describe('/appointments calendar service filter', () => {
 
   it('3.6 la lista conserva su filtro de servicio de un solo valor', async () => {
     searchParamsRef.value = new URLSearchParams('serviceId=service-1,service-2');
-    global.fetch = buildCalendarFetch({
-      services: CAL_SERVICES,
-      providers: [CAL_PROVIDERS[0]],
-      patients: [CAL_PATIENTS[0], CAL_PATIENTS[1]],
-      appointments: [
-        calAppointment('appt-x', 'prov-a', 'patient-a', 10, 8, 'service-1'),
-        calAppointment('appt-y', 'prov-a', 'patient-b', 10, 9, 'service-2'),
-      ],
+    // El filtro de la lista es server-side: el mock respeta `serviceId` del
+    // query para reproducir la página filtrada que devuelve el API.
+    const listAppointments = [
+      calAppointment('appt-x', 'prov-a', 'patient-a', 10, 8, 'service-1'),
+      calAppointment('appt-y', 'prov-a', 'patient-b', 10, 9, 'service-2'),
+    ];
+    const ok = (body: unknown) =>
+      Promise.resolve({ ok: true, json: () => Promise.resolve(body) });
+    global.fetch = vi.fn().mockImplementation((url: string) => {
+      if (url.startsWith('/api/admin/appointments')) {
+        const serviceId = new URLSearchParams(url.split('?')[1] ?? '').get(
+          'serviceId'
+        );
+        const filtered = serviceId
+          ? listAppointments.filter((a) => a.serviceId === serviceId)
+          : listAppointments;
+        return ok({
+          appointments: filtered,
+          pagination: {
+            total: filtered.length,
+            page: 1,
+            pageSize: 20,
+            totalPages: filtered.length > 0 ? 1 : 0,
+          },
+        });
+      }
+      return buildCalendarFetch({
+        services: CAL_SERVICES,
+        providers: [CAL_PROVIDERS[0]],
+        patients: [CAL_PATIENTS[0], CAL_PATIENTS[1]],
+        appointments: listAppointments,
+      })(url);
     });
     const user = userEvent.setup();
     render(<AppointmentsPage />);
@@ -1546,5 +1573,344 @@ describe('/appointments calendar service filter', () => {
       expect(replaceMock).toHaveBeenLastCalledWith('/appointments')
     );
     expect(calendarBlock(/09:00 Ortodoncia — Paciente B/)).toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Paginación server-side de la lista de citas (issue #168).
+// ---------------------------------------------------------------------------
+function listParamsCalls(fetchMock: ReturnType<typeof buildFetchMock>) {
+  return fetchMock.mock.calls
+    .map((call) => call[0])
+    .filter(
+      (url): url is string =>
+        typeof url === 'string' && url.startsWith('/api/admin/appointments?')
+    )
+    .map((url) => new URLSearchParams(url.split('?')[1]));
+}
+
+function lastListParams(fetchMock: ReturnType<typeof buildFetchMock>) {
+  const calls = listParamsCalls(fetchMock);
+  return calls.length > 0 ? calls[calls.length - 1] : null;
+}
+
+function buildPaginatedFetch({
+  appointments = [],
+  total = appointments.length,
+  page = 1,
+  pageSize = 20,
+}: {
+  appointments?: unknown[];
+  total?: number;
+  page?: number;
+  pageSize?: number;
+} = {}) {
+  const fetchMock = buildFetchMock();
+  fetchMock.mockImplementation((url: string) => {
+    if (url.startsWith('/api/admin/appointments')) {
+      return Promise.resolve({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            appointments,
+            pagination: {
+              total,
+              page,
+              pageSize,
+              totalPages: pageSize > 0 ? Math.ceil(total / pageSize) : 0,
+            },
+          }),
+      });
+    }
+    return buildFetchMock()(url);
+  });
+  return fetchMock;
+}
+
+describe('/appointments list pagination', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    window.alert = vi.fn();
+    window.confirm = vi.fn(() => false);
+    searchParamsRef.value = new URLSearchParams();
+    replaceMock.mockClear();
+  });
+
+  async function renderList(fetchMock: ReturnType<typeof buildFetchMock>) {
+    global.fetch = fetchMock;
+    const user = userEvent.setup();
+    render(<AppointmentsPage />);
+    await screen.findByRole('option', { name: 'Limpieza' });
+    return user;
+  }
+
+  it('sends page, pageSize and the canonical sort in list mode', async () => {
+    const fetchMock = buildPaginatedFetch({
+      appointments: [BASE_APPOINTMENT],
+      total: 1,
+    });
+    await renderList(fetchMock);
+
+    await waitFor(() => expect(lastListParams(fetchMock)).not.toBeNull());
+    const params = lastListParams(fetchMock)!;
+    expect(params.get('page')).toBe('1');
+    expect(params.get('pageSize')).toBe('20');
+    expect(params.get('sort')).toBe('start_at');
+    expect(params.get('sortDir')).toBe('asc');
+  });
+
+  it('forwards the list filters to the server', async () => {
+    const fetchMock = buildPaginatedFetch({
+      appointments: [BASE_APPOINTMENT],
+      total: 100,
+    });
+    const user = await renderList(fetchMock);
+    const comboboxes = screen.getAllByRole('combobox');
+
+    await user.selectOptions(comboboxes[0], SERVICE_ID);
+    await user.selectOptions(comboboxes[1], PATIENT_ID);
+    await user.selectOptions(comboboxes[2], PROVIDER_ID);
+
+    await waitFor(() => {
+      const params = lastListParams(fetchMock)!;
+      expect(params.get('serviceId')).toBe(SERVICE_ID);
+      expect(params.get('patientId')).toBe(PATIENT_ID);
+      expect(params.get('providerId')).toBe(PROVIDER_ID);
+    });
+  });
+
+  it('sends the date range as start/end only when both bounds are set', async () => {
+    const fetchMock = buildPaginatedFetch({
+      appointments: [BASE_APPOINTMENT],
+      total: 100,
+    });
+    global.fetch = fetchMock;
+    const { container } = render(<AppointmentsPage />);
+    await screen.findByRole('option', { name: 'Limpieza' });
+
+    const [fromInput, toInput] = Array.from(
+      container.querySelectorAll('input[type="date"]')
+    ) as HTMLInputElement[];
+
+    fireEvent.change(fromInput, { target: { value: '2026-09-01' } });
+    fireEvent.change(toInput, { target: { value: '2026-09-30' } });
+
+    await waitFor(() => {
+      const params = lastListParams(fetchMock)!;
+      expect(params.get('start')).toBe('2026-09-01T00:00:00.000Z');
+      expect(params.get('end')).toBe('2026-09-30T23:59:59.999Z');
+    });
+  });
+
+  it('resets the page to 1 and drops page from the URL when a filter changes', async () => {
+    searchParamsRef.value = new URLSearchParams('page=3');
+    const fetchMock = buildPaginatedFetch({
+      appointments: [BASE_APPOINTMENT],
+      total: 100,
+      page: 3,
+    });
+    const user = await renderList(fetchMock);
+
+    await waitFor(() =>
+      expect(lastListParams(fetchMock)!.get('page')).toBe('3')
+    );
+
+    await user.selectOptions(screen.getAllByRole('combobox')[0], SERVICE_ID);
+
+    await waitFor(() => {
+      const params = lastListParams(fetchMock)!;
+      expect(params.get('page')).toBe('1');
+      expect(params.get('serviceId')).toBe(SERVICE_ID);
+    });
+    expect(replaceMock).toHaveBeenCalledWith('/appointments');
+  });
+
+  it('resets the page to 1 when the sort field changes', async () => {
+    searchParamsRef.value = new URLSearchParams('page=3');
+    const fetchMock = buildPaginatedFetch({
+      appointments: [BASE_APPOINTMENT],
+      total: 100,
+      page: 3,
+    });
+    const user = await renderList(fetchMock);
+
+    await waitFor(() =>
+      expect(lastListParams(fetchMock)!.get('page')).toBe('3')
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Fin' }));
+
+    await waitFor(() => {
+      const params = lastListParams(fetchMock)!;
+      expect(params.get('page')).toBe('1');
+      expect(params.get('sort')).toBe('end_at');
+    });
+    expect(replaceMock).toHaveBeenCalledWith('/appointments');
+  });
+
+  it('initializes the page from ?page=2 and requests page 2', async () => {
+    searchParamsRef.value = new URLSearchParams('page=2');
+    const fetchMock = buildPaginatedFetch({
+      appointments: [BASE_APPOINTMENT],
+      total: 100,
+      page: 2,
+    });
+    await renderList(fetchMock);
+
+    await waitFor(() =>
+      expect(lastListParams(fetchMock)!.get('page')).toBe('2')
+    );
+    expect(
+      await screen.findByText('Página 2 de 5 (100 resultados)')
+    ).toBeInTheDocument();
+  });
+
+  it('writes ?page=3 with router.replace when advancing a page', async () => {
+    searchParamsRef.value = new URLSearchParams('page=2');
+    const fetchMock = buildPaginatedFetch({
+      appointments: [BASE_APPOINTMENT],
+      total: 100,
+      page: 2,
+    });
+    const user = await renderList(fetchMock);
+
+    await user.click(
+      await screen.findByRole('button', { name: 'Ir a la página siguiente' })
+    );
+
+    await waitFor(() =>
+      expect(replaceMock).toHaveBeenCalledWith('/appointments?page=3')
+    );
+    await waitFor(() =>
+      expect(lastListParams(fetchMock)!.get('page')).toBe('3')
+    );
+  });
+
+  it('does not rewrite the URL when the first page action is at its bound', async () => {
+    const fetchMock = buildPaginatedFetch({
+      appointments: [BASE_APPOINTMENT],
+      total: 100,
+      page: 1,
+    });
+    const user = await renderList(fetchMock);
+
+    const firstButton = await screen.findByRole('button', {
+      name: 'Ir a la primera página',
+    });
+    expect(firstButton).toBeDisabled();
+    await user.click(firstButton);
+
+    expect(replaceMock).not.toHaveBeenCalled();
+  });
+
+  it('disables next/last on the last page', async () => {
+    searchParamsRef.value = new URLSearchParams('page=5');
+    const fetchMock = buildPaginatedFetch({
+      appointments: [BASE_APPOINTMENT],
+      total: 100,
+      page: 5,
+    });
+    await renderList(fetchMock);
+
+    expect(
+      await screen.findByRole('button', { name: 'Ir a la página siguiente' })
+    ).toBeDisabled();
+    expect(
+      screen.getByRole('button', { name: 'Ir a la última página' })
+    ).toBeDisabled();
+  });
+
+  it('shows the out-of-range empty state and keeps pagination visible', async () => {
+    searchParamsRef.value = new URLSearchParams('page=9');
+    const fetchMock = buildPaginatedFetch({
+      appointments: [],
+      total: 5,
+      page: 9,
+    });
+    await renderList(fetchMock);
+
+    expect(
+      await screen.findByText('No hay citas en esta página.')
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('navigation', { name: 'Paginación de citas' })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Ir a la primera página' })
+    ).toBeEnabled();
+    expect(screen.queryAllByRole('row')).toHaveLength(0);
+  });
+
+  it('shows the no-appointments empty state when there is no data at all', async () => {
+    const fetchMock = buildPaginatedFetch({ appointments: [], total: 0 });
+    await renderList(fetchMock);
+
+    expect(
+      await screen.findByText('No hay citas registradas.')
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('navigation')).not.toBeInTheDocument();
+  });
+
+  it('shows the no-matches empty state when filters are active', async () => {
+    const fetchMock = buildPaginatedFetch({ appointments: [], total: 0 });
+    const user = await renderList(fetchMock);
+
+    await user.selectOptions(screen.getAllByRole('combobox')[0], SERVICE_ID);
+
+    expect(
+      await screen.findByText('No hay citas que coincidan con los filtros.')
+    ).toBeInTheDocument();
+  });
+
+  it('preserves the calendar providerId/serviceId when changing page', async () => {
+    searchParamsRef.value = new URLSearchParams(
+      'page=2&providerId=prov-a&serviceId=service-1'
+    );
+    const fetchMock = buildPaginatedFetch({
+      appointments: [BASE_APPOINTMENT],
+      total: 100,
+      page: 2,
+    });
+    const user = await renderList(fetchMock);
+
+    await user.click(
+      await screen.findByRole('button', { name: 'Ir a la página siguiente' })
+    );
+
+    await waitFor(() =>
+      expect(replaceMock).toHaveBeenCalledWith(
+        '/appointments?page=3&providerId=prov-a&serviceId=service-1'
+      )
+    );
+  });
+
+  it('preserves the page when toggling Lista <-> Calendario without filter changes', async () => {
+    searchParamsRef.value = new URLSearchParams('page=2');
+    const fetchMock = buildPaginatedFetch({
+      appointments: [BASE_APPOINTMENT],
+      total: 100,
+      page: 2,
+    });
+    const user = await renderList(fetchMock);
+
+    await screen.findByText('Página 2 de 5 (100 resultados)');
+    const replaceCallsBefore = replaceMock.mock.calls.length;
+
+    await user.click(screen.getByRole('button', { name: /^Calendario$/ }));
+    await waitFor(
+      () => {
+        expect(screen.getAllByTestId('weekday-label')).toHaveLength(7);
+      },
+      { timeout: 10000 }
+    );
+    await user.click(screen.getByRole('button', { name: /^Lista$/ }));
+
+    await waitFor(() =>
+      expect(lastListParams(fetchMock)!.get('page')).toBe('2')
+    );
+    expect(
+      await screen.findByText('Página 2 de 5 (100 resultados)')
+    ).toBeInTheDocument();
+    expect(replaceMock.mock.calls.length).toBe(replaceCallsBefore);
   });
 });

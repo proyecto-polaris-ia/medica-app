@@ -71,6 +71,11 @@ usuario ve. Por lo tanto:
   `dateTo` (`app/(admin)/appointments/page.tsx:201-212`) pasan a viajar como
   parámetros del request (`serviceId`, `patientId`, `providerId`, `start`,
   `end`).
+  > Registro de implementación: el rango de fechas viaja SOLO cuando ambos
+  > extremos están seteados (el API rechaza un extremo suelto con `400`), y el
+  > extremo superior se extiende a fin del día (`T23:59:59.999Z`) para que un
+  > rango de un solo día sea válido (`end > start`). Un extremo suelto queda
+  > inerte en la UI hasta completar el rango.
 - `loadData` (`:323-363`) construye la URL del modo lista con esos parámetros
   **más** `page`, `pageSize`, `sort` y `sortDir`, y deja de traer el arreglo
   completo.
@@ -180,7 +185,12 @@ base local); el embed usa `patients(full_name)`.
 - Archivo nuevo: `src/components/admin/Pagination.tsx`, presentacional y sin
   dependencias (`tailwind` + HTML nativo).
 - Contrato propuesto: `{ page: number; pageSize: number; total: number;
-  totalPages: number; onPageChange: (page: number) => void }`.
+  onPageChange: (page: number) => void; ariaLabel?: string }`.
+  > Registro de implementación: `totalPages` NO es prop; el componente lo
+  > calcula (`Math.ceil(total/pageSize)`), lo que evita desincronía entre
+  > consumidor y componente. `ariaLabel` es opcional con default `"Paginación"`;
+  > `/appointments` pasa `"Paginación de citas"` y #167 podrá pasar su propia
+  > etiqueta.
 - Renderiza **primera / anterior / indicador "Página X de Y (N resultados)" /
   siguiente / última**, con botones `disabled` en los extremos y en el rango
   `page < 1` o `page > totalPages`.

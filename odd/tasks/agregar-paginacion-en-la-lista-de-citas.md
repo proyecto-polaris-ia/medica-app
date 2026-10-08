@@ -42,10 +42,14 @@ columnas (`start_at` por defecto `desc`, `created_at`).
    tiene ~14 fallas preexistentes por timeouts del advisory lock en suites
    ajenas (probadas no relacionadas en aislamiento; rama hermana
    `test-local-falla-deterministicamente-8-tests-pat` ya la trackea).
-4. [ ] Frontend: `Pagination` reutilizable en `src/components/admin/`;
-   integración en `/appointments` (filtros al API, URL `?page=n`, reset a
-   página 1 al cambiar filtros, empty state, preservar página lista↔calendario
-   si no cambian filtros).
+4. [x] Frontend: `Pagination` reutilizable en `src/components/admin/` (props
+   `{ page, pageSize, total, onPageChange, ariaLabel? }`, aria completo,
+   reutilizable para #167); integración en `/appointments` (filtros y orden
+   server-side, URL `?page=n` con init única y no-reescritura, reset a página 1
+   al cambiar filtro u orden, preservación de página lista↔calendario, tres
+   estados vacíos). 74/74 pruebas de los archivos tocados en GREEN
+   (13 del componente + 61 de la página); `npm test` completo 1462/0;
+   typecheck/lint limpios.
 5. [ ] Verificación: `db:start` + `db:reset` + `npm run test:local`,
    `lint`, `typecheck`, `build`.
 6. [ ] Commits de unidad de trabajo (Conventional Commits) con evidencia.
@@ -54,4 +58,5 @@ columnas (`start_at` por defecto `desc`, `created_at`).
 
 - `4888930` docs(openspec): propose agregar-paginacion-citas change for issue #168 — artefactos OpenSpec + rastreo de feature (tarea 1).
 - Revisión nativa del candidato documental cerrada: lineage `review-f71be7c46b849ea4`, riesgo bajo, autoridad quemada.
-- Backend (tareas 2–3): evidence RED route 23 fail → 30/30 GREEN; RED data 11 fail → 13/13 GREEN; typecheck limpio; lint 0 errores (25 warnings preexistentes).
+- Backend (tareas 2–3): commit `8442588`; RED route 23 fail → 30/30 GREEN; RED data 11 fail → 13/13 GREEN; typecheck limpio; lint 0 errores (25 warnings preexistentes). Revisión nativa del candidato backend: consentimiento declinado para este candidato (sin lineage).
+- Frontend (tarea 4): RED Pagination (import inexistente) → 13/13 GREEN; RED page 12 fail → 74/74 GREEN; `npm test` 1462 passed / 0 failed; typecheck limpio; lint 0 errores sin warnings nuevos.
