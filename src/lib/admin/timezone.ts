@@ -9,9 +9,33 @@ type ClinicParts = {
   second: number;
 };
 
-function parseClinicParts(date: Date): ClinicParts {
+/**
+ * Indica si `value` es una zona horaria IANA que `Intl` puede resolver.
+ * Se usa para validar la preferencia del usuario antes de persistirla.
+ */
+export function isValidIanaTimeZone(value: string): boolean {
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: value });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Devuelve `value` si es una zona IANA válida; en cualquier otro caso
+ * (null, undefined, vacío o inválido) cae al default de la clínica.
+ */
+export function resolveTimeZone(value: string | null | undefined): string {
+  if (typeof value === 'string' && isValidIanaTimeZone(value)) {
+    return value;
+  }
+  return CLINIC_TZ;
+}
+
+function parseClinicParts(date: Date, timeZone: string): ClinicParts {
   const formatter = new Intl.DateTimeFormat('es-MX', {
-    timeZone: CLINIC_TZ,
+    timeZone,
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
@@ -38,8 +62,8 @@ function parseClinicParts(date: Date): ClinicParts {
   };
 }
 
-function offsetAtUtc(utc: Date): number {
-  const parts = parseClinicParts(utc);
+function offsetAtUtc(utc: Date, timeZone: string): number {
+  const parts = parseClinicParts(utc, timeZone);
   const naive = Date.UTC(
     parts.year,
     parts.month - 1,
@@ -55,6 +79,7 @@ function utcFromClinicParts(
   year: number,
   month: number,
   day: number,
+  timeZone: string,
   hour = 0,
   minute = 0,
   second = 0
@@ -62,10 +87,11 @@ function utcFromClinicParts(
   const naive = Date.UTC(year, month - 1, day, hour, minute, second);
   let candidate = naive;
 
-  // Converge on the UTC instant whose clinic-local parts match the target.
-  // One or two iterations are enough because the offset only changes at DST boundaries.
+  // Converge on the UTC instant whose local parts (in `timeZone`) match the
+  // target. One or two iterations are enough because the offset only changes
+  // at DST boundaries.
   for (let i = 0; i < 5; i++) {
-    const offset = offsetAtUtc(new Date(candidate));
+    const offset = offsetAtUtc(new Date(candidate), timeZone);
     const next = naive + offset;
     if (next === candidate) break;
     candidate = next;
@@ -74,34 +100,44 @@ function utcFromClinicParts(
   return new Date(candidate);
 }
 
-export function clinicDayKey(iso: string): string {
-  const parts = parseClinicParts(new Date(iso));
+export function clinicDayKey(iso: string, timeZone: string = CLINIC_TZ): string {
+  const parts = parseClinicParts(new Date(iso), timeZone);
   const pad = (n: number) => n.toString().padStart(2, '0');
   return `${parts.year}-${pad(parts.month)}-${pad(parts.day)}`;
 }
 
-export function clinicTimeLabel(iso: string): string {
-  const parts = parseClinicParts(new Date(iso));
+export function clinicTimeLabel(
+  iso: string,
+  timeZone: string = CLINIC_TZ
+): string {
+  const parts = parseClinicParts(new Date(iso), timeZone);
   const pad = (n: number) => n.toString().padStart(2, '0');
   return `${pad(parts.hour)}:${pad(parts.minute)}`;
 }
 
 /**
  * Formatea un instante ISO como valor para un input `datetime-local`, en la
- * zona clínica (no en la zona del dispositivo). Produce "YYYY-MM-DDTHH:mm".
+ * zona indicada (default: zona clínica, no la del dispositivo). Produce
+ * "YYYY-MM-DDTHH:mm".
  */
-export function toClinicLocalInput(iso: string): string {
-  const parts = parseClinicParts(new Date(iso));
+export function toClinicLocalInput(
+  iso: string,
+  timeZone: string = CLINIC_TZ
+): string {
+  const parts = parseClinicParts(new Date(iso), timeZone);
   const pad = (n: number) => n.toString().padStart(2, '0');
   return `${parts.year}-${pad(parts.month)}-${pad(parts.day)}T${pad(parts.hour)}:${pad(parts.minute)}`;
 }
 
 /**
  * Interpreta un valor de input `datetime-local` ("YYYY-MM-DDTHH:mm") como
- * hora de la zona clínica y lo convierte a ISO UTC. Nunca usa la zona del
- * dispositivo: lo capturado en el modal es hora del consultorio.
+ * hora de la zona indicada (default: zona clínica) y lo convierte a ISO UTC.
+ * Nunca usa la zona del dispositivo.
  */
-export function clinicLocalInputToUtc(value: string): string {
+export function clinicLocalInputToUtc(
+  value: string,
+  timeZone: string = CLINIC_TZ
+): string {
   const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(value);
   if (!match) {
     throw new Error(`Invalid datetime-local value: ${value}`);
@@ -111,6 +147,7 @@ export function clinicLocalInputToUtc(value: string): string {
     Number(year),
     Number(month),
     Number(day),
+    timeZone,
     Number(hour),
     Number(minute)
   ).toISOString();
@@ -118,13 +155,22 @@ export function clinicLocalInputToUtc(value: string): string {
 
 export function clinicMonthRangeUtc(
   year: number,
-  month: number
+  month: number,
+  timeZone: string = CLINIC_TZ
 ): { startAt: string; endAt: string } {
-  const startAt = utcFromClinicParts(year, month, 1, 0, 0, 0);
+  const startAt = utcFromClinicParts(year, month, 1, timeZone, 0, 0, 0);
 
   const endYear = month === 12 ? year + 1 : year;
   const endMonth = month === 12 ? 1 : month + 1;
-  const endAt = utcFromClinicParts(endYear, endMonth, 1, 0, 0, 0);
+  const endAt = utcFromClinicParts(
+    endYear,
+    endMonth,
+    1,
+    timeZone,
+    0,
+    0,
+    0
+  );
 
   return { startAt: startAt.toISOString(), endAt: endAt.toISOString() };
 }
@@ -137,10 +183,20 @@ export type CalendarDayCell = {
   dayKey: string | null;
 };
 
-export function getCalendarGrid(year: number, month: number): CalendarDayCell[] {
-  const { startAt } = clinicMonthRangeUtc(year, month);
-  const firstDayUtc = new Date(startAt);
-  const firstDayOfWeek = firstDayUtc.getUTCDay();
+export function getCalendarGrid(
+  year: number,
+  month: number,
+  timeZone: string = CLINIC_TZ
+): CalendarDayCell[] {
+  // La cuadrícula es de calendario (día de pared), no de instante: el primer
+  // día del mes local siempre es `year-month-01` en cualquier zona. Se deriva
+  // el día de la semana de las partes locales en `timeZone` para que el
+  // padding no dependa del offset UTC.
+  const { startAt } = clinicMonthRangeUtc(year, month, timeZone);
+  const localFirst = parseClinicParts(new Date(startAt), timeZone);
+  const firstDayOfWeek = new Date(
+    Date.UTC(localFirst.year, localFirst.month - 1, localFirst.day)
+  ).getUTCDay();
   const leadingPadding = (firstDayOfWeek + 6) % 7;
   const daysInMonth = new Date(year, month, 0).getDate();
 
@@ -166,8 +222,10 @@ export function getCalendarGrid(year: number, month: number): CalendarDayCell[] 
   return cells;
 }
 
-export function getCurrentClinicMonth(): { year: number; month: number } {
-  const parts = parseClinicParts(new Date());
+export function getCurrentClinicMonth(
+  timeZone: string = CLINIC_TZ
+): { year: number; month: number } {
+  const parts = parseClinicParts(new Date(), timeZone);
   return { year: parts.year, month: parts.month };
 }
 
@@ -193,19 +251,20 @@ export function groupAppointmentsByDay(
     status: import('./types').AppointmentStatus;
     patientId?: string | null;
   }>,
-  providerColor: (providerId: string) => string
+  providerColor: (providerId: string) => string,
+  timeZone: string = CLINIC_TZ
 ): Record<string, CalendarBlock[]> {
   const groups: Record<string, CalendarBlock[]> = {};
 
   for (const appointment of appointments) {
-    const dayKey = clinicDayKey(appointment.startAt);
+    const dayKey = clinicDayKey(appointment.startAt, timeZone);
     const block: CalendarBlock = {
       id: appointment.id,
       label: `${appointment.serviceName} — ${appointment.patientName || 'Sin paciente'}`,
       patientId: 'patientId' in appointment ? appointment.patientId ?? null : null,
       patientName: appointment.patientName || 'Sin paciente',
       serviceName: appointment.serviceName,
-      startLabel: clinicTimeLabel(appointment.startAt),
+      startLabel: clinicTimeLabel(appointment.startAt, timeZone),
       color: providerColor(appointment.providerId),
       status: appointment.status,
     };

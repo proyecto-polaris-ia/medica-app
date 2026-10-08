@@ -9,9 +9,9 @@ type DateParts = {
   second: number;
 };
 
-function getParts(instant: Date): DateParts {
+function getParts(instant: Date, timeZone: string): DateParts {
   const formatter = new Intl.DateTimeFormat('en-US', {
-    timeZone: CLINIC_TIME_ZONE,
+    timeZone,
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
@@ -26,7 +26,7 @@ function getParts(instant: Date): DateParts {
   const value = (type: keyof DateParts): number => {
     const part = parts.find((p) => p.type === type);
     if (!part) {
-      throw new Error(`Missing ${type} in clinic timezone formatter`);
+      throw new Error(`Missing ${type} in timezone formatter`);
     }
     return parseInt(part.value, 10);
   };
@@ -50,8 +50,8 @@ function getParts(instant: Date): DateParts {
   return { year, month, day, hour, minute, second };
 }
 
-function getOffsetMinutes(instant: Date): number {
-  const parts = getParts(instant);
+function getOffsetMinutes(instant: Date, timeZone: string): number {
+  const parts = getParts(instant, timeZone);
   const utcReading = Date.UTC(
     parts.year,
     parts.month - 1,
@@ -63,9 +63,9 @@ function getOffsetMinutes(instant: Date): number {
   return Math.round((instant.getTime() - utcReading) / 60_000);
 }
 
-function startOfLocalDay(instant: Date): Date {
-  const parts = getParts(instant);
-  const offsetMinutes = getOffsetMinutes(instant);
+function startOfLocalDay(instant: Date, timeZone: string): Date {
+  const parts = getParts(instant, timeZone);
+  const offsetMinutes = getOffsetMinutes(instant, timeZone);
   const wallMidnightUtc = Date.UTC(parts.year, parts.month - 1, parts.day, 0, 0, 0);
   return new Date(wallMidnightUtc + offsetMinutes * 60_000);
 }
@@ -76,19 +76,28 @@ function addDays(instant: Date, days: number): Date {
 
 /**
  * Returns the UTC half-open interval [localMidnight, nextLocalMidnight)
- * for the clinic day that contains `now`, computed in America/Mexico_City.
+ * for the local day that contains `now`, computed in `timeZone`
+ * (default: America/Mexico_City).
  */
-export function clinicDayRange(now: Date): [Date, Date] {
-  const start = startOfLocalDay(now);
+export function clinicDayRange(
+  now: Date,
+  timeZone: string = CLINIC_TIME_ZONE
+): [Date, Date] {
+  const start = startOfLocalDay(now, timeZone);
   return [start, addDays(start, 1)];
 }
 
 /**
- * Returns the UTC half-open interval for the trailing `days` clinic days
- * ending at the end of the clinic day that contains `now`.
+ * Returns the UTC half-open interval for the trailing `days` local days
+ * ending at the end of the local day that contains `now`, in `timeZone`
+ * (default: America/Mexico_City).
  */
-export function trailingDaysRange(now: Date, days: number): [Date, Date] {
-  const end = addDays(startOfLocalDay(now), 1);
-  const start = addDays(startOfLocalDay(now), -days);
+export function trailingDaysRange(
+  now: Date,
+  days: number,
+  timeZone: string = CLINIC_TIME_ZONE
+): [Date, Date] {
+  const end = addDays(startOfLocalDay(now, timeZone), 1);
+  const start = addDays(startOfLocalDay(now, timeZone), -days);
   return [start, end];
 }
