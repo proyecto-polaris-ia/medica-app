@@ -279,26 +279,26 @@ en operación.
 Verificación de cierre del change; todos los comandos se corren uno a la vez y
 en primer plano (`design.md` §13 y §13.1).
 
-- [ ] 8.1 `npx tsc --noEmit` sin errores.
-- [ ] 8.2 `npm run lint` sin errores nuevos.
-- [ ] 8.3 `npm run test` en verde (incluye `tests/agent/clara/**` y conserva
+- [x] 8.1 `npx tsc --noEmit` sin errores.
+- [x] 8.2 `npm run lint` sin errores nuevos.
+- [x] 8.3 `npm run test` en verde (incluye `tests/agent/clara/**` y conserva
   las suites de Eva/Mora y de `src/lib/admin/follow-up/` sin duplicarlas).
-- [ ] 8.4 `npx vitest run tests/agent/clara` en verde (contrato estructural,
+- [x] 8.4 `npx vitest run tests/agent/clara` en verde (contrato estructural,
   acceso, canal y las 7 tools).
-- [ ] 8.5 `eve build` de Clara con el prefijo del servicio:
+- [x] 8.5 `eve build` de Clara con el prefijo del servicio:
   `cd agents/clara && EVE_PUBLIC_ROUTE_PREFIX='/clara' EVE_INTERNAL_AGENT_WORKSPACE_MEMBER=1 node ../../node_modules/eve/bin/eve.js build`.
   Debe terminar sin diagnósticos y dejar `eve/v1/discord` registrada, **sin**
   credenciales `DISCORD_*` (prueba de degradación graceful).
-- [ ] 8.6 `npx eve info --agent clara` reporta la ruta `eve/v1/discord` y
+- [x] 8.6 `npx eve info --agent clara` reporta la ruta `eve/v1/discord` y
   `Diagnostics 0 errors, 0 warnings`.
-- [ ] 8.7 Regresión de agentes raíz: `npx eve info --agent eva` y
+- [x] 8.7 Regresión de agentes raíz: `npx eve info --agent eva` y
   `npx eve info --agent mora` siguen con `Diagnostics 0 errors, 0 warnings`; el
   workspace reporta tres agentes raíz (eva, mora, clara).
-- [ ] 8.8 Invariantes manuales del §4.3: ninguna tool expone envío ni reclamo
+- [x] 8.8 Invariantes manuales del §4.3: ninguna tool expone envío ni reclamo
   para envío; ningún archivo de `src/lib/admin/follow-up/*`,
   `src/lib/follow-up/send-follow-up-draft.ts`, `agents/eva/agent/*`,
   `agents/mora/agent/*`, `middleware.ts` ni migraciones se modificó.
-- [ ] 8.9 Verificación manual post-deploy (§13.2, fuera del repo, la ejecuta el
+- [ ] 8.9 (POST-DEPLOY: a ejecutar por el propietario del despliegue) Verificación manual post-deploy (§13.2, fuera del repo, la ejecuta el
   responsable del despliegue): lista con usuario autorizado, silencio con usuario
   no autorizado, borrador con `created_by` del mapa, aprobación sin filas nuevas
   en `whatsapp_messages`, marca `contacted`, lectura con el kill switch apagado y
