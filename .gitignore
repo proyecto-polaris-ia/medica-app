@@ -48,6 +48,14 @@ opencode.json
 .eve/
 .output/
 
+# eve Vercel services: el scaffold del servicio eve-eva debe existir en el repo
+# (lo referencia vercel.json#services); su contenido se genera en el build.
+!.eve/
+.eve/*
+!.eve/vercel-services/
+.eve/vercel-services/*
+!.eve/vercel-services/eve-eva/
+
 # Archify: diagramas generados (regenerar con bin/archify.mjs finalize)
 .archify/
 coverage/
