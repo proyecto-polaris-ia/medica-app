@@ -60,25 +60,28 @@ payload, emite el indicador de "escribiendo" y un registro de observabilidad, y
 de firma de Meta) y refleja la respuesta de Eve. No hay rama legacy ni
 alternativa: si el reenvío falla responde `502` y registra `webhook.failed`.
 
-### 3.2 Agente Eve (`agent/`)
-Único runtime conversacional de WhatsApp. `agent/agent.ts` configura el agente raíz
-y `agent/instructions.md` define instrucciones y guardrails; `agent/tools/*.ts`
-expone las acciones deterministas (catálogo, disponibilidad, reserva, escalación)
-y `agent/skills/*.md` los procedimientos. El LLM interpreta y redacta; las tools
-ejecutan contra Supabase. El webhook solo reenvía: el LLM no escribe en BD ni
-envía mensajes por sí mismo.
+### 3.2 Agentes raíz (`agents/<name>/agent/`)
+Workspace multi-agente: cada agente raíz vive en `agents/<name>/agent/` con su
+propio canal y se despliega como servicio Vercel independiente
+(`eve-eva` → `/eva/eve/v1/*`, `eve-mora` → `/mora/eve/v1/*`; ver `vercel.json`).
 
-**Topología multiagente (issue #140):** Eva es el único agente ligado al canal de
-WhatsApp (un solo binding). Los agentes especializados son **subagentes
-declarados** de Eve (`agent/subagents/<id>/`), alcanzados solo por delegación:
-el framework lowerea cada subagente a una tool del modelo con
-`{ message, agentId?, outputSchema? }`. Actualmente existe **Mora**
-(`agent/subagents/mora/`): cobranza y saldos, con tools, instrucciones y skill
-propias. La identidad confiable del paciente cruza la frontera de delegación por
-un binding server-side (hook `agent/hooks/delegation-identity.ts` + tabla
-`agent_delegation_bindings`); el teléfono nunca viaja por texto del modelo. Clara
-y Nora NO son subagentes: son capacidades admin/jobs (ver specs `follow-up` y
-`dashboard-metrics`).
+- **Eva** (`agents/eva/agent/`): recepción y citas por WhatsApp.
+  `instructions.md` define instrucciones y guardrails; `tools/*.ts` expone las
+  acciones deterministas (catálogo, disponibilidad, reserva, escalación) y
+  `skills/*.md` los procedimientos.
+- **Mora** (`agents/mora/agent/`): cobranza y saldos, con canal Discord propio
+  (`channels/discord.ts`, ruta `/mora/eve/v1/discord`), tools
+  (`find-patient`, `get-patient-balance`, `list-overdue-balances`,
+  `register-payment-intent`), skill `payment-collection.md` y módulo de acceso
+  `access.ts` (allowlist de doctores + resolución del paciente nombrado).
+  Los doctores le hablan directo por Discord; la autorización es fail-closed
+  vía `MORA_DISCORD_DOCTOR_IDS`.
+- En WhatsApp, Eva escala las intenciones de cobranza a un humano
+  (`escalate-to-human`); la delegación a subagentes se retiró con el issue
+  #159.
+
+El LLM interpreta y redacta; las tools ejecutan contra Supabase. Los webhooks
+solo reenvían: el LLM no escribe en BD ni envía mensajes por sí mismo.
 
 ### 3.3 Tipos compartidos de decisión inbound (`lib/whatsapp/inbound-decision.ts`)
 `WhatsAppInboundIntent` y la forma de decisión que consume el store

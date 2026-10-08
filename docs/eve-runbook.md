@@ -6,25 +6,31 @@ paralelo.
 
 ## Topología multiagente (issue #140)
 
-Eva es el agente **raíz** y el único ligado al canal de WhatsApp. Los agentes
-de cobranza y seguimiento no tienen número propio: se alcanzan por
-**delegación**.
+Eva es el agente raíz de WhatsApp y el único ligado a ese canal (un solo
+binding). Cada agente raíz vive en `agents/<name>/agent/` con su propio canal.
 
-- **Mora** (`agent/subagents/mora/`): subagente declarado de Eve para cobranza.
-  Eve delega cuando detecta intención de saldo/pagos; la respuesta de Mora se
-  entrega por el mismo canal de WhatsApp vía Eva. Verifícalo tras cada deploy:
-  `npx eve info` debe reportar `Subagents 1 subagent` y `Diagnostics 0 errors,
-  0 warnings`.
-- La identidad confiable del paciente cruza la frontera de delegación por un
-  binding server-side: el hook `agent/hooks/delegation-identity.ts` persiste
-  `childSessionId → trustedPatientPhone` (tabla `agent_delegation_bindings`,
-  TTL 1 h) al momento de la delegación. Si una delegación llega sin binding,
-  las tools de Mora se niegan a mostrar saldos (fail-closed).
-- En Agent Runs (observabilidad de Vercel) las delegaciones se ven como
-  `subagent.called` / `subagent.completed`; el trace del hijo se sigue con el
-  `childSessionId` del evento.
+- **Mora** (`agents/mora/agent/`): agente raíz independiente de cobranza con
+  canal Discord propio (issue #159). Los doctores autorizados le hablan directo
+  por el slash command; la ruta del canal es `/mora/eve/v1/discord` (servicio
+  Vercel `eve-mora`). Verifícalo tras cada deploy: `npx eve info --agent mora`
+  debe reportar `Diagnostics 0 errors, 0 warnings`.
+- La autorización del doctor es una allowlist por variable de entorno
+  (`MORA_DISCORD_DOCTOR_IDS`, user IDs de Discord separados por coma). Se
+  aplica dos veces: en `onCommand` del canal (usuarios no autorizados no
+  abren sesión) y dentro de cada tool (`agents/mora/agent/access.ts`). Sin
+  allowlist configurada, el canal falla cerrado.
+- Las tools de Mora ya no derivan identidad de un WhatsApp verificado: el
+  doctor nombra al paciente (teléfono registrado o nombre) y la tool lo
+  resuelve contra `patients`. El sistema de delegación
+  (`src/lib/agent/delegation-bindings.ts` + tabla `agent_delegation_bindings`)
+  quedó sin consumidores y se elimina en Fase 3 (issue #160).
+- En WhatsApp, Eva ya no delega: ante intención de cobranza escala a un humano
+  con `escalate-to-human` (transicional hasta que exista una superficie
+  paciente-facing de cobranza).
 - Clara y Nora NO son agentes de WhatsApp: son capacidades admin/jobs (specs
   `follow-up` y `dashboard-metrics`).
+
+Setup del canal de Discord de Mora: `docs/mora-discord-setup.md`.
 
 ## Modelo de reenvío (Eve-only)
 

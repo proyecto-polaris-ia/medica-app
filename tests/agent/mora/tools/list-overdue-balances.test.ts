@@ -10,7 +10,7 @@
  *   2. Verified contact — without a trusted WhatsApp phone the tool MUST
  *      return `{ success: false, error }` and MUST NOT query the database.
  *
- * Mock pattern mirrors `tests/agent/subagents/mora/tools/get-patient-balance.test.ts` and
+ * Mock pattern mirrors `tests/agent/mora/tools/get-patient-balance.test.ts` and
  * `src/lib/admin/__tests__/accounts-receivable.test.ts`.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
