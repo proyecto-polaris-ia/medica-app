@@ -160,6 +160,7 @@ export function TreatmentPlansTab({
                 aria-label={`Ver detalle del plan ${plan.name}`}
                 onClick={() => handleOpenDetail(plan)}
                 onKeyDown={(event) => {
+                  if (event.target !== event.currentTarget) return;
                   if (event.key === 'Enter' || event.key === ' ') {
                     event.preventDefault();
                     handleOpenDetail(plan);
