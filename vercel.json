@@ -47,6 +47,23 @@
           ]
         }
       ]
+    },
+    "eve-clara": {
+      "framework": "eve",
+      "root": ".eve/vercel-services/eve-clara",
+      "buildCommand": "cd '../../../agents/clara' && export EVE_INTERNAL_BUILD_OUTPUT_DIRECTORY='../../.eve/vercel-services/eve-clara/.vercel/output' && export EVE_INTERNAL_HOST_BUILD_OUTPUT_DIRECTORY='../../.vercel/output' && export EVE_PUBLIC_ROUTE_PREFIX='/clara' && export EVE_INTERNAL_AGENT_WORKSPACE_MEMBER=1 && node '../../node_modules/eve/bin/eve.js' build",
+      "routes": [
+        {
+          "src": "^/clara/eve/v1/(.*)$",
+          "transforms": [
+            {
+              "args": "/eve/v1/$1",
+              "op": "set",
+              "type": "request.path"
+            }
+          ]
+        }
+      ]
     }
   },
   "rewrites": [
@@ -60,6 +77,12 @@
       "source": "/mora/eve/v1/(.*)",
       "destination": {
         "service": "eve-mora"
+      }
+    },
+    {
+      "source": "/clara/eve/v1/(.*)",
+      "destination": {
+        "service": "eve-clara"
       }
     },
     {
