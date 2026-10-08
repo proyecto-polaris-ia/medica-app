@@ -27,6 +27,7 @@ const PAYMENT_COLUMNS = [
   'paid_at',
   'reference',
   'notes',
+  'requires_invoice',
   'created_by',
   'voided_at',
   'voided_by',
@@ -45,6 +46,7 @@ function mapPaymentRow(row: Record<string, unknown>): Payment {
     paidAt: row.paid_at as string,
     reference: (row.reference as string | null) ?? null,
     notes: (row.notes as string | null) ?? null,
+    requiresInvoice: row.requires_invoice === true,
     createdBy: (row.created_by as string | null) ?? null,
     voidedAt: (row.voided_at as string | null) ?? null,
     voidedBy: (row.voided_by as string | null) ?? null,
@@ -93,6 +95,7 @@ function buildPaymentPayload(
     paid_at: parsePaidAt(input.paidAt, 'paidAt'),
     reference: parseOptionalString(input.reference),
     notes: parseNotes(input.notes, 'notes'),
+    requires_invoice: input.requiresInvoice === true,
     created_by: createdBy,
   };
 }

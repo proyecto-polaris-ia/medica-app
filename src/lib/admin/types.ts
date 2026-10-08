@@ -331,6 +331,7 @@ export type Payment = {
   paidAt: string;
   reference: string | null;
   notes: string | null;
+  requiresInvoice: boolean;
   createdBy: string | null;
   voidedAt: string | null;
   voidedBy: string | null;
@@ -346,6 +347,7 @@ export type PaymentInput = {
   paidAt: string;
   reference?: string | null;
   notes?: string | null;
+  requiresInvoice?: boolean;
 };
 
 export type PaymentUpdateInput = Partial<
