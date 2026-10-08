@@ -1,5 +1,5 @@
 change: user-timezone-preferences
-status: in_progress
+status: complete
 artifact_store: openspec
 created: 2026-10-08
 phases:
@@ -7,5 +7,5 @@ phases:
   spec: complete
   design: complete
   tasks: complete
-  apply: complete
+  archive: complete
   verify: complete
