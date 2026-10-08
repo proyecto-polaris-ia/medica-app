@@ -105,32 +105,32 @@ seguimiento", "Tool de lectura de la lista diaria", "Tool de reglas de
 segmentación", "Tool de lectura del borrador existente" y "Solo datos de la base
 y sin fuga entre pacientes".
 
-- [ ] 3.1 **RED:** crear `tests/agent/clara/tools/list-follow-up-cases.test.ts`.
+- [x] 3.1 **RED:** crear `tests/agent/clara/tools/list-follow-up-cases.test.ts`.
   Casos: devuelve los casos con `reason` / `reasonLabel` / `roundDate`; sin
   autorización ⇒ error y **cero** consultas a Supabase; falla de lectura ⇒
   `{ success: false, error }` sin datos inventados; los contactados/descartados
   de la ronda no aparecen.
-- [ ] 3.2 **GREEN:** crear `agents/clara/agent/tools/list-follow-up-cases.ts`
+- [x] 3.2 **GREEN:** crear `agents/clara/agent/tools/list-follow-up-cases.ts`
   envolviendo `listDailyFollowUpCases` (`src/lib/admin/follow-up/follow-up.ts:190`),
   `input: z.object({})`, salida de §4.1. `resolveClaraAccess` como primer paso.
-- [ ] 3.3 **RED:** crear `tests/agent/clara/tools/get-follow-up-rules.test.ts`.
+- [x] 3.3 **RED:** crear `tests/agent/clara/tools/get-follow-up-rules.test.ts`.
   Casos: los valores coinciden con `src/lib/admin/follow-up/config.ts`
   (`NO_SHOW_WINDOW_DAYS=90`, `STALLED_TREATMENT_DAYS=45`,
   `INACTIVE_PATIENT_MONTHS=6` / `INACTIVE_PATIENT_DAYS=180`,
   `UNANSWERED_QUOTE_DAYS=21`, `FOLLOW_UP_REASON_PRIORITY`); `reasonPriority`
   respeta el orden; las etiquetas coinciden con `followUpReasonLabel`
   (`rules.ts:176`); `roundDate` con `currentRoundDate` (`follow-up.ts:179`).
-- [ ] 3.4 **GREEN:** crear `agents/clara/agent/tools/get-follow-up-rules.ts`
+- [x] 3.4 **GREEN:** crear `agents/clara/agent/tools/get-follow-up-rules.ts`
   con `input: z.object({})` y salida de §4.1, leyendo las constantes importadas
   sin repetirlas en texto literal.
-- [ ] 3.5 **RED:** crear `tests/agent/clara/tools/get-follow-up-draft.test.ts`.
+- [x] 3.5 **RED:** crear `tests/agent/clara/tools/get-follow-up-draft.test.ts`.
   Casos: con borrador ⇒ `found: true` con estado y texto; sin borrador ⇒
   `found: false`; nombre ambiguo ⇒ `candidates`; sin autorización ⇒ error **sin**
   consulta; nunca crea ni modifica.
-- [ ] 3.6 **GREEN:** crear `agents/clara/agent/tools/get-follow-up-draft.ts`
+- [x] 3.6 **GREEN:** crear `agents/clara/agent/tools/get-follow-up-draft.ts`
   envolviendo `findFollowUpDraftForRound` (`src/lib/admin/follow-up/drafts.ts:110`)
   y `resolvePatient` (§D3), schema y salidas de §4.1.
-- [ ] 3.7 **TRIANGULATE lectura:** comparar la lista devuelta por
+- [x] 3.7 **TRIANGULATE lectura:** comparar la lista devuelta por
   `list-follow-up-cases` con `listDailyFollowUpCases` para la misma fecha de
   referencia (identidad con el panel admin, mismos pacientes/motivos/orden);
   verificar que una consulta por paciente no expone datos de otros pacientes.
@@ -143,7 +143,7 @@ borrador", "Tool de transición de borrador limitada a aprobado o rechazado",
 del estado de contacto y de los borradores" y "El envío queda fuera del set de
 tools"; `clara-drafting` → "Sin canal de WhatsApp ni capacidad de envío".
 
-- [ ] 4.1 **RED:** crear
+- [x] 4.1 **RED:** crear
   `tests/agent/clara/tools/draft-follow-up-message.test.ts`. Casos: sin llaves
   del LLM ⇒ persiste plantilla (`source: "template"`) y no falla; LLM que lanza
   ⇒ plantilla; LLM que excede timeout (`DRAFT_LLM_TIMEOUT_MS`, 8 s) ⇒ plantilla;
@@ -152,25 +152,25 @@ tools"; `clara-drafting` → "Sin canal de WhatsApp ni capacidad de envío".
   cambios; borrador `approved` ⇒ se devuelve sin llamar al LLM y sin escribir;
   caso fuera de la lista del día ⇒ `{ success: false, error }`; sin actor mapeado
   ⇒ error sin escritura.
-- [ ] 4.2 **GREEN:** crear `agents/clara/agent/tools/draft-follow-up-message.ts`
+- [x] 4.2 **GREEN:** crear `agents/clara/agent/tools/draft-follow-up-message.ts`
   con la secuencia de §4.2 y §D5: autorización → `requireClaraActor` →
   `resolveRoundCase({ patientId })` → `findFollowUpDraftForRound` →
   `generateFollowUpDraftText` (`draft-llm.ts:172`) →
   `validateFollowUpDraftText` (`draft.ts:101`) inmediatamente antes de persistir
   → `createFollowUpDraft` (`drafts.ts:126`) o
   `updateFollowUpDraftBody` (`drafts.ts:220`). Nunca en lote.
-- [ ] 4.3 **RED:** crear
+- [x] 4.3 **RED:** crear
   `tests/agent/clara/tools/transition-follow-up-draft.test.ts`. Casos:
   `approved`/`rejected` desde `draft` ⇒ estado nuevo y sin envío; `decision:
   "sent"`/`"sent_failed"` es rechazada por el schema; borrador ya decidido ⇒
   error y sin cambios; sin actor ⇒ error sin escritura; no existe fila nueva en
   `whatsapp_messages`.
-- [ ] 4.4 **GREEN:** crear
+- [x] 4.4 **GREEN:** crear
   `agents/clara/agent/tools/transition-follow-up-draft.ts` con
   `decision: z.enum(["approved", "rejected"])` (§D6) delegando en
   `transitionFollowUpDraft` (`drafts.ts:170`) y traduciendo `ConflictError` /
   `NotFoundError` (`src/lib/admin/errors.ts`) a `{ success: false, error }`.
-- [ ] 4.5 **RED:** crear
+- [x] 4.5 **RED:** crear
   `tests/agent/clara/tools/mark-contact-attempted.test.ts`. Casos: persiste
   `contacted` con `contacted_at` y `created_by` = UUID del mapa; el paciente
   desaparece de la lista de la ronda; segunda marca ⇒ mismo registro (upsert en
@@ -178,16 +178,16 @@ tools"; `clara-drafting` → "Sin canal de WhatsApp ni capacidad de envío".
   la ronda ⇒ error sin escritura; sin actor mapeado ⇒ error sin escritura; sin
   autorización ⇒ error sin lectura ni escritura; `note` mayor a
   `MAX_NOTES_LENGTH` (1000) ⇒ `ValidationError` reportado como error de tool.
-- [ ] 4.6 **GREEN:** crear `agents/clara/agent/tools/mark-contact-attempted.ts`
+- [x] 4.6 **GREEN:** crear `agents/clara/agent/tools/mark-contact-attempted.ts`
   envolviendo `markFollowUpContact` (`follow-up.ts:290`) con `status:
   "contacted"` fijo, secuencia y schema de §4.2.
-- [ ] 4.7 **RED:** crear
+- [x] 4.7 **RED:** crear
   `tests/agent/clara/tools/dismiss-follow-up.test.ts`. Casos: persiste
   `dismissed` con `dismissed_at` y actor; idempotencia; mismos negativos que
   4.5.
-- [ ] 4.8 **GREEN:** crear `agents/clara/agent/tools/dismiss-follow-up.ts` con
+- [x] 4.8 **GREEN:** crear `agents/clara/agent/tools/dismiss-follow-up.ts` con
   `status: "dismissed"` fijo, misma firma, módulo e idempotencia que 4.6.
-- [ ] 4.9 **TRIANGULATE escritura:** confirmar con los tests (y un grep
+- [x] 4.9 **TRIANGULATE escritura:** confirmar con los tests (y un grep
   estructural en 1.1) que ninguna tool importa `claimFollowUpDraftForSend`,
   `markFollowUpDraftSent`, `markFollowUpDraftSentFailed`, `sendFollowUpDraft`
   (`src/lib/follow-up/send-follow-up-draft.ts:173`) ni
