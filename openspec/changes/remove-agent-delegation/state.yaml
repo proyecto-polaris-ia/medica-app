@@ -1,0 +1,11 @@
+change: remove-agent-delegation
+status: in_progress
+artifact_store: openspec
+created: 2026-10-08
+phases:
+  proposal: complete
+  spec: not_applicable
+  design: complete
+  tasks: complete
+  apply: pending
+  verify: pending
