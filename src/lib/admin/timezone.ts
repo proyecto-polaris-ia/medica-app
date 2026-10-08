@@ -86,6 +86,36 @@ export function clinicTimeLabel(iso: string): string {
   return `${pad(parts.hour)}:${pad(parts.minute)}`;
 }
 
+/**
+ * Formatea un instante ISO como valor para un input `datetime-local`, en la
+ * zona clínica (no en la zona del dispositivo). Produce "YYYY-MM-DDTHH:mm".
+ */
+export function toClinicLocalInput(iso: string): string {
+  const parts = parseClinicParts(new Date(iso));
+  const pad = (n: number) => n.toString().padStart(2, '0');
+  return `${parts.year}-${pad(parts.month)}-${pad(parts.day)}T${pad(parts.hour)}:${pad(parts.minute)}`;
+}
+
+/**
+ * Interpreta un valor de input `datetime-local` ("YYYY-MM-DDTHH:mm") como
+ * hora de la zona clínica y lo convierte a ISO UTC. Nunca usa la zona del
+ * dispositivo: lo capturado en el modal es hora del consultorio.
+ */
+export function clinicLocalInputToUtc(value: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(value);
+  if (!match) {
+    throw new Error(`Invalid datetime-local value: ${value}`);
+  }
+  const [, year, month, day, hour, minute] = match;
+  return utcFromClinicParts(
+    Number(year),
+    Number(month),
+    Number(day),
+    Number(hour),
+    Number(minute)
+  ).toISOString();
+}
+
 export function clinicMonthRangeUtc(
   year: number,
   month: number

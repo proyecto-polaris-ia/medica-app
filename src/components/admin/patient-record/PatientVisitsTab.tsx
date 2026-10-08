@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import type { ClinicalVisit } from '@/lib/admin/types';
+import { CLINIC_TZ } from '@/lib/admin/timezone';
 import { EmptyState } from '@/components/admin/EmptyState';
 import { LoadingState } from '@/components/admin/LoadingState';
 import { ErrorState } from '@/components/admin/ErrorState';
@@ -16,7 +17,9 @@ type PatientVisitsTabProps = {
 };
 
 function formatDateTime(iso: string): string {
+  // Zona clínica fija, nunca la zona del navegador.
   return new Date(iso).toLocaleString('es-MX', {
+    timeZone: CLINIC_TZ,
     dateStyle: 'medium',
     timeStyle: 'short',
   });

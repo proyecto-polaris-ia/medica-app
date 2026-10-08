@@ -375,3 +375,72 @@ describe('/appointments integration', () => {
     expect(await screen.findByText('Confirmada')).toBeInTheDocument();
   });
 });
+
+// Regresión del bug "lista 17:00 / calendario 16:00": la página de citas debe
+// leer y escribir horas SIEMPRE en la zona clínica (America/Mexico_City),
+// aunque el dispositivo esté en otra zona.
+describe('/appointments clinic-timezone rendering', () => {
+  const ORIGINAL_TZ = process.env.TZ;
+
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    window.alert = vi.fn();
+    window.confirm = vi.fn(() => false);
+    // Equipo del usuario fuera de la zona clínica: New York va 1 h adelante
+    // de Ciudad de México (UTC-4 vs UTC-6) en septiembre.
+    process.env.TZ = 'America/New_York';
+  });
+
+  afterEach(() => {
+    process.env.TZ = ORIGINAL_TZ;
+  });
+
+  it('renders the list and edit modal in clinic time, not device time', async () => {
+    global.fetch = buildFetchMock();
+    const user = userEvent.setup();
+
+    render(<AppointmentsPage />);
+
+    // 14:00 UTC = 08:00 hora clínica (UTC-6); en New York serían 10:00.
+    await waitFor(() => {
+      expect(screen.getByText(/8:00/)).toBeInTheDocument();
+    });
+
+    const editButton = screen.getAllByRole('button', { name: /Editar/i })[0];
+    await user.click(editButton);
+
+    const startInput = document.querySelectorAll('input[type="datetime-local"]')[0] as HTMLInputElement;
+    expect(startInput.value).toBe(`${startAt.slice(0, 10)}T08:00`);
+  });
+
+  it('saves the untouched clinic time without shifting the UTC instant', async () => {
+    let savedBody: Record<string, unknown> | null = null;
+    const fetchMock = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+      if (url === `/api/admin/appointments/${APPOINTMENT_ID}` && init?.body) {
+        savedBody = JSON.parse(init.body as string);
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+      }
+      return buildFetchMock()(url, init);
+    });
+    global.fetch = fetchMock;
+    const user = userEvent.setup();
+
+    render(<AppointmentsPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText(/8:00/)).toBeInTheDocument();
+    });
+
+    const editButton = screen.getAllByRole('button', { name: /Editar/i })[0];
+    await user.click(editButton);
+
+    // Editar sin tocar la hora no debe mover la cita una hora.
+    await user.click(screen.getByRole('button', { name: /Guardar cambios/i }));
+
+    await waitFor(() => {
+      expect(savedBody).not.toBeNull();
+    });
+
+    expect(savedBody).toMatchObject({ startAt, endAt });
+  });
+});

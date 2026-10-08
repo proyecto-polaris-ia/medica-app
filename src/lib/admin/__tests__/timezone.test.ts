@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest';
 import {
   CLINIC_TZ,
   clinicDayKey,
+  clinicLocalInputToUtc,
   clinicMonthRangeUtc,
   clinicTimeLabel,
+  toClinicLocalInput,
 } from '../timezone';
 
 describe('timezone helpers', () => {
@@ -49,5 +51,40 @@ describe('timezone helpers', () => {
     const { startAt, endAt } = clinicMonthRangeUtc(2025, 2);
     expect(startAt).toBe('2025-02-01T06:00:00.000Z');
     expect(endAt).toBe('2025-03-01T06:00:00.000Z');
+  });
+
+  describe('toClinicLocalInput', () => {
+    it('formats a UTC instant as clinic-local datetime-local input', () => {
+      // 23:00 UTC = 17:00 in Mexico City (CST, -06:00)
+      expect(toClinicLocalInput('2026-09-16T23:00:00.000Z')).toBe(
+        '2026-09-16T17:00'
+      );
+    });
+
+    it('handles the midnight boundary without shifting the day', () => {
+      // 06:00 UTC on the 17th = 00:00 on the 17th in Mexico City
+      expect(toClinicLocalInput('2026-09-17T06:00:00.000Z')).toBe(
+        '2026-09-17T00:00'
+      );
+    });
+  });
+
+  describe('clinicLocalInputToUtc', () => {
+    it('interprets the input as clinic time, not device time', () => {
+      expect(clinicLocalInputToUtc('2026-09-16T17:00')).toBe(
+        '2026-09-16T23:00:00.000Z'
+      );
+    });
+
+    it('converts clinic midnight to the correct UTC instant', () => {
+      expect(clinicLocalInputToUtc('2026-09-17T00:00')).toBe(
+        '2026-09-17T06:00:00.000Z'
+      );
+    });
+  });
+
+  it('clinic local input round-trips through UTC', () => {
+    const input = '2026-09-16T17:00';
+    expect(toClinicLocalInput(clinicLocalInputToUtc(input))).toBe(input);
   });
 });
