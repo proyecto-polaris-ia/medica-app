@@ -7,8 +7,10 @@ texto del borrador de seguimiento de la lista diaria, apoyándose opcionalmente 
 un LLM y conservando siempre la plantilla determinista como fallback obligatorio.
 La capacidad consume la lista del día en solo lectura: no altera sus reglas, su
 deduplicación ni su orden, no tiene canal de WhatsApp propio, no envía nada por sí
-misma y exige aprobación humana explícita antes de cualquier envío. Originada en la
-change `clara-follow-up-draft-agent` (issue #148).
+misma y exige aprobación humana explícita antes de cualquier envío. Desde la
+Fase 4 es operada conversacionalmente por el agente raíz Clara a través de su
+canal Discord de staff y doctores autorizados, sin que ello habilite el envío.
+Originada en la change `clara-follow-up-draft-agent` (issue #148).
 
 ## Requirements
 
@@ -184,12 +186,16 @@ NOT modificar ningún dato existente.
 - THEN el sistema MAY redactar con apoyo del LLM
 - AND MUST conservar la plantilla determinista como fallback
 
-### Requirement: Sin canal propio ni capacidad de envío
+### Requirement: Sin canal de WhatsApp ni capacidad de envío
 
 La capacidad de redacción de Clara MUST NOT tener binding de canal de WhatsApp ni
-capacidad de envío. MUST NOT enviar ningún mensaje por sí misma. El envío de un
-borrador MUST ocurrir únicamente por el transporte de WhatsApp existente y solo
-tras aprobación humana explícita.
+capacidad de envío. MUST NOT enviar ningún mensaje a pacientes por sí misma. La
+capacidad MAY ser operada conversacionalmente desde la superficie de staff del
+agente raíz Clara (canal Discord de staff y doctores autorizados), entendida como
+superficie de consulta y preparación. Esa superficie MUST NOT ser un canal
+paciente-facing y MUST NOT aceptar mensajes entrantes de pacientes. El envío de
+un borrador MUST ocurrir únicamente por el transporte de WhatsApp existente y
+solo tras aprobación humana explícita.
 
 #### Scenario: La redacción no envía ningún WhatsApp
 
@@ -198,13 +204,27 @@ tras aprobación humana explícita.
 - THEN el sistema MUST NOT emitir ningún mensaje saliente al paciente
 - AND MUST NOT registrar un envío `outbound` en `whatsapp_messages`
 
-#### Scenario: La capacidad no expone un canal propio
+#### Scenario: La capacidad no expone un canal de WhatsApp propio
 
 - GIVEN la capacidad de redacción de Clara
-- WHEN se inspecciona su configuración
-- THEN MUST NOT exponer un canal de WhatsApp propio ni un binding de agente de
-  mensajería
+- WHEN se inspecciona su configuración de canales
+- THEN MUST NOT exponer un canal de WhatsApp propio
 - AND MUST NOT aceptar mensajes entrantes de pacientes
+
+#### Scenario: El canal de staff es una superficie de consulta y preparación
+
+- GIVEN la superficie conversacional de Clara para staff y doctores autorizados
+- WHEN el staff autorizado consulta un caso o solicita un borrador
+- THEN la superficie MUST permitir la consulta y la preparación del borrador
+- AND MUST NOT habilitar ningún envío hacia el paciente
+- AND MUST NOT tratar la superficie como un canal paciente-facing
+
+#### Scenario: La superficie de staff no acepta mensajes de pacientes
+
+- GIVEN un usuario no autorizado que intenta hablar con Clara como paciente
+- WHEN se procesa la interacción
+- THEN MUST NOT iniciarse ninguna sesión
+- AND MUST NOT procesarse como una conversación de atención al paciente
 
 #### Scenario: El envío sigue el flujo aprobado existente
 
