@@ -6,6 +6,7 @@ import { EmptyState } from '@/components/admin/EmptyState';
 import { LoadingState } from '@/components/admin/LoadingState';
 import { ErrorState } from '@/components/admin/ErrorState';
 import { TreatmentPlanForm } from './TreatmentPlanForm';
+import { TreatmentPlanDetailModal } from './TreatmentPlanDetailModal';
 
 type TreatmentPlansTabProps = {
   patientId: string;
@@ -44,6 +45,7 @@ export function TreatmentPlansTab({
 
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingPlan, setEditingPlan] = useState<TreatmentPlan | null>(null);
+  const [detailPlanId, setDetailPlanId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -73,6 +75,19 @@ export function TreatmentPlansTab({
   function handleEdit(plan: TreatmentPlan) {
     setEditingPlan(plan);
     setIsFormOpen(true);
+  }
+
+  // "Editar" desde el detalle: cierra el detalle y reutiliza el flujo de
+  // edición existente (`TreatmentPlanEditFormWrapper`).
+  function handleEditFromDetail(planId: string) {
+    const plan = treatmentPlans.find((candidate) => candidate.id === planId) ?? null;
+    setDetailPlanId(null);
+    setEditingPlan(plan);
+    setIsFormOpen(true);
+  }
+
+  function handleOpenDetail(plan: TreatmentPlan) {
+    setDetailPlanId(plan.id);
   }
 
   function handleClose() {
@@ -108,6 +123,10 @@ export function TreatmentPlansTab({
   if (loading) return <LoadingState message="Cargando planes de tratamiento..." />;
   if (error) return <ErrorState message={error} onRetry={onPlansChanged} />;
 
+  const detailPlan = detailPlanId
+    ? treatmentPlans.find((plan) => plan.id === detailPlanId) ?? null
+    : null;
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -136,7 +155,17 @@ export function TreatmentPlansTab({
             return (
               <article
                 key={plan.id}
-                className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm"
+                role="button"
+                tabIndex={0}
+                aria-label={`Ver detalle del plan ${plan.name}`}
+                onClick={() => handleOpenDetail(plan)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    handleOpenDetail(plan);
+                  }
+                }}
+                className="cursor-pointer rounded-lg border border-gray-200 bg-white p-4 shadow-sm hover:bg-gray-50"
               >
                 <div className="mb-3 flex items-start justify-between gap-4">
                   <div>
@@ -149,18 +178,34 @@ export function TreatmentPlansTab({
                     <h4 className="text-base font-semibold text-gray-900">{plan.name}</h4>
                   </div>
                   <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        handleOpenDetail(plan);
+                      }}
+                      className="text-sm font-medium text-blue-600 hover:text-blue-800"
+                    >
+                      Ver detalle
+                    </button>
                     {isDraft && (
                       <>
                         <button
                           type="button"
-                          onClick={() => handleEdit(plan)}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            handleEdit(plan);
+                          }}
                           className="text-sm font-medium text-blue-600 hover:text-blue-800"
                         >
                           Editar
                         </button>
                         <button
                           type="button"
-                          onClick={() => handleDelete(plan)}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            handleDelete(plan);
+                          }}
                           disabled={deletingId === plan.id}
                           className="text-sm font-medium text-red-600 hover:text-red-800 disabled:opacity-50"
                         >
@@ -213,6 +258,17 @@ export function TreatmentPlansTab({
           isOpen={isFormOpen}
           onClose={handleClose}
           onSaved={handleSaved}
+        />
+      )}
+
+      {detailPlan && (
+        <TreatmentPlanDetailModal
+          patientId={patientId}
+          planId={detailPlan.id}
+          planName={detailPlan.name}
+          providerName={providerById.get(detailPlan.providerId)?.name ?? '—'}
+          onClose={() => setDetailPlanId(null)}
+          onEdit={handleEditFromDetail}
         />
       )}
     </div>
