@@ -3,9 +3,9 @@
  * Credential-free smoke test for the Eve agent scaffold.
  *
  * Approach (design Decision 6): we FIRST try to import the default export of
- * `agent/agent.ts`. If importing `eve` under Vitest / `tsc` triggers side
+ * `agents/eva/agent/agent.ts`. If importing `eve` under Vitest / `tsc` triggers side
  * effects, runtime errors, or type errors, we FALL BACK to reading
- * `agent/agent.ts` as source text and asserting via regex. In this environment
+ * `agents/eva/agent/agent.ts` as source text and asserting via regex. In this environment
  * the import succeeds, so the source-text branch is a defensive fallback and is
  * exercised if the import ever breaks. The chosen approach is recorded in the
  * test output by the branch taken.
@@ -14,8 +14,8 @@ import { describe, expect, it } from "vitest";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-const AGENT_FILE = resolve(__dirname, "../../agent/agent.ts");
-const INSTRUCTIONS_FILE = resolve(__dirname, "../../agent/instructions.md");
+const AGENT_FILE = resolve(__dirname, "../../agents/eva/agent/agent.ts");
+const INSTRUCTIONS_FILE = resolve(__dirname, "../../agents/eva/agent/instructions.md");
 
 describe("Eve agent scaffold", () => {
   it("exports a valid model and a 30-minute session timeout", async () => {
@@ -25,7 +25,7 @@ describe("Eve agent scaffold", () => {
     let approach = "import";
 
     try {
-      const mod = await import("../../agent/agent");
+      const mod = await import("../../agents/eva/agent/agent");
       const config = mod.default;
       model = config?.model;
       sessionTimeoutMs = config?.limits?.sessionTimeoutMs;
@@ -39,7 +39,7 @@ describe("Eve agent scaffold", () => {
       typeof sessionTimeoutMs !== "number"
     ) {
       approach = "source-text";
-      expect(existsSync(AGENT_FILE), "agent/agent.ts must exist").toBe(true);
+      expect(existsSync(AGENT_FILE), "agents/eva/agent/agent.ts must exist").toBe(true);
 
       const source = readFileSync(AGENT_FILE, "utf-8");
 
@@ -72,7 +72,7 @@ describe("Eve agent scaffold", () => {
   });
 
   it("states all five clinical guardrails in Spanish", () => {
-    expect(existsSync(INSTRUCTIONS_FILE), "agent/instructions.md must exist").toBe(true);
+    expect(existsSync(INSTRUCTIONS_FILE), "agents/eva/agent/instructions.md must exist").toBe(true);
 
     const text = readFileSync(INSTRUCTIONS_FILE, "utf-8").toLowerCase();
 
@@ -90,7 +90,7 @@ describe("Eve agent scaffold", () => {
   });
 
   it("enumerates the escalation triggers", () => {
-    expect(existsSync(INSTRUCTIONS_FILE), "agent/instructions.md must exist").toBe(true);
+    expect(existsSync(INSTRUCTIONS_FILE), "agents/eva/agent/instructions.md must exist").toBe(true);
 
     const text = readFileSync(INSTRUCTIONS_FILE, "utf-8").toLowerCase();
     const triggers = [

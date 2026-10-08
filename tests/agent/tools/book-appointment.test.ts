@@ -18,7 +18,7 @@ vi.mock("@/lib/booking/patient-resolution", () => ({
 vi.mock("@/lib/booking/booking", () => ({ bookAppointment }));
 vi.mock("@/lib/supabase/server", () => ({ getSupabaseAdmin: () => ({ from }) }));
 
-const { default: tool } = await import("../../../agent/tools/book-appointment");
+const { default: tool } = await import("../../../agents/eva/agent/tools/book-appointment");
 const execute = tool.execute as (input: {
   patientPhone?: string;
   patientEmail?: string;

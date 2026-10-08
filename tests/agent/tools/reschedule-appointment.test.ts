@@ -13,7 +13,7 @@ vi.mock("@/lib/booking/patient-resolution", () => ({
 }));
 vi.mock("@/lib/booking/reschedule", () => ({ rescheduleAppointment }));
 
-const { default: tool } = await import("../../../agent/tools/reschedule-appointment");
+const { default: tool } = await import("../../../agents/eva/agent/tools/reschedule-appointment");
 const execute = tool.execute as (input: {
   appointmentId?: string;
   patientPhone?: string;

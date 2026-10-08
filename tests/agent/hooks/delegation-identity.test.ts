@@ -7,7 +7,7 @@
  *   - only bind when the delegated subagent is `mora` and the event carries a
  *     child session id;
  *   - read the trusted phone from the root session auth attributes (current or
- *     initiator), the same convention as `agent/trusted-contact-context.ts`;
+ *     initiator), the same convention as `agents/eva/agent/trusted-contact-context.ts`;
  *   - swallow-and-log on any failure (delegation continues; tools refuse).
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -19,7 +19,7 @@ vi.mock('@/lib/agent/delegation-bindings', () => ({
   DELEGATION_BINDING_TTL_SECONDS: 3600,
 }));
 
-const hookModule = await import('../../../agent/hooks/delegation-identity');
+const hookModule = await import('../../../agents/eva/agent/hooks/delegation-identity');
 const { extractMoraChildSessionId, readTrustedPatientPhone } = hookModule;
 const hook = hookModule.default;
 

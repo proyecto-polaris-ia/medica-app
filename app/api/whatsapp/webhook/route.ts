@@ -65,7 +65,7 @@ function recordForwardOutcome(
 
 async function forwardToEve(request: NextRequest, rawBody: string): Promise<NextResponse | null> {
   try {
-    const eveWebhookUrl = new URL('/eve/v1/whatsapp', request.url);
+    const eveWebhookUrl = new URL('/eva/eve/v1/whatsapp', request.url);
     const response = await fetch(eveWebhookUrl, {
       method: 'POST',
       headers: {

@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest';
 
-import { resolveModelConfig } from '../../agent/model';
+import { resolveModelConfig } from '../../agents/eva/agent/model';
 
 describe('resolveModelConfig', () => {
   it('applies the DeepSeek default when no model id is configured', () => {

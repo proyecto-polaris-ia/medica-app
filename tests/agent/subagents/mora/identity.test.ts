@@ -22,7 +22,7 @@ vi.mock('@/lib/agent/delegation-bindings', () => ({
 const {
   COLLECTIONS_SECURITY_REFUSAL,
   resolveCollectionsPatientPhone,
-} = await import('../../../../agent/subagents/mora/identity');
+} = await import('../../../../agents/eva/agent/subagents/mora/identity');
 
 const TRUSTED_PHONE = '+5215512345678';
 const BOUND_PHONE = '+5215598765432';

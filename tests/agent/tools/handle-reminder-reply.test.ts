@@ -7,7 +7,7 @@ const isReminderReplyEnabled = vi.fn();
 vi.mock('@/lib/citas/reminder-reply-service', () => ({ handleReminderReply }));
 vi.mock('@/lib/citas/reminder-reply-flag', () => ({ isReminderReplyEnabled }));
 
-const { default: tool } = await import('../../../agent/tools/handle-reminder-reply');
+const { default: tool } = await import('../../../agents/eva/agent/tools/handle-reminder-reply');
 const execute = tool.execute as (input: {
   message: string;
   providerMessageId?: string;

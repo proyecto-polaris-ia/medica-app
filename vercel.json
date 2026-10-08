@@ -1,5 +1,4 @@
 {
-  "framework": "nextjs",
   "crons": [
     {
       "path": "/api/cron/payment-reminders",
@@ -9,5 +8,28 @@
       "path": "/api/cron/appointment-reminders",
       "schedule": "0 15 * * *"
     }
-  ]
+  ],
+  "services": {
+    "web": {
+      "framework": "nextjs",
+      "root": "."
+    },
+    "eve-eva": {
+      "framework": "eve",
+      "root": ".eve/vercel-services/eve-eva",
+      "buildCommand": "cd '../../../agents/eva' && export EVE_INTERNAL_BUILD_OUTPUT_DIRECTORY='../../.eve/vercel-services/eve-eva/.vercel/output' && export EVE_INTERNAL_HOST_BUILD_OUTPUT_DIRECTORY='../../.vercel/output' && export EVE_PUBLIC_ROUTE_PREFIX='/eva' && export EVE_INTERNAL_AGENT_WORKSPACE_MEMBER=1 && node '../../node_modules/eve/bin/eve.js' build",
+      "routes": [
+        {
+          "src": "^/eva/eve/v1/(.*)$",
+          "transforms": [
+            {
+              "args": "/eve/v1/$1",
+              "op": "set",
+              "type": "request.path"
+            }
+          ]
+        }
+      ]
+    }
+  }
 }

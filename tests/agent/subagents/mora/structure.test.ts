@@ -2,7 +2,7 @@
 /**
  * Structural checks for the separated Mora agent surface (issue #140, fase 1).
  *
- * The collections agent lives at `agent/subagents/mora/` with its own
+ * The collections agent lives at `agents/eva/agent/subagents/mora/` with its own
  * instructions, the three collections tools, and the payment-collection skill.
  * Eva's surface must no longer carry any of them; she delegates instead.
  */
@@ -11,11 +11,11 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
 
 const ROOT = resolve(__dirname, "../../../..");
-const MORA_DIR = resolve(ROOT, "agent/subagents/mora");
+const MORA_DIR = resolve(ROOT, "agents/eva/agent/subagents/mora");
 const MORA_TOOLS_DIR = resolve(MORA_DIR, "tools");
 const MORA_SKILLS_DIR = resolve(MORA_DIR, "skills");
-const EVA_TOOLS_DIR = resolve(ROOT, "agent/tools");
-const EVA_INSTRUCTIONS = resolve(ROOT, "agent/instructions.md");
+const EVA_TOOLS_DIR = resolve(ROOT, "agents/eva/agent/tools");
+const EVA_INSTRUCTIONS = resolve(ROOT, "agents/eva/agent/instructions.md");
 
 const COLLECTIONS_TOOLS = [
   "get-patient-balance",
@@ -62,7 +62,7 @@ describe("Mora subagent surface", () => {
   it("leaves no collections tool in Eva's tool directory", () => {
     const evaTools = toolFiles(EVA_TOOLS_DIR);
     for (const tool of COLLECTIONS_TOOLS) {
-      expect(evaTools, `agent/tools must not contain ${tool}.ts`).not.toContain(`${tool}.ts`);
+      expect(evaTools, `agents/eva/agent/tools must not contain ${tool}.ts`).not.toContain(`${tool}.ts`);
     }
   });
 });

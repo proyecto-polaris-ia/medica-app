@@ -24,10 +24,10 @@ vi.mock("@/lib/booking/booking", () => ({ bookAppointment }));
 vi.mock("@/lib/booking/next-available", () => ({ findNextAvailable }));
 vi.mock("@/lib/supabase/server", () => ({ getSupabaseAdmin: () => ({ from }) }));
 
-const { default: availabilityTool } = await import("../../../agent/tools/check-availability");
-const { default: resolvePatientTool } = await import("../../../agent/tools/resolve-patient");
-const { default: bookAppointmentTool } = await import("../../../agent/tools/book-appointment");
-const { default: nextAvailableTool } = await import("../../../agent/tools/get-next-available");
+const { default: availabilityTool } = await import("../../../agents/eva/agent/tools/check-availability");
+const { default: resolvePatientTool } = await import("../../../agents/eva/agent/tools/resolve-patient");
+const { default: bookAppointmentTool } = await import("../../../agents/eva/agent/tools/book-appointment");
+const { default: nextAvailableTool } = await import("../../../agents/eva/agent/tools/get-next-available");
 
 // Minimal structural type for what this suite asserts about tool outputs.
 type BookingToolResult = {
