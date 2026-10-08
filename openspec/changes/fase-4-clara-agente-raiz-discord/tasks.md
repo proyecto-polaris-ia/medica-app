@@ -202,7 +202,7 @@ obligatorio a humano", "Sin canal de WhatsApp y sin capacidad de envío", "Skill
 de apoyo cargables", "Idioma y tono de las respuestas" y "Alcance limitado al
 seguimiento de pacientes".
 
-- [ ] 5.1 **RED:** extender `tests/agent/clara/structure.test.ts` con los
+- [x] 5.1 **RED:** extender `tests/agent/clara/structure.test.ts` con los
   guardrails textuales de las instrucciones y las skills (patrón de
   `tests/agent/mora/structure.test.ts`): presencia de "no diagnostico", "no
   receto", "precio", "disponibilidad", escalamiento (dolor fuerte, urgencia,
@@ -210,17 +210,17 @@ seguimiento de pacientes".
   `drafting-guidelines.md` documente `MAX_DRAFT_LENGTH` (600), el fallback
   determinista y el ciclo `draft → approved | rejected`; que ninguna skill
   introduzca umbrales/prioridades propios. Capturar el fallo observado.
-- [ ] 5.2 **GREEN (instrucciones):** crear
+- [x] 5.2 **GREEN (instrucciones):** crear
   `agents/clara/agent/instructions.md` con el outline de §9 (identidad y alcance,
   guardrails innegociables, escalamiento, datos y autorización, ciclo del
   borrador, routing de tools, formato Discord ≤ 1,500 caracteres, habilidades y
   límites de superficie).
-- [ ] 5.3 **GREEN (skills):** crear
+- [x] 5.3 **GREEN (skills):** crear
   `agents/clara/agent/skills/follow-up-workflow.md` y
   `agents/clara/agent/skills/drafting-guidelines.md` con el outline de §10
   (markdown plano, sin frontmatter, primera línea como intención de activación;
   sin redefinir reglas, umbrales, deduplicación, prioridad ni orden).
-- [ ] 5.4 **TRIANGULATE/REFACTOR docs del agente:** `npx vitest run
+- [x] 5.4 **TRIANGULATE/REFACTOR docs del agente:** `npx vitest run
   tests/agent/clara` completo y confirmar que `structure.test.ts` queda verde
   (todos los archivos de §2 existen, el set de tools es exacto y no hay
   `package.json` ni `subagents/`).
@@ -230,20 +230,20 @@ seguimiento de pacientes".
 Verifica `clara-discord-channel` → "Canal Discord propio con ruta y comando
 propios" y la degradación graceful de credenciales (§D11, §8).
 
-- [ ] 6.1 `.eve/vercel-services/eve-clara/README.md` con el mismo texto de
+- [x] 6.1 `.eve/vercel-services/eve-clara/README.md` con el mismo texto de
   `.eve/vercel-services/eve-mora/README.md` (scaffold del servicio).
-- [ ] 6.2 `.gitignore`: agregar `!/.eve/vercel-services/eve-clara/` a
+- [x] 6.2 `.gitignore`: agregar `!/.eve/vercel-services/eve-clara/` a
   continuación de las líneas de `eve-eva` / `eve-mora`. Sin esta excepción
   Vercel no puede materializar el `root` del servicio.
-- [ ] 6.3 `vercel.json`: servicio `eve-clara` (framework `eve`, `root
+- [x] 6.3 `vercel.json`: servicio `eve-clara` (framework `eve`, `root
   ".eve/vercel-services/eve-clara"`, `buildCommand` desde `agents/clara` con
   `EVE_PUBLIC_ROUTE_PREFIX='/clara'`) con `routes` `^/clara/eve/v1/(.*)$`, y
   rewrite `/clara/eve/v1/(.*)` → servicio `eve-clara` **antes** del catch-all
   `web`, exactamente como §8. `middleware.ts` no se toca.
-- [ ] 6.4 (Opcional, no requerido por la spec) agregar en `.env.local.example`,
+- [x] 6.4 (Opcional, no requerido por la spec) agregar en `.env.local.example`,
   después de `CLARA_DRAFTING_ENABLED=false` (línea 39), `CLARA_DISCORD_STAFF_IDS`
   y `CLARA_DISCORD_ACTOR_MAP` vacías con comentario de fail-closed.
-- [ ] 6.5 Documentar en el propio change (§7 del design) la tabla de variables
+- [x] 6.5 Documentar en el propio change (§7 del design) la tabla de variables
   del servicio `eve-clara`: `DISCORD_APPLICATION_ID`, `DISCORD_BOT_TOKEN`,
   `DISCORD_PUBLIC_KEY`, `CLARA_DISCORD_STAFF_IDS`, `CLARA_DISCORD_ACTOR_MAP`,
   `WHATSAPP_AGENT_LLM_API_KEY`, `WHATSAPP_AGENT_LLM_MODEL`,
@@ -256,18 +256,18 @@ propios" y la degradación graceful de credenciales (§D11, §8).
 Verifica §12 y §D14 del design; sostiene el requirement "Canal Discord propio"
 en operación.
 
-- [ ] 7.1 Crear `docs/clara-discord-setup.md` con los 7 pasos de §11 (Developer
+- [x] 7.1 Crear `docs/clara-discord-setup.md` con los 7 pasos de §11 (Developer
   Portal, credenciales, slash command `/clara` con opción `message`, Interactions
   Endpoint URL `https://<dominio>/clara/eve/v1/discord`, variables de entorno del
   servicio, instalación OAuth2 con scopes `applications.commands` + `bot`, y la
   validación §13.2). Cerrar con la nota fail-closed y la aclaración de canal de
   staff, no de pacientes. Patrón de `docs/mora-discord-setup.md`.
-- [ ] 7.2 `docs/eve-runbook.md`: (a) insertar el bullet de Clara en la topología
+- [x] 7.2 `docs/eve-runbook.md`: (a) insertar el bullet de Clara en la topología
   después de la línea 21; (b) corregir las líneas 28-29 ("Clara y Nora NO son
   agentes de WhatsApp" ⇒ Nora no es agente raíz y Clara sí es agente raíz con
   canal Discord de staff); (c) después de la línea 31 agregar el enlace a
   `docs/clara-discord-setup.md`. Ediciones exactas de §12.1.
-- [ ] 7.3 `architecture.md` §3.2: (a) línea 66, agregar `eve-clara` →
+- [x] 7.3 `architecture.md` §3.2: (a) línea 66, agregar `eve-clara` →
   `/clara/eve/v1/*`; (b) insertar el bullet de Clara después de la línea 78
   (canal `/clara/eve/v1/discord`, las 7 tools, las 2 skills, `access.ts` con
   allowlist + mapa de actor, y "no atiende WhatsApp, no atiende pacientes, no
