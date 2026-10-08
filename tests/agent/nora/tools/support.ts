@@ -13,9 +13,9 @@
  * como suite.
  */
 import type { DashboardMetricsView } from "@/lib/admin/metrics/loader";
+import type { MetricsTrend } from "@/lib/admin/metrics/trend";
 import type {
   MetricsResult,
-  MetricsTrend,
   ProviderMetrics,
   StatusCounts,
 } from "@/lib/admin/metrics/types";
