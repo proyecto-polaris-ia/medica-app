@@ -14,6 +14,7 @@ import { ProviderLegend } from '@/components/admin/calendar/ProviderLegend';
 import { ServiceFilter } from '@/components/admin/calendar/ServiceFilter';
 import { PatientRecordModal } from '@/components/admin/PatientRecordModal';
 import type { Appointment, AppointmentReminderSummary, Provider } from '@/lib/admin/types';
+import { statusLabel } from '@/lib/admin/appointment-labels';
 import {
   clinicLocalInputToUtc,
   clinicMonthRangeUtc,
@@ -91,26 +92,6 @@ const APPOINTMENT_DATE_FORMATTER = new Intl.DateTimeFormat('es-MX', {
 
 function formatDate(iso: string): string {
   return APPOINTMENT_DATE_FORMATTER.format(new Date(iso));
-}
-
-function statusLabel(status: Appointment['status']): string {
-  switch (status) {
-    case 'confirmed':
-      return 'Confirmada';
-    case 'requested':
-    case 'pending':
-      return 'Sin confirmar';
-    case 'cancelled':
-      return 'Cancelada';
-    case 'rescheduled':
-      return 'Reagendada';
-    case 'no_show':
-      return 'No asistió';
-    case 'attended':
-      return 'Atendida';
-    default:
-      return status;
-  }
 }
 
 // Nunca muestra una fecha de recordatorio inexistente: cuando no hay `sentAt`
@@ -263,9 +244,11 @@ export default function AppointmentsPage() {
       startAt: appointment.startAt,
       endAt: appointment.endAt,
       status: appointment.status,
+      providerName: refName(providers, appointment.providerId),
+      notes: appointment.notes,
     }));
     return groupAppointmentsByDay(enriched, providerColor);
-  }, [calendarAppointments, patients, services, providerColor]);
+  }, [calendarAppointments, patients, services, providers, providerColor]);
 
   const visibleProviders = useMemo(() => {
     const providerIds = new Set(appointments.map((a) => a.providerId));
