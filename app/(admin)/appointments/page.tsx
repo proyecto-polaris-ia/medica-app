@@ -14,10 +14,14 @@ import { ProviderLegend } from '@/components/admin/calendar/ProviderLegend';
 import { PatientRecordModal } from '@/components/admin/PatientRecordModal';
 import type { Appointment, AppointmentReminderSummary, Provider } from '@/lib/admin/types';
 import {
+  clinicLocalInputToUtc,
   clinicMonthRangeUtc,
+  clinicTimeLabel,
+  CLINIC_TZ,
   FALLBACK_COLOR,
   getCurrentClinicMonth,
   groupAppointmentsByDay,
+  toClinicLocalInput,
 } from '@/lib/admin/timezone';
 
 type Reference = {
@@ -49,14 +53,14 @@ const emptyAppointment = {
   notes: '',
 };
 
+// La captura y el despliegue de horas de la cita usan SIEMPRE la zona
+// clínica (America/Mexico_City), nunca la zona del navegador.
 function toLocalInput(iso: string): string {
-  const date = new Date(iso);
-  const pad = (n: number) => n.toString().padStart(2, '0');
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  return toClinicLocalInput(iso);
 }
 
 function fromLocalInput(value: string): string {
-  return new Date(value).toISOString();
+  return clinicLocalInputToUtc(value);
 }
 
 // Fecha/hora del envío del recordatorio SIEMPRE en la zona clínica
@@ -74,6 +78,18 @@ const REMINDER_DATE_FORMATTER = new Intl.DateTimeFormat('es-MX', {
 
 function formatReminderSentAt(iso: string): string {
   return REMINDER_DATE_FORMATTER.format(new Date(iso));
+}
+
+// Fecha/hora de la cita en la lista: SIEMPRE en la zona clínica
+// (America/Mexico_City), nunca en la zona del navegador.
+const APPOINTMENT_DATE_FORMATTER = new Intl.DateTimeFormat('es-MX', {
+  timeZone: CLINIC_TZ,
+  dateStyle: 'medium',
+  timeStyle: 'short',
+});
+
+function formatDate(iso: string): string {
+  return APPOINTMENT_DATE_FORMATTER.format(new Date(iso));
 }
 
 function statusLabel(status: Appointment['status']): string {
@@ -301,10 +317,6 @@ export default function AppointmentsPage() {
 
   function refName(list: Reference[], id: string) {
     return list.find((item) => item.id === id)?.name ?? id;
-  }
-
-  function formatDate(iso: string) {
-    return new Date(iso).toLocaleString('es-MX');
   }
 
   function formatNotes(notes: string | null) {

@@ -1,7 +1,10 @@
 import type { PatientRecord, PatientRecordAppointment } from '@/lib/admin/types';
+import { CLINIC_TZ } from '@/lib/admin/timezone';
 
 function formatDateTime(iso: string): string {
+  // Zona clínica fija, nunca la zona del navegador.
   return new Date(iso).toLocaleString('es-MX', {
+    timeZone: CLINIC_TZ,
     dateStyle: 'medium',
     timeStyle: 'short',
   });
