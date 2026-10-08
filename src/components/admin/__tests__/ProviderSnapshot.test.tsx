@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { ProviderSnapshot } from '../ProviderSnapshot';
+import { TimezoneProvider } from '../TimezoneProvider';
 import type { ProviderSnapshot as SnapshotType } from '@/lib/admin/types';
 
 function buildSnapshot(overrides?: Partial<SnapshotType>): SnapshotType {
@@ -92,5 +93,31 @@ describe('ProviderSnapshot', () => {
       'href',
       '/appointments?providerId=1'
     );
+  });
+
+  it('renders appointment times in the viewer timezone, not the clinic timezone', () => {
+    const snapshot = buildSnapshot({
+      upcoming: [
+        {
+          id: 'a',
+          patientId: 'p1',
+          patientName: 'Juan Pérez',
+          serviceName: 'Limpieza',
+          startAt: '2026-09-05T14:00:00.000Z',
+          endAt: '2026-09-05T14:30:00.000Z',
+          status: 'confirmed',
+        },
+      ],
+    });
+
+    render(
+      <TimezoneProvider timezone="America/Los_Angeles">
+        <ProviderSnapshot snapshot={snapshot} />
+      </TimezoneProvider>
+    );
+
+    // 14:00Z = 07:00 en America/Los_Angeles (PDT, UTC-7); en la clínica serían 08:00.
+    expect(screen.getByText(/7:00/)).toBeInTheDocument();
+    expect(screen.queryByText(/8:00/)).not.toBeInTheDocument();
   });
 });

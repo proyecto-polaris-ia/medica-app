@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import { TimezoneProvider } from '@/components/admin/TimezoneProvider';
 
 vi.mock('../nora-actions', () => ({
   acceptSuggestionAction: vi.fn(),
@@ -143,5 +144,20 @@ describe('NoraSection — sugerencias de reacomodo', () => {
     // La sección completa sigue montada: la fila no desaparece al fallar.
     expect(screen.getByText('Sugerencias de reacomodo')).toBeInTheDocument();
     expect(screen.getByText('Dra. Ana · Hueco antes de la hora actual')).toBeInTheDocument();
+  });
+
+  it('formatea las horas en la zona del observador cuando no es la clínica', () => {
+    render(
+      <TimezoneProvider timezone="America/Los_Angeles">
+        <NoraSection view={buildView()} />
+      </TimezoneProvider>
+    );
+
+    // 17:00Z = 10:00 en Los Ángeles (PDT, UTC-7); 16:00Z = 09:00.
+    expect(
+      screen.getByText('5 oct 2026 10:00 → 5 oct 2026 09:00')
+    ).toBeInTheDocument();
+    // El hueco 16:00Z–17:00Z se muestra en la zona del observador.
+    expect(screen.getByText('09:00–10:00 (60 min)')).toBeInTheDocument();
   });
 });
