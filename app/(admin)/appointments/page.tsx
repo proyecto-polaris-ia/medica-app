@@ -14,6 +14,7 @@ import { ProviderLegend } from '@/components/admin/calendar/ProviderLegend';
 import { ServiceFilter } from '@/components/admin/calendar/ServiceFilter';
 import { PatientRecordModal } from '@/components/admin/PatientRecordModal';
 import type { Appointment, AppointmentReminderSummary, Provider } from '@/lib/admin/types';
+import { statusLabel } from '@/lib/admin/appointment-labels';
 import {
   clinicLocalInputToUtc,
   clinicMonthRangeUtc,
