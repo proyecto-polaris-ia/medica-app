@@ -2,12 +2,12 @@
 
 ## Fase 1 — Documentación (este change)
 
-- [ ] 1.1 Revisar y aprobar `proposal.md`, `design.md` y el delta
+- [x] 1.1 Revisar y aprobar (aprobado por el usuario al elegir SDD completo hasta PR; artefactos revisados por el orquestador) `proposal.md`, `design.md` y el delta
   `specs/appointments-calendar-view/spec.md`; confirmar que el delta MODIFIED
   reemplaza el requirement "View toggle from appointments page" completo y que
   los requirements ADDED cubren agenda, campos, "Sin citas", reutilización de
   edición/expediente, filtros, navegación + "Hoy" y presentación.
-- [ ] 1.2 Confirmar etiquetas de UI definitivas: **Lista | Calendario | Agenda**
+- [x] 1.2 Confirmar etiquetas de UI definitivas: **Lista | Calendario | Agenda**
   (sin renombrar Calendario) y que "Hoy" solo hace scroll.
 
 ## Fase 2 — Datos de presentación (`endLabel`)
@@ -30,7 +30,7 @@
   (props espejo de `MonthCalendar`, días vía `getCalendarGrid`, filas con el
   patrón de `DayAppointmentsModal`, encabezados pegajosos, contenedor con scroll,
   botón "Hoy" con guard); suite de `AgendaView` en verde.
-- [ ] 3.3 REFACTOR (opcional): extraer `formatDayTitle` compartido sin cambiar su
+- [x] 3.3 OMITIDO por decisión de diseño (ver design.md y verify-report): requería editar DayAppointmentsModal (fuera de superficie); AgendaView conserva copia privada de `formatDayTitle`. Tarea original: extraer `formatDayTitle` compartido sin cambiar su
   salida; re-ejecutar las suites de `AgendaView` y `DayAppointmentsModal`.
 
 ## Fase 4 — Integración en la página
@@ -53,9 +53,9 @@
 - [x] 5.1 Suite enfocada en verde: `npm test` sobre las suites de `AgendaView`,
   `timezone` y `page` (o `npm test` completo si es asequible).
 - [x] 5.2 `npx tsc --noEmit` sin errores.
-- [ ] 5.3 `npm run lint` sin errores nuevos.
-- [ ] 5.4 `npm run build` sin errores.
-- [ ] 5.5 Reporte de verificación (sdd-verify) con evidencia y comparación contra
+- [x] 5.3 `npm run lint` sin errores nuevos.
+- [x] 5.4 `npm run build` sin errores.
+- [x] 5.5 Reporte de verificación (sdd-verify) con evidencia y comparación contra
   los escenarios del delta.
 
 ## Workload Forecast
