@@ -1,10 +1,14 @@
 import { getSupabaseAdmin } from '@/lib/supabase/server';
 import { buildTransitionStamp } from './metrics/transitions';
-import type {
-  Appointment,
-  AppointmentInput,
-  AppointmentReminderSummary,
-  ProviderAppointment,
+import {
+  APPOINTMENT_SORT_COLUMNS,
+  APPOINTMENT_SORT_DIRECTIONS,
+  type Appointment,
+  type AppointmentInput,
+  type AppointmentReminderSummary,
+  type AppointmentSortColumn,
+  type AppointmentSortDirection,
+  type ProviderAppointment,
 } from './types';
 import {
   parseAppointmentStatus,
@@ -142,6 +146,166 @@ export async function listAppointmentsRange(
   }
 
   return withReminders((data ?? []).map(mapRow));
+}
+
+const DEFAULT_PAGE = 1;
+const DEFAULT_PAGE_SIZE = 20;
+const MAX_PAGE_SIZE = 100;
+
+/** Expresión de orden PostgREST por cada columna del whitelist. */
+const SORT_ORDER_EXPRESSION: Record<AppointmentSortColumn, string> = {
+  start_at: 'start_at',
+  end_at: 'end_at',
+  status: 'status',
+  created_at: 'created_at',
+  patient: 'patients(full_name)',
+  service: 'services(name)',
+  provider: 'providers(name)',
+};
+
+/**
+ * Embeds exigidos por PostgREST para ordenar por nombre: la relación debe
+ * aparecer en el `select`. Verificado contra Supabase local (PostgREST 16.4):
+ * `.order('patients(full_name)')` compone con `.range(...)` y `count: 'exact'`.
+ */
+const SORT_EMBED: Partial<Record<AppointmentSortColumn, string>> = {
+  patient: 'patients(full_name)',
+  service: 'services(name)',
+  provider: 'providers(name)',
+};
+
+export type ListAppointmentsPagedParams = {
+  page?: number;
+  pageSize?: number;
+  serviceId?: string;
+  patientId?: string;
+  providerId?: string;
+  startAtIso?: string;
+  endAtIso?: string;
+  sort?: AppointmentSortColumn;
+  sortDir?: AppointmentSortDirection;
+};
+
+export type ListAppointmentsPagedResult = {
+  appointments: Appointment[];
+  total: number;
+};
+
+function parsePageParam(page: number | undefined): number {
+  if (page === undefined) return DEFAULT_PAGE;
+  if (!Number.isInteger(page) || page < 1) {
+    throw new ValidationError('page', 'Invalid page');
+  }
+  return page;
+}
+
+function parsePageSizeParam(pageSize: number | undefined): number {
+  if (pageSize === undefined) return DEFAULT_PAGE_SIZE;
+  if (!Number.isInteger(pageSize) || pageSize < 1 || pageSize > MAX_PAGE_SIZE) {
+    throw new ValidationError('pageSize', 'Invalid pageSize');
+  }
+  return pageSize;
+}
+
+function parseSortParam(
+  sort: AppointmentSortColumn | undefined
+): AppointmentSortColumn {
+  if (sort === undefined) return 'start_at';
+  if (!(APPOINTMENT_SORT_COLUMNS as readonly string[]).includes(sort)) {
+    throw new ValidationError('sort', 'Invalid sort');
+  }
+  return sort;
+}
+
+function parseSortDirParam(
+  sortDir: AppointmentSortDirection | undefined
+): AppointmentSortDirection {
+  if (sortDir === undefined) return 'desc';
+  if (!(APPOINTMENT_SORT_DIRECTIONS as readonly string[]).includes(sortDir)) {
+    throw new ValidationError('sortDir', 'Invalid sortDir');
+  }
+  return sortDir;
+}
+
+/**
+ * Página del listado de citas con filtros, orden por whitelist y `total` exacto
+ * del conjunto filtrado. La paginación se aplica después de los filtros.
+ */
+export async function listAppointmentsPaged(
+  params: ListAppointmentsPagedParams
+): Promise<ListAppointmentsPagedResult> {
+  const page = parsePageParam(params.page);
+  const pageSize = parsePageSizeParam(params.pageSize);
+  const sort = parseSortParam(params.sort);
+  const sortDir = parseSortDirParam(params.sortDir);
+
+  let startAt: Date | undefined;
+  let endAt: Date | undefined;
+  if (params.startAtIso !== undefined || params.endAtIso !== undefined) {
+    if (params.startAtIso === undefined || params.endAtIso === undefined) {
+      throw new ValidationError('start', 'start and end must be provided together');
+    }
+    ({ startAt, endAt } = validateDateRange(params.startAtIso, params.endAtIso));
+  }
+
+  const embed = SORT_EMBED[sort];
+  const select = embed ? `${SELECT_COLUMNS}, ${embed}` : SELECT_COLUMNS;
+
+  const supabase = getSupabaseAdmin();
+  // `count: 'exact'` cuenta el conjunto filtrado antes del `range`.
+  const buildQuery = () => {
+    let query = supabase.from('appointments').select(select, { count: 'exact' });
+
+    if (params.serviceId) query = query.eq('service_id', params.serviceId);
+    if (params.patientId) query = query.eq('patient_id', params.patientId);
+    if (params.providerId) query = query.eq('provider_id', params.providerId);
+    if (startAt && endAt) {
+      query = query
+        .gte('start_at', startAt.toISOString())
+        .lt('start_at', endAt.toISOString());
+    }
+
+    return query
+      .order(SORT_ORDER_EXPRESSION[sort], { ascending: sortDir === 'asc' })
+      // Desempate estable para que la paginación no repita filas cuando la
+      // columna ordenada tiene valores iguales.
+      .order('id', { ascending: true });
+  };
+
+  const from = (page - 1) * pageSize;
+  const to = from + pageSize - 1;
+  let { data, count, error } = await buildQuery().range(from, to);
+
+  // Una página más allá del total no debe romper la respuesta: PostgREST
+  // responde 416 (`PGRST103`) sin exponer el total, así que se repite la
+  // consulta con un rango válido solo para recuperar el `count` exacto.
+  let outOfRangePage = false;
+  if (error && isRangeNotSatisfiable(error)) {
+    outOfRangePage = true;
+    ({ data, count, error } = await buildQuery().range(0, 0));
+  }
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  if (outOfRangePage) {
+    return { appointments: [], total: count ?? 0 };
+  }
+
+  return {
+    appointments: await withReminders(
+      // El `select` es dinámico (embeds del orden por nombre), así que
+      // supabase-js no infiere la fila; se normaliza al mapper del dominio.
+      ((data ?? []) as unknown as Record<string, unknown>[]).map(mapRow)
+    ),
+    total: count ?? 0,
+  };
+}
+
+/** PostgREST responde 416 cuando el `offset` solicitado excede el total. */
+function isRangeNotSatisfiable(error: { code?: string; message: string }): boolean {
+  return error.code === 'PGRST103' || /range not satisfiable/i.test(error.message);
 }
 
 function validateAppointmentInput(input: AppointmentInput): {

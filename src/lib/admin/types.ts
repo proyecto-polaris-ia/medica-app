@@ -119,6 +119,29 @@ export type AppointmentInput = {
   notes?: string | null;
 };
 
+/**
+ * Columnas ordenables del listado de citas (whitelist del endpoint).
+ * `patient`/`service`/`provider` ordenan por el nombre de la relación
+ * embebida en PostgREST; el resto son columnas directas.
+ */
+export const APPOINTMENT_SORT_COLUMNS = [
+  'start_at',
+  'end_at',
+  'status',
+  'created_at',
+  'patient',
+  'service',
+  'provider',
+] as const;
+
+export type AppointmentSortColumn = (typeof APPOINTMENT_SORT_COLUMNS)[number];
+
+/** Direcciones de ordenamiento aceptadas por el endpoint. */
+export const APPOINTMENT_SORT_DIRECTIONS = ['asc', 'desc'] as const;
+
+export type AppointmentSortDirection =
+  (typeof APPOINTMENT_SORT_DIRECTIONS)[number];
+
 
 export type PregnancyStatus = 'not_applicable' | 'no' | 'yes';
 export type SmokingStatus = 'never' | 'former' | 'current';

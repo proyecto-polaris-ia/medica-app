@@ -8,6 +8,7 @@ import { EmptyState } from '@/components/admin/EmptyState';
 import { ErrorState } from '@/components/admin/ErrorState';
 import { FormModal } from '@/components/admin/FormModal';
 import { LoadingState } from '@/components/admin/LoadingState';
+import { Pagination } from '@/components/admin/Pagination';
 import { MonthCalendar } from '@/components/admin/calendar/MonthCalendar';
 import { CalendarNav } from '@/components/admin/calendar/CalendarNav';
 import { ProviderLegend } from '@/components/admin/calendar/ProviderLegend';
@@ -33,6 +34,26 @@ type Reference = {
 type ViewMode = 'list' | 'calendar';
 type SortField = 'startAt' | 'endAt' | 'patient' | 'service' | 'provider' | 'status';
 type SortDirection = 'asc' | 'desc';
+
+// Tamaño de página fijo de la lista (design OQ2: sin selector en la UI).
+const PAGE_SIZE = 20;
+
+// Mapeo de las columnas ordenables de la UI a las llaves del whitelist del API.
+const API_SORT_FIELD: Record<SortField, string> = {
+  startAt: 'start_at',
+  endAt: 'end_at',
+  patient: 'patient',
+  service: 'service',
+  provider: 'provider',
+  status: 'status',
+};
+
+type PaginationMeta = {
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+};
 
 const STATUS_OPTIONS = [
   'requested',
@@ -181,16 +202,71 @@ function normalizeSelection(next: string[], allIds: string[]): string[] {
   return next.length === allIds.length ? [] : next;
 }
 
-// URL destino del filtro del calendario: compone ambos parámetros y omite los
-// vacíos (providerId primero, serviceId después; orden determinista de #174).
+// URL destino de la sincronía con el historial: compone `page` (solo si > 1),
+// `providerId` y `serviceId`, omitiendo los vacíos (orden determinista
+// page → providerId → serviceId) y devuelve `/appointments` si no queda ningún
+// parámetro. La comparten el filtro del calendario y el cambio de página para
+// que no se pisen (design §1.6/§2.5).
 // `URLSearchParams` codifica la coma como `%2C`; se decodifica para conservar la
 // forma exacta de URL de #174 (`providerId=prov-a,prov-b`).
-function calendarFilterUrl(providerIds: string[], serviceIds: string[]): string {
+function appointmentsUrl(
+  page: number,
+  providerIds: string[],
+  serviceIds: string[]
+): string {
   const params = new URLSearchParams();
+  if (page > 1) params.set('page', String(page));
   if (providerIds.length > 0) params.set('providerId', providerIds.join(','));
   if (serviceIds.length > 0) params.set('serviceId', serviceIds.join(','));
   const query = params.toString().replace(/%2C/g, ',');
   return query.length > 0 ? `/appointments?${query}` : '/appointments';
+}
+
+// Parseo defensivo de `?page=n`: vacío, no numérico, cero o negativo cae en 1
+// (init única desde la URL, sin `useEffect`).
+function parsePage(raw: string | null | undefined): number {
+  if (!raw || !/^\d+$/.test(raw)) return 1;
+  const value = Number(raw);
+  return Number.isSafeInteger(value) && value >= 1 ? value : 1;
+}
+
+// Límites ISO del rango de fechas del listado. El extremo superior se extiende
+// al final del día para que un rango de un solo día sea válido (el endpoint
+// exige `end > start`).
+function listDateRangeBounds(dateFrom: string, dateTo: string) {
+  return {
+    start: `${dateFrom}T00:00:00.000Z`,
+    end: `${dateTo}T23:59:59.999Z`,
+  };
+}
+
+// URL del request del modo lista: página, tamaño, filtros (incluido el rango
+// opcional, que solo viaja cuando ambos extremos están seteados) y orden
+// canónico del whitelist.
+function listAppointmentsRequestUrl(params: {
+  page: number;
+  serviceFilter: string;
+  patientFilter: string;
+  providerFilter: string;
+  dateFrom: string;
+  dateTo: string;
+  sortField: SortField;
+  sortDirection: SortDirection;
+}): string {
+  const search = new URLSearchParams();
+  search.set('page', String(params.page));
+  search.set('pageSize', String(PAGE_SIZE));
+  if (params.serviceFilter) search.set('serviceId', params.serviceFilter);
+  if (params.patientFilter) search.set('patientId', params.patientFilter);
+  if (params.providerFilter) search.set('providerId', params.providerFilter);
+  if (params.dateFrom && params.dateTo) {
+    const { start, end } = listDateRangeBounds(params.dateFrom, params.dateTo);
+    search.set('start', start);
+    search.set('end', end);
+  }
+  search.set('sort', API_SORT_FIELD[params.sortField]);
+  search.set('sortDir', params.sortDirection);
+  return `/api/admin/appointments?${search.toString()}`;
 }
 
 export default function AppointmentsPage() {
@@ -233,6 +309,15 @@ export default function AppointmentsPage() {
   const [dateTo, setDateTo] = useState('');
   const [sortField, setSortField] = useState<SortField>('startAt');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+  // Página activa de la lista: estado local inicializado una sola vez desde la
+  // URL (deep link `?page=n`) y `pageSize` constante (design §1.6, D14).
+  const [page, setPage] = useState(() => parsePage(searchParams?.get('page')));
+  const [pagination, setPagination] = useState<PaginationMeta>({
+    total: 0,
+    page: 1,
+    pageSize: PAGE_SIZE,
+    totalPages: 0,
+  });
 
   const providerColor = useCallback(
     (providerId: string) =>
@@ -304,9 +389,9 @@ export default function AppointmentsPage() {
       }
       setCalendarProviderFilter(nextProvider);
       setCalendarServiceFilter(nextService);
-      router.replace(calendarFilterUrl(nextProvider, nextService));
+      router.replace(appointmentsUrl(page, nextProvider, nextService));
     },
-    [calendarProviderFilter, calendarServiceFilter, router]
+    [calendarProviderFilter, calendarServiceFilter, page, router]
   );
 
   function toggleCalendarProvider(id: string) {
@@ -342,7 +427,7 @@ export default function AppointmentsPage() {
     setLoading(true);
     setError(null);
     try {
-      const appointmentsUrl =
+      const requestUrl =
         view === 'calendar'
           ? (() => {
               const { startAt, endAt } = clinicMonthRangeUtc(
@@ -352,10 +437,19 @@ export default function AppointmentsPage() {
               );
               return `/api/admin/appointments?start=${encodeURIComponent(startAt)}&end=${encodeURIComponent(endAt)}`;
             })()
-          : '/api/admin/appointments';
+          : listAppointmentsRequestUrl({
+              page,
+              serviceFilter,
+              patientFilter,
+              providerFilter,
+              dateFrom,
+              dateTo,
+              sortField,
+              sortDirection,
+            });
 
       const [apptRes, patientRes, providerRes, serviceRes] = await Promise.all([
-        fetch(appointmentsUrl),
+        fetch(requestUrl),
         fetch('/api/admin/patients'),
         fetch('/api/admin/providers'),
         fetch('/api/admin/services'),
@@ -365,7 +459,20 @@ export default function AppointmentsPage() {
       const patientData = await patientRes.json();
       const providerData = await providerRes.json();
       const serviceData = await serviceRes.json();
-      setAppointments(apptData.appointments ?? []);
+      const receivedAppointments: Appointment[] = apptData.appointments ?? [];
+      setAppointments(receivedAppointments);
+      // El modo lista trae metadatos; se tolera su ausencia (mocks y respuestas
+      // legacy) derivando el total de la página recibida.
+      if (view === 'list') {
+        setPagination(
+          apptData.pagination ?? {
+            total: receivedAppointments.length,
+            page,
+            pageSize: PAGE_SIZE,
+            totalPages: receivedAppointments.length > 0 ? 1 : 0,
+          }
+        );
+      }
       setPatients(
         (patientData.patients ?? []).map((p: { id: string; fullName: string }) => ({
           id: p.id,
@@ -379,7 +486,19 @@ export default function AppointmentsPage() {
     } finally {
       setLoading(false);
     }
-  }, [view, visibleMonth, viewerTz]);
+  }, [
+    view,
+    visibleMonth,
+    viewerTz,
+    page,
+    serviceFilter,
+    patientFilter,
+    providerFilter,
+    dateFrom,
+    dateTo,
+    sortField,
+    sortDirection,
+  ]);
 
   useEffect(() => {
     loadData();
@@ -479,6 +598,55 @@ export default function AppointmentsPage() {
     return notes.length > 80 ? `${notes.slice(0, 80)}…` : notes;
   }
 
+  // Al cambiar cualquier filtro u orden la página vuelve a 1 (D17); si había
+  // `?page=n` se reescribe la URL sin el parámetro y conservando los filtros del
+  // calendario (D16).
+  const resetPageForFilterChange = useCallback(() => {
+    if (page === 1) return;
+    setPage(1);
+    router.replace(
+      appointmentsUrl(1, calendarProviderFilter, calendarServiceFilter)
+    );
+  }, [page, calendarProviderFilter, calendarServiceFilter, router]);
+
+  // Cambio de página: estado local como fuente de verdad, guardia de reescritura
+  // redundante y `router.replace` sin agregar historial (D14, D15).
+  const handlePageChange = useCallback(
+    (nextPage: number) => {
+      if (nextPage === page) return;
+      setPage(nextPage);
+      router.replace(
+        appointmentsUrl(nextPage, calendarProviderFilter, calendarServiceFilter)
+      );
+    },
+    [page, calendarProviderFilter, calendarServiceFilter, router]
+  );
+
+  function handleServiceFilterChange(value: string) {
+    setServiceFilter(value);
+    resetPageForFilterChange();
+  }
+
+  function handlePatientFilterChange(value: string) {
+    setPatientFilter(value);
+    resetPageForFilterChange();
+  }
+
+  function handleProviderFilterChange(value: string) {
+    setProviderFilter(value);
+    resetPageForFilterChange();
+  }
+
+  function handleDateFromChange(value: string) {
+    setDateFrom(value);
+    resetPageForFilterChange();
+  }
+
+  function handleDateToChange(value: string) {
+    setDateTo(value);
+    resetPageForFilterChange();
+  }
+
   function handleSort(field: SortField) {
     if (sortField === field) {
       setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
@@ -486,6 +654,7 @@ export default function AppointmentsPage() {
       setSortField(field);
       setSortDirection('asc');
     }
+    resetPageForFilterChange();
   }
 
   function clearFilters() {
@@ -494,58 +663,18 @@ export default function AppointmentsPage() {
     setProviderFilter('');
     setDateFrom('');
     setDateTo('');
+    resetPageForFilterChange();
   }
 
-  const filteredAndSortedAppointments = useMemo(() => {
-    let result = [...appointments];
-
-    if (serviceFilter) {
-      result = result.filter((a) => a.serviceId === serviceFilter);
-    }
-    if (patientFilter) {
-      result = result.filter((a) => a.patientId === patientFilter);
-    }
-    if (providerFilter) {
-      result = result.filter((a) => a.providerId === providerFilter);
-    }
-    if (dateFrom) {
-      result = result.filter((a) => new Date(a.startAt) >= new Date(dateFrom));
-    }
-    if (dateTo) {
-      result = result.filter((a) => new Date(a.startAt) <= new Date(dateTo));
-    }
-
-    result.sort((a, b) => {
-      let comparison = 0;
-      
-      switch (sortField) {
-        case 'startAt':
-          comparison = new Date(a.startAt).getTime() - new Date(b.startAt).getTime();
-          break;
-        case 'endAt':
-          comparison = new Date(a.endAt).getTime() - new Date(b.endAt).getTime();
-          break;
-        case 'patient':
-          comparison = refName(patients, a.patientId ?? '').localeCompare(refName(patients, b.patientId ?? ''));
-          break;
-        case 'service':
-          comparison = refName(services, a.serviceId).localeCompare(refName(services, b.serviceId));
-          break;
-        case 'provider':
-          comparison = refName(providers, a.providerId).localeCompare(refName(providers, b.providerId));
-          break;
-        case 'status':
-          comparison = a.status.localeCompare(b.status);
-          break;
-      }
-      
-      return sortDirection === 'asc' ? comparison : -comparison;
-    });
-
-    return result;
-  }, [appointments, serviceFilter, patientFilter, providerFilter, dateFrom, dateTo, sortField, sortDirection, patients, services, providers]);
-
   const hasActiveFilters = serviceFilter || patientFilter || providerFilter || dateFrom || dateTo;
+
+  // El estado vacío distingue filtros sin coincidencias, listado sin citas
+  // registradas y página fuera de rango con resultados existentes (design §1.8).
+  const listEmptyMessage = hasActiveFilters
+    ? 'No hay citas que coincidan con los filtros.'
+    : pagination.total > 0
+      ? 'No hay citas en esta página.'
+      : 'No hay citas registradas.';
 
   return (
     <div>
@@ -607,7 +736,7 @@ export default function AppointmentsPage() {
               </label>
               <select
                 value={serviceFilter}
-                onChange={(e) => setServiceFilter(e.target.value)}
+                onChange={(e) => handleServiceFilterChange(e.target.value)}
                 className="mt-1 block w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm"
               >
                 <option value="">Todos</option>
@@ -624,7 +753,7 @@ export default function AppointmentsPage() {
               </label>
               <select
                 value={patientFilter}
-                onChange={(e) => setPatientFilter(e.target.value)}
+                onChange={(e) => handlePatientFilterChange(e.target.value)}
                 className="mt-1 block w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm"
               >
                 <option value="">Todos</option>
@@ -641,7 +770,7 @@ export default function AppointmentsPage() {
               </label>
               <select
                 value={providerFilter}
-                onChange={(e) => setProviderFilter(e.target.value)}
+                onChange={(e) => handleProviderFilterChange(e.target.value)}
                 className="mt-1 block w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm"
               >
                 <option value="">Todos</option>
@@ -659,7 +788,7 @@ export default function AppointmentsPage() {
               <input
                 type="date"
                 value={dateFrom}
-                onChange={(e) => setDateFrom(e.target.value)}
+                onChange={(e) => handleDateFromChange(e.target.value)}
                 className="mt-1 block w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm"
               />
             </div>
@@ -670,7 +799,7 @@ export default function AppointmentsPage() {
               <input
                 type="date"
                 value={dateTo}
-                onChange={(e) => setDateTo(e.target.value)}
+                onChange={(e) => handleDateToChange(e.target.value)}
                 className="mt-1 block w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm"
               />
             </div>
@@ -712,14 +841,10 @@ export default function AppointmentsPage() {
 
       {loading && <LoadingState />}
       {error && <ErrorState message={error} onRetry={loadData} />}
-      {!loading && !error && view === 'list' && filteredAndSortedAppointments.length === 0 && (
-        <EmptyState 
-          message={hasActiveFilters 
-            ? 'No hay citas que coincidan con los filtros.' 
-            : 'No hay citas registradas.'} 
-        />
+      {!loading && !error && view === 'list' && appointments.length === 0 && (
+        <EmptyState message={listEmptyMessage} />
       )}
-      {!loading && !error && view === 'list' && filteredAndSortedAppointments.length > 0 && (
+      {!loading && !error && view === 'list' && appointments.length > 0 && (
         <DataTable
           columns={[
             { 
@@ -841,9 +966,19 @@ export default function AppointmentsPage() {
               cell: (a) => formatNotes(a.notes),
             },
           ]}
-          rows={filteredAndSortedAppointments}
+          rows={appointments}
           onEdit={openEdit}
           onDelete={handleDelete}
+        />
+      )}
+
+      {!loading && !error && view === 'list' && pagination.total > 0 && (
+        <Pagination
+          ariaLabel="Paginación de citas"
+          page={page}
+          pageSize={PAGE_SIZE}
+          total={pagination.total}
+          onPageChange={handlePageChange}
         />
       )}
 
