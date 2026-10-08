@@ -63,7 +63,8 @@ alternativa: si el reenvío falla responde `502` y registra `webhook.failed`.
 ### 3.2 Agentes raíz (`agents/<name>/agent/`)
 Workspace multi-agente: cada agente raíz vive en `agents/<name>/agent/` con su
 propio canal y se despliega como servicio Vercel independiente
-(`eve-eva` → `/eva/eve/v1/*`, `eve-mora` → `/mora/eve/v1/*`; ver `vercel.json`).
+(`eve-eva` → `/eva/eve/v1/*`, `eve-mora` → `/mora/eve/v1/*`,
+`eve-clara` → `/clara/eve/v1/*`; ver `vercel.json`).
 
 - **Eva** (`agents/eva/agent/`): recepción y citas por WhatsApp.
   `instructions.md` define instrucciones y guardrails; `tools/*.ts` expone las
@@ -76,6 +77,17 @@ propio canal y se despliega como servicio Vercel independiente
   `access.ts` (allowlist de doctores + resolución del paciente nombrado).
   Los doctores le hablan directo por Discord; la autorización es fail-closed
   vía `MORA_DISCORD_DOCTOR_IDS`.
+- **Clara** (`agents/clara/agent/`): seguimiento de pacientes, con canal
+  Discord propio (`channels/discord.ts`, ruta `/clara/eve/v1/discord`), tools
+  de lectura y escritura (`list-follow-up-cases`, `get-follow-up-rules`,
+  `get-follow-up-draft`, `draft-follow-up-message`,
+  `transition-follow-up-draft`, `mark-contact-attempted`,
+  `dismiss-follow-up`), skills `follow-up-workflow.md` y
+  `drafting-guidelines.md`, y módulo de acceso `access.ts` (allowlist de staff
+  `CLARA_DISCORD_STAFF_IDS` + mapa de actor para la auditoría). El staff y los
+  doctores autorizados le hablan por Discord; Clara **no** atiende WhatsApp,
+  **no** atiende pacientes y **no** envía mensajes: importa la lógica de
+  `src/lib/admin/follow-up/` sin moverla ni duplicarla.
 - En WhatsApp, Eva escala las intenciones de cobranza a un humano
   (`escalate-to-human`); la delegación a subagentes se retiró con el issue
   #159.

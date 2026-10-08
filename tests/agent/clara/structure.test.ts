@@ -41,6 +41,24 @@ const CLARA_TOOLS = [
 
 const CLARA_SKILLS = ["follow-up-workflow.md", "drafting-guidelines.md"] as const;
 
+const CLARA_INSTRUCTIONS = resolve(CLARA_AGENT_DIR, "instructions.md");
+const CLARA_FOLLOW_UP_SKILL = resolve(CLARA_SKILLS_DIR, CLARA_SKILLS[0]);
+const CLARA_DRAFTING_SKILL = resolve(CLARA_SKILLS_DIR, CLARA_SKILLS[1]);
+
+/**
+ * Umbrales y prioridades que SOLO viven en `src/lib/admin/follow-up/` y se
+ * leen por `get-follow-up-rules` (design §D13). Ninguna skill los redefine.
+ */
+const FORBIDDEN_SKILL_THRESHOLDS = [
+  "no_show_window_days",
+  "stalled_treatment_days",
+  "inactive_patient_months",
+  "unanswered_quote_days",
+  "follow_up_reason_priority",
+] as const;
+
+const FOLLOW_UP_THRESHOLD_LITERALS = /\b(90|45|21|180)\b/;
+
 /** El envío queda fuera del set de tools (design §D7). */
 const FORBIDDEN_SEND_SYMBOLS = [
   "claimFollowUpDraftForSend",
@@ -140,6 +158,79 @@ describe("Superficie de Clara como agente raíz", () => {
           `${file} must not reference ${symbol}`,
         ).toBe(false);
       }
+    }
+  });
+});
+
+describe("Guardrails de Clara en instrucciones y skills", () => {
+  it("preserva los guardrails de dominio y el escalamiento en sus instrucciones", () => {
+    const text = read(CLARA_INSTRUCTIONS).toLowerCase();
+
+    for (const needle of [
+      "no diagnostico",
+      "no receto",
+      "precio",
+      "disponibilidad",
+      "dolor fuerte",
+      "urgencia",
+      "infección",
+      "alergia",
+      "medicamento",
+      "receta",
+      "intención ambigua",
+      "no envío",
+      "español de méxico",
+    ]) {
+      expect(
+        text.includes(needle),
+        `Clara instructions must preserve: ${needle}`,
+      ).toBe(true);
+    }
+  });
+
+  it("documenta el routing de las 7 tools en follow-up-workflow.md", () => {
+    const text = read(CLARA_FOLLOW_UP_SKILL).toLowerCase();
+
+    for (const tool of CLARA_TOOLS) {
+      expect(
+        text.includes(tool),
+        `follow-up-workflow.md must reference ${tool}`,
+      ).toBe(true);
+    }
+  });
+
+  it("documenta el límite, el fallback y el ciclo del borrador", () => {
+    const text = read(CLARA_DRAFTING_SKILL).toLowerCase();
+
+    for (const needle of [
+      "max_draft_length",
+      "600",
+      "fallback",
+      "plantilla",
+      "draft → approved | rejected",
+    ]) {
+      expect(
+        text.includes(needle),
+        `drafting-guidelines.md must document: ${needle}`,
+      ).toBe(true);
+    }
+  });
+
+  it("no introduce umbrales ni prioridades propios en las skills", () => {
+    for (const skill of CLARA_SKILLS) {
+      const text = read(resolve(CLARA_SKILLS_DIR, skill)).toLowerCase();
+
+      for (const forbidden of FORBIDDEN_SKILL_THRESHOLDS) {
+        expect(
+          text.includes(forbidden),
+          `${skill} must not redefine ${forbidden}`,
+        ).toBe(false);
+      }
+
+      expect(
+        FOLLOW_UP_THRESHOLD_LITERALS.test(text),
+        `${skill} must not hardcode follow-up thresholds`,
+      ).toBe(false);
     }
   });
 });
