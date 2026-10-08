@@ -340,5 +340,16 @@ d('wcc appointments data layer', () => {
         '2026-10-03 21:00'
       );
     });
+
+    it('formats the instant in an explicit viewer timezone', () => {
+      // 15:15 UTC == 08:15 en America/Los_Angeles (PDT, UTC-7).
+      expect(
+        formatWccAppointmentStart('2026-10-03T15:15:00.000Z', 'America/Los_Angeles')
+      ).toBe('2026-10-03 08:15');
+      // 2026-10-04T03:00Z == 2026-10-03 20:00 en America/Los_Angeles.
+      expect(
+        formatWccAppointmentStart('2026-10-04T03:00:00.000Z', 'America/Los_Angeles')
+      ).toBe('2026-10-03 20:00');
+    });
   });
 });

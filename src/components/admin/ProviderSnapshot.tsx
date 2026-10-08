@@ -1,19 +1,24 @@
+'use client';
+
 import Link from 'next/link';
 import { EmptyState } from './EmptyState';
+import { useViewerTimezone } from './TimezoneProvider';
 import type { ProviderSnapshot } from '@/lib/admin/types';
 
 type ProviderSnapshotProps = {
   snapshot: ProviderSnapshot;
 };
 
-function formatDateTime(iso: string): string {
+function formatDateTime(iso: string, timeZone: string): string {
+  // Zona del observador (preferencia del usuario); nunca la del navegador.
   return new Date(iso).toLocaleString('es-MX', {
-    timeZone: 'America/Mexico_City',
+    timeZone,
   });
 }
 
 export function ProviderSnapshot({ snapshot }: ProviderSnapshotProps) {
   const { provider, upcoming, today, recentClients, clientsHref } = snapshot;
+  const viewerTz = useViewerTimezone();
 
   return (
     <div className="space-y-8">
@@ -36,7 +41,7 @@ export function ProviderSnapshot({ snapshot }: ProviderSnapshotProps) {
                   {appointment.patientName}
                 </p>
                 <p className="text-sm text-gray-600">
-                  {appointment.serviceName} · {formatDateTime(appointment.startAt)}
+                  {appointment.serviceName} · {formatDateTime(appointment.startAt, viewerTz)}
                 </p>
               </li>
             ))}
@@ -58,7 +63,7 @@ export function ProviderSnapshot({ snapshot }: ProviderSnapshotProps) {
                   {appointment.patientName}
                 </p>
                 <p className="text-sm text-gray-600">
-                  {appointment.serviceName} · {formatDateTime(appointment.startAt)}
+                  {appointment.serviceName} · {formatDateTime(appointment.startAt, viewerTz)}
                 </p>
               </li>
             ))}

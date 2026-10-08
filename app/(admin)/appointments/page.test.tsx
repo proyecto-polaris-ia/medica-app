@@ -1,7 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import AppointmentsPage from './page';
+import { TimezoneProvider } from '@/components/admin/TimezoneProvider';
+import {
+  clinicLocalInputToUtc,
+  clinicTimeLabel,
+  toClinicLocalInput,
+} from '@/lib/admin/timezone';
 
 const { replaceMock, searchParamsRef } = vi.hoisted(() => ({
   replaceMock: vi.fn(),
@@ -48,6 +54,15 @@ const BASE_APPOINTMENT = {
 const LONG_NOTES = 'a'.repeat(120);
 function truncateNotes(notes: string): string {
   return notes.length > 80 ? `${notes.slice(0, 80)}…` : notes;
+}
+
+// Etiqueta de fecha/hora de la lista, con el mismo formato que la página.
+function viewerListDateTime(iso: string, timeZone: string): string {
+  return new Intl.DateTimeFormat('es-MX', {
+    timeZone,
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(new Date(iso));
 }
 
 function buildFetchMock() {
@@ -383,9 +398,9 @@ describe('/appointments integration', () => {
 });
 
 // Regresión del bug "lista 17:00 / calendario 16:00": la página de citas debe
-// leer y escribir horas SIEMPRE en la zona clínica (America/Mexico_City),
-// aunque el dispositivo esté en otra zona.
-describe('/appointments clinic-timezone rendering', () => {
+// leer y escribir horas en la zona del observador (la preferencia del usuario),
+// con default en la zona clínica, y nunca en la zona del dispositivo.
+describe('/appointments viewer-timezone rendering', () => {
   const ORIGINAL_TZ = process.env.TZ;
 
   beforeEach(() => {
@@ -448,6 +463,121 @@ describe('/appointments clinic-timezone rendering', () => {
     });
 
     expect(savedBody).toMatchObject({ startAt, endAt });
+  });
+
+  it('muestra la misma hora del observador en la lista, el calendario y el modal', async () => {
+    global.fetch = buildFetchMock();
+    const user = userEvent.setup();
+
+    render(
+      <TimezoneProvider timezone="America/Los_Angeles">
+        <AppointmentsPage />
+      </TimezoneProvider>
+    );
+
+    const viewerHour = clinicTimeLabel(startAt, 'America/Los_Angeles');
+
+    // La lista debe usar la zona del observador, no la de la clínica (8:00).
+    expect(
+      await screen.findByText(viewerListDateTime(startAt, 'America/Los_Angeles'))
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /Calendario/ }));
+    await waitFor(
+      () => {
+        expect(screen.getAllByTestId('weekday-label')).toHaveLength(7);
+      },
+      { timeout: 10000 }
+    );
+
+    const block = screen
+      .getAllByRole('button')
+      .find((button) => button.getAttribute('aria-label')?.includes('Limpieza'));
+    expect(block?.getAttribute('aria-label')).toContain(viewerHour);
+
+    await user.click(block!);
+
+    const startInput = document.querySelectorAll(
+      'input[type="datetime-local"]'
+    )[0] as HTMLInputElement;
+    expect(startInput.value).toBe(toClinicLocalInput(startAt, 'America/Los_Angeles'));
+  }, 15000);
+
+  it('indica la zona horaria del observador junto a los campos de captura', async () => {
+    global.fetch = buildFetchMock();
+    const user = userEvent.setup();
+
+    render(
+      <TimezoneProvider timezone="America/Los_Angeles">
+        <AppointmentsPage />
+      </TimezoneProvider>
+    );
+
+    await screen.findByText(viewerListDateTime(startAt, 'America/Los_Angeles'));
+
+    await user.click(screen.getAllByRole('button', { name: /Editar/i })[0]);
+
+    expect(
+      screen.getByText('Zona horaria: America/Los_Angeles')
+    ).toBeInTheDocument();
+  });
+
+  it('interpreta la hora capturada como hora del observador al guardar', async () => {
+    let savedBody: Record<string, unknown> | null = null;
+    const fetchMock = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+      if (url === `/api/admin/appointments/${APPOINTMENT_ID}` && init?.body) {
+        savedBody = JSON.parse(init.body as string);
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+      }
+      return buildFetchMock()(url, init);
+    });
+    global.fetch = fetchMock;
+    const user = userEvent.setup();
+
+    render(
+      <TimezoneProvider timezone="America/Los_Angeles">
+        <AppointmentsPage />
+      </TimezoneProvider>
+    );
+
+    await screen.findByText(viewerListDateTime(startAt, 'America/Los_Angeles'));
+
+    await user.click(screen.getAllByRole('button', { name: /Editar/i })[0]);
+
+    const date = startAt.slice(0, 10);
+    const captured = `${date}T17:00`;
+    const startInput = document.querySelectorAll(
+      'input[type="datetime-local"]'
+    )[0] as HTMLInputElement;
+    fireEvent.change(startInput, { target: { value: captured } });
+
+    await user.click(screen.getByRole('button', { name: /Guardar cambios/i }));
+
+    await waitFor(() => {
+      expect(savedBody).not.toBeNull();
+    });
+
+    expect(savedBody).toMatchObject({
+      startAt: clinicLocalInputToUtc(captured, 'America/Los_Angeles'),
+    });
+    // La interpretación clínica sería distinta: la captura usó la zona del observador.
+    expect(savedBody).not.toMatchObject({
+      startAt: clinicLocalInputToUtc(captured, 'America/Mexico_City'),
+    });
+  });
+
+  it('usa la zona de la clínica cuando la preferencia del observador es la clínica', async () => {
+    global.fetch = buildFetchMock();
+
+    render(
+      <TimezoneProvider timezone="America/Mexico_City">
+        <AppointmentsPage />
+      </TimezoneProvider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/8:00/)).toBeInTheDocument();
+    });
   });
 });
 

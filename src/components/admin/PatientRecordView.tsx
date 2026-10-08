@@ -1,10 +1,12 @@
-import type { PatientRecord, PatientRecordAppointment } from '@/lib/admin/types';
-import { CLINIC_TZ } from '@/lib/admin/timezone';
+'use client';
 
-function formatDateTime(iso: string): string {
-  // Zona clínica fija, nunca la zona del navegador.
+import type { PatientRecord, PatientRecordAppointment } from '@/lib/admin/types';
+import { useViewerTimezone } from '@/components/admin/TimezoneProvider';
+
+function formatDateTime(iso: string, timeZone: string): string {
+  // Zona del observador (preferencia del usuario); nunca la del navegador.
   return new Date(iso).toLocaleString('es-MX', {
-    timeZone: CLINIC_TZ,
+    timeZone,
     dateStyle: 'medium',
     timeStyle: 'short',
   });
@@ -17,9 +19,11 @@ function valueOrDash(value: string | null | undefined): string {
 function AppointmentList({
   appointments,
   emptyMessage,
+  timeZone,
 }: {
   appointments: PatientRecordAppointment[];
   emptyMessage: string;
+  timeZone: string;
 }) {
   if (appointments.length === 0) {
     return <p className="text-sm text-gray-500">{emptyMessage}</p>;
@@ -39,7 +43,7 @@ function AppointmentList({
         <tbody className="divide-y divide-gray-200 bg-white">
           {appointments.map((appointment) => (
             <tr key={appointment.id}>
-              <td className="px-3 py-2 text-sm text-gray-900">{formatDateTime(appointment.startAt)}</td>
+              <td className="px-3 py-2 text-sm text-gray-900">{formatDateTime(appointment.startAt, timeZone)}</td>
               <td className="px-3 py-2 text-sm text-gray-900">{appointment.serviceName}</td>
               <td className="px-3 py-2 text-sm text-gray-900">{appointment.providerName}</td>
               <td className="px-3 py-2 text-sm text-gray-600">{appointment.status}</td>
@@ -53,6 +57,7 @@ function AppointmentList({
 
 export function PatientRecordView({ record }: { record: PatientRecord }) {
   const { patient } = record;
+  const viewerTz = useViewerTimezone();
 
   return (
     <div className="space-y-6">
@@ -72,7 +77,7 @@ export function PatientRecordView({ record }: { record: PatientRecord }) {
           </div>
           <div>
             <dt className="text-xs font-semibold uppercase tracking-wide text-gray-500">Registrado</dt>
-            <dd className="text-sm text-gray-900">{formatDateTime(patient.createdAt)}</dd>
+            <dd className="text-sm text-gray-900">{formatDateTime(patient.createdAt, viewerTz)}</dd>
           </div>
           <div>
             <dt className="text-xs font-semibold uppercase tracking-wide text-gray-500">Notas</dt>
@@ -86,6 +91,7 @@ export function PatientRecordView({ record }: { record: PatientRecord }) {
         <AppointmentList
           appointments={record.upcomingAppointments}
           emptyMessage="No hay citas futuras para este paciente."
+          timeZone={viewerTz}
         />
       </section>
 
@@ -94,6 +100,7 @@ export function PatientRecordView({ record }: { record: PatientRecord }) {
         <AppointmentList
           appointments={record.attendedAppointments}
           emptyMessage="No hay citas asistidas registradas para este paciente."
+          timeZone={viewerTz}
         />
       </section>
     </div>

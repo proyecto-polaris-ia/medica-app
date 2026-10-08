@@ -1,4 +1,7 @@
+'use client';
+
 import { EmptyState } from '@/components/admin/EmptyState';
+import { useViewerTimezone } from '@/components/admin/TimezoneProvider';
 import type { NoraView } from '@/lib/admin/nora/loader';
 import type { NoraGap, NoraSuggestionReason } from '@/lib/admin/nora/types';
 import { clinicDayKey, clinicTimeLabel } from '@/lib/admin/timezone';
@@ -46,9 +49,9 @@ function formatClinicDay(dayKey: string): string {
   return `${Number(day)} ${monthLabel} ${year}`;
 }
 
-/** Instante ISO → `5 oct 2026 10:00`, siempre en la zona de la clínica. */
-function formatClinicInstant(iso: string): string {
-  return `${formatClinicDay(clinicDayKey(iso))} ${clinicTimeLabel(iso)}`;
+/** Instante ISO → `5 oct 2026 10:00`, en la zona del observador. */
+function formatClinicInstant(iso: string, timeZone: string): string {
+  return `${formatClinicDay(clinicDayKey(iso, timeZone))} ${clinicTimeLabel(iso, timeZone)}`;
 }
 
 /** Motivo del reacomodo en español de México. */
@@ -114,6 +117,7 @@ function groupGapsByProviderDay(view: NoraView): ProviderDayGroup[] {
 
 export function NoraSection({ view }: { view: NoraView }) {
   const { metrics } = view;
+  const viewerTz = useViewerTimezone();
   const groups = groupGapsByProviderDay(view);
   const totalMinutes = view.gaps.reduce((sum, gap) => sum + gap.minutes, 0);
   const suggestions = view.suggestions ?? [];
@@ -209,8 +213,9 @@ export function NoraSection({ view }: { view: NoraView }) {
                         <ul className="space-y-1">
                           {group.gaps.map((gap) => (
                             <li key={gap.startAt}>
-                              {`${clinicTimeLabel(gap.startAt)}–${clinicTimeLabel(
-                                gap.endAt
+                              {`${clinicTimeLabel(gap.startAt, viewerTz)}–${clinicTimeLabel(
+                                gap.endAt,
+                                viewerTz
                               )} (${formatMinutes(gap.minutes)})`}
                             </li>
                           ))}
@@ -244,8 +249,12 @@ export function NoraSection({ view }: { view: NoraView }) {
                     </p>
                     <p className="mt-1 text-sm text-gray-700">
                       {`${formatClinicInstant(
-                        suggestion.originalStartAt
-                      )} → ${formatClinicInstant(suggestion.suggestedStartAt)}`}
+                        suggestion.originalStartAt,
+                        viewerTz
+                      )} → ${formatClinicInstant(
+                        suggestion.suggestedStartAt,
+                        viewerTz
+                      )}`}
                     </p>
                     <div className="mt-3">
                       <NoraSuggestionActions suggestionId={suggestion.id} />

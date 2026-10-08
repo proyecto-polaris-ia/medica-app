@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import { TimezoneProvider } from '@/components/admin/TimezoneProvider';
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn() }),
@@ -427,5 +428,20 @@ describe('/dashboard (métricas de agenda)', () => {
     expect(text).not.toContain('null');
     expect(text).not.toContain('undefined');
     expect(text).not.toMatch(/-\d/);
+  });
+
+  it('presenta los huecos de Nora en la zona del observador cuando no es la clínica', async () => {
+    render(
+      <TimezoneProvider timezone="America/Los_Angeles">
+        {await Page({ searchParams: Promise.resolve({ preset: 'month' }) })}
+      </TimezoneProvider>
+    );
+
+    // 16:00Z–17:00Z = 09:00–10:00 en Los Ángeles (PDT, UTC-7);
+    // 18:00Z–20:00Z = 11:00–13:00.
+    expect(screen.getByText('09:00–10:00 (60 min)')).toBeInTheDocument();
+    expect(screen.getByText('11:00–13:00 (120 min)')).toBeInTheDocument();
+    // Las etiquetas de la zona clínica (10:00, 12:00) ya no aparecen.
+    expect(screen.queryByText('10:00–11:00 (60 min)')).not.toBeInTheDocument();
   });
 });

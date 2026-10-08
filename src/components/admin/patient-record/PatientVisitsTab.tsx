@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import type { ClinicalVisit } from '@/lib/admin/types';
-import { CLINIC_TZ } from '@/lib/admin/timezone';
+import { useViewerTimezone } from '@/components/admin/TimezoneProvider';
 import { EmptyState } from '@/components/admin/EmptyState';
 import { LoadingState } from '@/components/admin/LoadingState';
 import { ErrorState } from '@/components/admin/ErrorState';
@@ -16,10 +16,10 @@ type PatientVisitsTabProps = {
   onVisitsChanged: () => void;
 };
 
-function formatDateTime(iso: string): string {
-  // Zona clínica fija, nunca la zona del navegador.
+function formatDateTime(iso: string, timeZone: string): string {
+  // Zona del observador (preferencia del usuario); nunca la del navegador.
   return new Date(iso).toLocaleString('es-MX', {
-    timeZone: CLINIC_TZ,
+    timeZone,
     dateStyle: 'medium',
     timeStyle: 'short',
   });
@@ -32,6 +32,7 @@ export function PatientVisitsTab({
   error,
   onVisitsChanged,
 }: PatientVisitsTabProps) {
+  const viewerTz = useViewerTimezone();
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingVisit, setEditingVisit] = useState<ClinicalVisit | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -103,7 +104,7 @@ export function PatientVisitsTab({
             >
               <div className="mb-3 flex items-start justify-between gap-4">
                 <div>
-                  <p className="text-sm text-gray-500">{formatDateTime(visit.createdAt)}</p>
+                  <p className="text-sm text-gray-500">{formatDateTime(visit.createdAt, viewerTz)}</p>
                   <h4 className="text-base font-semibold text-gray-900">{visit.subjective}</h4>
                 </div>
                 <div className="flex gap-2">

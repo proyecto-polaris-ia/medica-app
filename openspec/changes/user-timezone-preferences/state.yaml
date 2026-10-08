@@ -7,5 +7,5 @@ phases:
   spec: complete
   design: complete
   tasks: complete
-  apply: in_progress
-  verify: pending
+  apply: complete
+  verify: complete
