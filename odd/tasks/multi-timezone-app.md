@@ -25,9 +25,14 @@ Estrategia: Stacked PRs to main — 3 PRs encadenados (decisión del usuario).
      inspeccionado en psql, tsc/lint limpios.
    - Review nativa: aprobada y acuse quemado (review-94ee28bb66b9debe);
      5 hallazgos advisory no bloqueantes (hour-24 handling, tests, idioma SQL).
-5. [ ] Chain 2 — preferencia + settings → PR 2 (`eliumontoya/user-tz-settings`):
-   user-settings lib, API GET/PUT, TimezoneProvider, layout, /settings,
-   tests local-db (task 1.2).
+5. [x] Chain 2 — preferencia + settings → PR #186 (`eliumontoya/user-tz-settings`):
+   - `e94c2ef` feat(admin): lib de preferencia (sesión RLS) + API GET/PUT
+   - `7ed1ebe` feat(admin): TimezoneProvider + layout + /settings
+   - Verificación: test:local 1587 tests, tsc, lint, build (rutas dinámicas).
+   - Review nativa aprobada y quemada (review-2742d4f7c994ba02, 2 advisory:
+     amplificación de fallo de BD en layout, hooks de suite skipped).
+   - Nota: falta route.test.ts dedicado para la API (fuera de superficies del
+     worker) — follow-up.
 6. [ ] Chain 3 — presentación por vista → PR 3 (`eliumontoya/user-tz-presentation`):
    appointments, calendario, snapshot, WCC, expediente.
 7. [ ] Archive + cierre del issue (PR final con 'Closes #163').
