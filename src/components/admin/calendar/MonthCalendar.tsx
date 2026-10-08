@@ -1,4 +1,4 @@
-import { getCalendarGrid } from '@/lib/admin/timezone';
+import { CLINIC_TZ, getCalendarGrid } from '@/lib/admin/timezone';
 import type { CalendarBlock } from '@/lib/admin/timezone';
 import { DayCell } from './DayCell';
 
@@ -8,6 +8,8 @@ type MonthCalendarProps = {
   year: number;
   month: number;
   blocksByDay: Record<string, CalendarBlock[]>;
+  /** Zona del observador para la grilla; default: zona de la clínica. */
+  timeZone?: string;
   onSelectBlock: (id: string) => void;
   onSelectPatient?: (patientId: string) => void;
 };
@@ -16,10 +18,11 @@ export function MonthCalendar({
   year,
   month,
   blocksByDay,
+  timeZone = CLINIC_TZ,
   onSelectBlock,
   onSelectPatient,
 }: MonthCalendarProps) {
-  const grid = getCalendarGrid(year, month);
+  const grid = getCalendarGrid(year, month, timeZone);
 
   return (
     <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
