@@ -3,8 +3,14 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import AppointmentsPage from './page';
 
+const { replaceMock, searchParamsRef } = vi.hoisted(() => ({
+  replaceMock: vi.fn(),
+  searchParamsRef: { value: new URLSearchParams() },
+}));
+
 vi.mock('next/navigation', () => ({
-  useSearchParams: () => new URLSearchParams(),
+  useRouter: () => ({ replace: replaceMock, push: vi.fn(), refresh: vi.fn() }),
+  useSearchParams: () => searchParamsRef.value,
 }));
 
 const PROVIDER_ID = '550e8400-e29b-41d4-a716-446655440001';
@@ -442,5 +448,460 @@ describe('/appointments clinic-timezone rendering', () => {
     });
 
     expect(savedBody).toMatchObject({ startAt, endAt });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Filtro multi-selección de proveedores en el calendario (issue #174).
+// ---------------------------------------------------------------------------
+const CAL_PROVIDERS = [
+  { id: 'prov-a', name: 'Dra. Ana', color: '#1f77b4' },
+  { id: 'prov-b', name: 'Dr. Beto', color: '#ff7f0e' },
+  { id: 'prov-c', name: 'Dra. Caro', color: '#2ca02c' },
+];
+
+const CAL_PATIENTS = [
+  { id: 'patient-a', fullName: 'Paciente A' },
+  { id: 'patient-b', fullName: 'Paciente B' },
+  { id: 'patient-c', fullName: 'Paciente C' },
+];
+
+const CAL_SERVICE = { id: 'service-1', name: 'Limpieza' };
+
+// America/Mexico_City opera en UTC-6 (sin DST): hora clínica + 6 = UTC.
+function clinicHourIso(day: number, hour: number): string {
+  const now = new Date();
+  return new Date(
+    Date.UTC(now.getFullYear(), now.getMonth(), day, hour + 6, 0, 0)
+  ).toISOString();
+}
+
+function calAppointment(
+  id: string,
+  providerId: string,
+  patientId: string,
+  day: number,
+  hour: number
+) {
+  return {
+    id,
+    patientId,
+    serviceId: CAL_SERVICE.id,
+    providerId,
+    startAt: clinicHourIso(day, hour),
+    endAt: clinicHourIso(day, hour + 1),
+    status: 'confirmed',
+    notes: null,
+  };
+}
+
+const CAL_APPOINTMENTS = [
+  calAppointment('appt-a', 'prov-a', 'patient-a', 10, 8),
+  calAppointment('appt-b', 'prov-b', 'patient-b', 10, 9),
+  calAppointment('appt-c', 'prov-c', 'patient-c', 10, 10),
+];
+
+function buildCalendarFetch({
+  appointments = CAL_APPOINTMENTS,
+  providers = CAL_PROVIDERS,
+  patients = CAL_PATIENTS,
+}: {
+  appointments?: unknown[];
+  providers?: unknown[];
+  patients?: unknown[];
+} = {}) {
+  const ok = (body: unknown) =>
+    Promise.resolve({ ok: true, json: () => Promise.resolve(body) });
+  return vi.fn().mockImplementation((url: string) => {
+    if (url.startsWith('/api/admin/appointments')) return ok({ appointments });
+    if (url === '/api/admin/patients') return ok({ patients });
+    if (url === '/api/admin/providers') return ok({ providers });
+    if (url === '/api/admin/services') return ok({ services: [CAL_SERVICE] });
+    return ok({});
+  });
+}
+
+function legendEntry(name: string | RegExp) {
+  return screen.getByRole('button', { name });
+}
+
+function calendarBlock(name: string | RegExp) {
+  return screen.queryByRole('button', { name });
+}
+
+async function openCalendar(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByRole('button', { name: /^Calendario$/ }));
+  await waitFor(
+    () => {
+      expect(screen.getAllByTestId('weekday-label')).toHaveLength(7);
+    },
+    { timeout: 10000 }
+  );
+}
+
+describe('/appointments calendar provider filter', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    window.alert = vi.fn();
+    window.confirm = vi.fn(() => false);
+    searchParamsRef.value = new URLSearchParams();
+    replaceMock.mockClear();
+  });
+
+  it('2.1 muestra solo las citas del proveedor deseleccionado (A y B)', async () => {
+    global.fetch = buildCalendarFetch({
+      providers: [CAL_PROVIDERS[0], CAL_PROVIDERS[1]],
+      patients: [CAL_PATIENTS[0], CAL_PATIENTS[1]],
+      appointments: [CAL_APPOINTMENTS[0], CAL_APPOINTMENTS[1]],
+    });
+    const user = userEvent.setup();
+    render(<AppointmentsPage />);
+
+    await openCalendar(user);
+    await waitFor(() =>
+      expect(calendarBlock(/08:00 Limpieza — Paciente A/)).toBeInTheDocument()
+    );
+    expect(calendarBlock(/09:00 Limpieza — Paciente B/)).toBeInTheDocument();
+
+    await user.click(legendEntry(/Dr\. Beto/));
+
+    await waitFor(() => {
+      expect(calendarBlock(/08:00 Limpieza — Paciente A/)).toBeInTheDocument();
+      expect(calendarBlock(/09:00 Limpieza — Paciente B/)).not.toBeInTheDocument();
+    });
+  });
+
+  it('2.1 muestra solo los proveedores elegidos (A y C, sin B)', async () => {
+    global.fetch = buildCalendarFetch();
+    const user = userEvent.setup();
+    render(<AppointmentsPage />);
+
+    await openCalendar(user);
+    await waitFor(() =>
+      expect(calendarBlock(/09:00 Limpieza — Paciente B/)).toBeInTheDocument()
+    );
+
+    await user.click(legendEntry(/Dr\. Beto/));
+
+    await waitFor(() => {
+      expect(calendarBlock(/08:00 Limpieza — Paciente A/)).toBeInTheDocument();
+      expect(calendarBlock(/10:00 Limpieza — Paciente C/)).toBeInTheDocument();
+      expect(calendarBlock(/09:00 Limpieza — Paciente B/)).not.toBeInTheDocument();
+    });
+  });
+
+  it('2.2 volver a "todos" restaura todas las citas y lo comunica', async () => {
+    global.fetch = buildCalendarFetch();
+    const user = userEvent.setup();
+    render(<AppointmentsPage />);
+
+    await openCalendar(user);
+    await waitFor(() =>
+      expect(calendarBlock(/09:00 Limpieza — Paciente B/)).toBeInTheDocument()
+    );
+
+    await user.click(legendEntry(/Dr\. Beto/));
+    await waitFor(() =>
+      expect(calendarBlock(/09:00 Limpieza — Paciente B/)).not.toBeInTheDocument()
+    );
+    expect(
+      screen.queryByText('Mostrando todos los proveedores')
+    ).not.toBeInTheDocument();
+
+    await user.click(legendEntry(/Dr\. Beto/));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText('Mostrando todos los proveedores')
+      ).toBeInTheDocument();
+    });
+    expect(calendarBlock(/08:00 Limpieza — Paciente A/)).toBeInTheDocument();
+    expect(calendarBlock(/09:00 Limpieza — Paciente B/)).toBeInTheDocument();
+    expect(calendarBlock(/10:00 Limpieza — Paciente C/)).toBeInTheDocument();
+  });
+
+  it('2.2 el filtrado precede al agrupamiento por día', async () => {
+    global.fetch = buildCalendarFetch({
+      providers: [CAL_PROVIDERS[0], CAL_PROVIDERS[1]],
+      patients: [CAL_PATIENTS[0], CAL_PATIENTS[1]],
+      appointments: [
+        calAppointment('appt-a', 'prov-a', 'patient-a', 12, 9),
+        calAppointment('appt-b', 'prov-b', 'patient-b', 12, 11),
+      ],
+    });
+    const user = userEvent.setup();
+    render(<AppointmentsPage />);
+
+    await openCalendar(user);
+    await waitFor(() =>
+      expect(calendarBlock(/11:00 Limpieza — Paciente B/)).toBeInTheDocument()
+    );
+
+    await user.click(legendEntry(/Dr\. Beto/));
+
+    await waitFor(() => {
+      expect(calendarBlock(/09:00 Limpieza — Paciente A/)).toBeInTheDocument();
+      expect(calendarBlock(/11:00 Limpieza — Paciente B/)).not.toBeInTheDocument();
+    });
+  });
+
+  it('2.3 refleja la selección en la URL con ids unidos por coma', async () => {
+    global.fetch = buildCalendarFetch();
+    const user = userEvent.setup();
+    render(<AppointmentsPage />);
+
+    await openCalendar(user);
+    await waitFor(() =>
+      expect(calendarBlock(/10:00 Limpieza — Paciente C/)).toBeInTheDocument()
+    );
+
+    await user.click(legendEntry(/Dra\. Caro/));
+
+    await waitFor(() => {
+      expect(replaceMock).toHaveBeenCalledWith(
+        '/appointments?providerId=prov-a,prov-b'
+      );
+    });
+  });
+
+  it('2.3 restaura la selección desde un deep link', async () => {
+    searchParamsRef.value = new URLSearchParams('providerId=prov-a,prov-b');
+    global.fetch = buildCalendarFetch();
+    const user = userEvent.setup();
+    render(<AppointmentsPage />);
+
+    await openCalendar(user);
+    await waitFor(() =>
+      expect(calendarBlock(/09:00 Limpieza — Paciente B/)).toBeInTheDocument()
+    );
+
+    expect(legendEntry(/Dra\. Ana/)).toHaveAttribute('aria-pressed', 'true');
+    expect(legendEntry(/Dr\. Beto/)).toHaveAttribute('aria-pressed', 'true');
+    expect(legendEntry(/Dra\. Caro/)).toHaveAttribute('aria-pressed', 'false');
+    expect(calendarBlock(/10:00 Limpieza — Paciente C/)).not.toBeInTheDocument();
+  });
+
+  it('2.3 "Limpiar filtros" reinicia la selección y limpia la URL', async () => {
+    searchParamsRef.value = new URLSearchParams('providerId=prov-a,prov-b');
+    global.fetch = buildCalendarFetch();
+    const user = userEvent.setup();
+    render(<AppointmentsPage />);
+
+    await openCalendar(user);
+    await waitFor(() =>
+      expect(calendarBlock(/10:00 Limpieza — Paciente C/)).not.toBeInTheDocument()
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Limpiar filtros' }));
+
+    await waitFor(() => {
+      expect(replaceMock).toHaveBeenCalledWith('/appointments');
+    });
+    expect(calendarBlock(/08:00 Limpieza — Paciente A/)).toBeInTheDocument();
+    expect(calendarBlock(/09:00 Limpieza — Paciente B/)).toBeInTheDocument();
+    expect(calendarBlock(/10:00 Limpieza — Paciente C/)).toBeInTheDocument();
+  });
+
+  it('2.3 no reescribe la URL cuando la selección efectiva no cambia', async () => {
+    global.fetch = buildCalendarFetch({
+      providers: [CAL_PROVIDERS[0]],
+      patients: [CAL_PATIENTS[0]],
+      appointments: [CAL_APPOINTMENTS[0]],
+    });
+    const user = userEvent.setup();
+    render(<AppointmentsPage />);
+
+    await openCalendar(user);
+    await waitFor(() =>
+      expect(calendarBlock(/08:00 Limpieza — Paciente A/)).toBeInTheDocument()
+    );
+
+    await user.click(legendEntry(/Dra\. Ana/));
+
+    await waitFor(() =>
+      expect(calendarBlock(/08:00 Limpieza — Paciente A/)).toBeInTheDocument()
+    );
+    expect(replaceMock).not.toHaveBeenCalled();
+  });
+
+  it('2.4 tolera ids desconocidos en la URL sin romper el calendario', async () => {
+    searchParamsRef.value = new URLSearchParams('providerId=prov-a,desconocido');
+    global.fetch = buildCalendarFetch({
+      providers: [CAL_PROVIDERS[0], CAL_PROVIDERS[1]],
+      patients: [CAL_PATIENTS[0], CAL_PATIENTS[1]],
+      appointments: [CAL_APPOINTMENTS[0], CAL_APPOINTMENTS[1]],
+    });
+    const user = userEvent.setup();
+    render(<AppointmentsPage />);
+
+    await openCalendar(user);
+    await waitFor(() =>
+      expect(calendarBlock(/08:00 Limpieza — Paciente A/)).toBeInTheDocument()
+    );
+
+    // La leyenda conserva el universo del mes: A y B siguen como controles.
+    expect(legendEntry(/Dra\. Ana/)).toHaveAttribute('aria-pressed', 'true');
+    expect(legendEntry(/Dr\. Beto/)).toHaveAttribute('aria-pressed', 'false');
+    expect(calendarBlock(/09:00 Limpieza — Paciente B/)).not.toBeInTheDocument();
+  });
+
+  it('3.1 la lista conserva su filtro de proveedor de un solo valor', async () => {
+    searchParamsRef.value = new URLSearchParams('providerId=prov-a');
+    global.fetch = buildCalendarFetch({
+      providers: [CAL_PROVIDERS[0], CAL_PROVIDERS[1]],
+      patients: [CAL_PATIENTS[0], CAL_PATIENTS[1]],
+      appointments: [CAL_APPOINTMENTS[0], CAL_APPOINTMENTS[1]],
+    });
+    render(<AppointmentsPage />);
+
+    await waitFor(() =>
+      expect(screen.getAllByRole('row').length).toBeGreaterThan(1)
+    );
+    const providerSelect = screen.getAllByRole('combobox')[2] as HTMLSelectElement;
+    expect(providerSelect).toHaveValue('prov-a');
+    expect(
+      screen.queryByText('No hay citas que coincidan con los filtros.')
+    ).not.toBeInTheDocument();
+  });
+
+  it('3.1 un providerId multi-valor deja la lista en "todos" y no reescribe la URL', async () => {
+    searchParamsRef.value = new URLSearchParams('providerId=prov-a,prov-b');
+    global.fetch = buildCalendarFetch({
+      providers: [CAL_PROVIDERS[0], CAL_PROVIDERS[1]],
+      patients: [CAL_PATIENTS[0], CAL_PATIENTS[1]],
+      appointments: [CAL_APPOINTMENTS[0], CAL_APPOINTMENTS[1]],
+    });
+    render(<AppointmentsPage />);
+
+    await waitFor(() =>
+      expect(screen.getAllByRole('row').length).toBeGreaterThan(1)
+    );
+    expect(
+      screen.queryByText('No hay citas que coincidan con los filtros.')
+    ).not.toBeInTheDocument();
+    expect(replaceMock).not.toHaveBeenCalled();
+  });
+
+  it('3.2 la selección sobrevive el cambio Lista ↔ Calendario', async () => {
+    searchParamsRef.value = new URLSearchParams('providerId=prov-a,prov-b');
+    global.fetch = buildCalendarFetch();
+    const user = userEvent.setup();
+    render(<AppointmentsPage />);
+
+    await openCalendar(user);
+    await waitFor(() =>
+      expect(calendarBlock(/09:00 Limpieza — Paciente B/)).toBeInTheDocument()
+    );
+    expect(legendEntry(/Dra\. Ana/)).toHaveAttribute('aria-pressed', 'true');
+    expect(legendEntry(/Dr\. Beto/)).toHaveAttribute('aria-pressed', 'true');
+
+    const replaceCallsBefore = replaceMock.mock.calls.length;
+
+    await user.click(screen.getByRole('button', { name: /^Lista$/ }));
+    await waitFor(() =>
+      expect(screen.getAllByRole('combobox').length).toBeGreaterThan(0)
+    );
+    await user.click(screen.getByRole('button', { name: /^Calendario$/ }));
+    await waitFor(
+      () => {
+        expect(screen.getAllByTestId('weekday-label')).toHaveLength(7);
+      },
+      { timeout: 10000 }
+    );
+
+    await waitFor(() =>
+      expect(calendarBlock(/09:00 Limpieza — Paciente B/)).toBeInTheDocument()
+    );
+    expect(legendEntry(/Dra\. Ana/)).toHaveAttribute('aria-pressed', 'true');
+    expect(legendEntry(/Dr\. Beto/)).toHaveAttribute('aria-pressed', 'true');
+    expect(calendarBlock(/10:00 Limpieza — Paciente C/)).not.toBeInTheDocument();
+    expect(replaceMock.mock.calls.length).toBe(replaceCallsBefore);
+  });
+
+  it('3.3 la fila es responsiva y "Limpiar filtros" solo existe con filtro activo', async () => {
+    global.fetch = buildCalendarFetch();
+    const user = userEvent.setup();
+    render(<AppointmentsPage />);
+
+    await openCalendar(user);
+
+    expect(
+      screen.queryByRole('button', { name: 'Limpiar filtros' })
+    ).not.toBeInTheDocument();
+
+    const nav = screen.getByRole('button', { name: 'Mes anterior' });
+    const row = nav.parentElement!.parentElement!;
+    expect(row.className).toContain('flex-col');
+    expect(row.className).toContain('gap-4');
+    expect(row.className).toContain('sm:flex-row');
+    expect(row.className).toContain('sm:items-center');
+    expect(row.className).toContain('sm:justify-between');
+
+    await user.click(legendEntry(/Dr\. Beto/));
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole('button', { name: 'Limpiar filtros' })
+      ).toBeInTheDocument();
+    });
+  });
+
+  it('12.1 el centinela providerId=all se parsea a "todos"', async () => {
+    searchParamsRef.value = new URLSearchParams('providerId=all');
+    global.fetch = buildCalendarFetch();
+    const user = userEvent.setup();
+    render(<AppointmentsPage />);
+
+    await openCalendar(user);
+    await waitFor(() =>
+      expect(calendarBlock(/09:00 Limpieza — Paciente B/)).toBeInTheDocument()
+    );
+
+    expect(
+      screen.getByText('Mostrando todos los proveedores')
+    ).toBeInTheDocument();
+    expect(legendEntry(/Dra\. Ana/)).toHaveAttribute('aria-pressed', 'true');
+    expect(legendEntry(/Dr\. Beto/)).toHaveAttribute('aria-pressed', 'true');
+    expect(legendEntry(/Dra\. Caro/)).toHaveAttribute('aria-pressed', 'true');
+    expect(calendarBlock(/10:00 Limpieza — Paciente C/)).toBeInTheDocument();
+  });
+
+  it('12.1 alternar entradas consecutivas escribe la unión en orden sin repetir la última', async () => {
+    global.fetch = buildCalendarFetch();
+    const user = userEvent.setup();
+    render(<AppointmentsPage />);
+
+    await openCalendar(user);
+    await waitFor(() =>
+      expect(calendarBlock(/10:00 Limpieza — Paciente C/)).toBeInTheDocument()
+    );
+
+    // Desactivar C -> selección [A, B].
+    await user.click(legendEntry(/Dra\. Caro/));
+    await waitFor(() =>
+      expect(replaceMock).toHaveBeenCalledWith(
+        '/appointments?providerId=prov-a,prov-b'
+      )
+    );
+
+    // Reactivar C -> [A, B, C] equivale a "todos" -> se guarda [].
+    await user.click(legendEntry(/Dra\. Caro/));
+    await waitFor(() =>
+      expect(replaceMock).toHaveBeenLastCalledWith('/appointments')
+    );
+
+    // Desactivar A -> [B, C].
+    await user.click(legendEntry(/Dra\. Ana/));
+    await waitFor(() =>
+      expect(replaceMock).toHaveBeenLastCalledWith(
+        '/appointments?providerId=prov-b,prov-c'
+      )
+    );
+
+    expect(replaceMock.mock.calls.map((call) => call[0])).toEqual([
+      '/appointments?providerId=prov-a,prov-b',
+      '/appointments',
+      '/appointments?providerId=prov-b,prov-c',
+    ]);
   });
 });
