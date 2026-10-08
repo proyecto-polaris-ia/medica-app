@@ -38,7 +38,8 @@ const getSupabaseAdmin = vi.fn(() => ({ from }));
 
 vi.mock("@/lib/supabase/server", () => ({ getSupabaseAdmin }));
 
-const { default: tool } = await import("../../../../../agents/eva/agent/subagents/mora/tools/get-patient-balance");
+const { DOCTOR_ACCESS_REFUSAL } = await import("../../../../agents/mora/agent/access");
+const { default: tool } = await import("../../../../agents/mora/agent/tools/get-patient-balance");
 const execute = tool.execute as (
   input: { thresholdDays?: number },
   ctx?: unknown,
@@ -48,14 +49,16 @@ const TRUSTED_PHONE = "+5215512345678";
 const PATIENT_ID = "550e8400-e29b-41d4-a716-446655440000";
 const OTHER_PATIENT_ID = "550e8400-e29b-41d4-a716-446655440001";
 
-const trustedCtx = {
+const DOCTOR_DISCORD_ID = "111222333444555666";
+
+const doctorCtx = {
   session: {
     auth: {
       current: {
-        attributes: {
-          trustedContactSource: "whatsapp",
-          trustedPatientPhone: TRUSTED_PHONE,
-        },
+        principalId: DOCTOR_DISCORD_ID,
+        principalType: "user",
+        authenticator: "discord",
+        attributes: { channel_id: "chan-1", guild_id: "guild-1" },
       },
       initiator: null,
     },
@@ -144,33 +147,67 @@ function setupTrustedPatient(): { patients: Query; plans: Query; payments: Query
 describe("get-patient-balance tool", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    process.env.MORA_DISCORD_DOCTOR_IDS = DOCTOR_DISCORD_ID;
     getSupabaseAdmin.mockImplementation(() => ({ from }));
   });
 
-  it("refuses the lookup when no trusted WhatsApp phone is present", async () => {
-    await expect(execute({})).resolves.toEqual({
+  it("refuses an unauthorized doctor without querying the database", async () => {
+    const outsiderCtx = {
+      session: {
+        auth: {
+          current: {
+            principalId: "000000000000000000",
+            principalType: "user",
+            authenticator: "discord",
+            attributes: {},
+          },
+          initiator: null,
+        },
+      },
+    };
+
+    await expect(execute({ patientPhone: TRUSTED_PHONE }, outsiderCtx)).resolves.toMatchObject({
       success: false,
-      error:
-        "Por seguridad no puedo consultar saldos sin un WhatsApp vinculado al paciente.",
+      error: DOCTOR_ACCESS_REFUSAL,
     });
 
     expect(from).not.toHaveBeenCalled();
   });
 
-  it("never accepts a chat-typed phone as the patient phone", () => {
-    expect(JSON.stringify(tool.inputSchema)).not.toContain("patientPhone");
-    expect(JSON.stringify(tool.inputSchema)).not.toContain("phone");
+  it("fails closed when the doctor allowlist is not configured", async () => {
+    delete process.env.MORA_DISCORD_DOCTOR_IDS;
+
+    await expect(execute({ patientPhone: TRUSTED_PHONE }, doctorCtx)).resolves.toMatchObject({
+      success: false,
+      error: DOCTOR_ACCESS_REFUSAL,
+    });
+
+    expect(from).not.toHaveBeenCalled();
   });
 
-  it("returns patientFound=false when the trusted WhatsApp is not linked to a patient", async () => {
+  it("requires an explicit patient reference from the doctor", async () => {
+    await expect(execute({}, doctorCtx)).resolves.toMatchObject({
+      success: false,
+      error: expect.stringContaining("No encontré un paciente con esa referencia."),
+    });
+
+    expect(from).not.toHaveBeenCalled();
+  });
+
+  it("accepts the doctor-supplied patient phone as the lookup key", () => {
+    const schema = JSON.stringify(tool.inputSchema);
+    expect(schema).toContain("patientPhone");
+    expect(schema).toContain("patientName");
+  });
+
+  it("reports a clean not-found when the phone is not linked to a patient", async () => {
     const patients = buildQuery();
     patients._result = { data: null, error: null };
     mockTablesByQueue({ patients: [patients] });
 
-    await expect(execute({}, trustedCtx)).resolves.toMatchObject({
-      success: true,
-      patientFound: false,
-      planBalances: [],
+    await expect(execute({ patientPhone: TRUSTED_PHONE }, doctorCtx)).resolves.toMatchObject({
+      success: false,
+      error: expect.stringContaining("No encontré un paciente con esa referencia."),
     });
 
     expect(patients.eq).toHaveBeenCalledWith("phone_e164", TRUSTED_PHONE);
@@ -193,7 +230,7 @@ describe("get-patient-balance tool", () => {
       error: null,
     };
 
-    const result = await execute({}, trustedCtx);
+    const result = await execute({ patientPhone: TRUSTED_PHONE }, doctorCtx);
 
     expect(result).toMatchObject({
       success: true,
@@ -253,7 +290,7 @@ describe("get-patient-balance tool", () => {
       payments: [payments],
     });
 
-    const result = (await execute({}, trustedCtx)) as {
+    const result = (await execute({ patientPhone: TRUSTED_PHONE }, doctorCtx)) as {
       balance: number;
       totalEligibleAmount: number;
       planBalances: Array<{ status: string }>;
@@ -299,7 +336,7 @@ describe("get-patient-balance tool", () => {
       payments: [payments],
     });
 
-    const result = (await execute({}, trustedCtx)) as {
+    const result = (await execute({ patientPhone: TRUSTED_PHONE }, doctorCtx)) as {
       balance: number;
       creditAmount: number;
     };
@@ -357,7 +394,7 @@ describe("get-patient-balance tool", () => {
       payments: [payments],
     });
 
-    const result = (await execute({}, trustedCtx)) as {
+    const result = (await execute({ patientPhone: TRUSTED_PHONE }, doctorCtx)) as {
       balance: number;
       planBalances: Array<{ treatmentPlanId: string }>;
     };

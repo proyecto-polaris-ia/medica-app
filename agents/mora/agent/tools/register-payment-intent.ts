@@ -6,18 +6,28 @@ import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { createEveWhatsAppEscalation } from "@/lib/whatsapp/eve-escalation";
 
 import {
-  resolveCollectionsPatientPhone,
-  type CollectionsToolContext,
-} from "../identity";
+  authorizeAndResolvePatient,
+  buildPatientNotResolvedError,
+  type DoctorAccessContext,
+} from "../access";
 
 const ELIGIBLE_PLAN_STATUSES = ["accepted", "in_progress", "completed"] as const;
-
-const SECURITY_REFUSAL =
-  "No puedo registrar una intención de pago sin un teléfono confiable de WhatsApp.";
 
 const PAYMENT_METHODS = ["cash", "card", "transfer", "other"] as const;
 
 const registerPaymentIntentInputSchema = z.object({
+  patientPhone: z
+    .string()
+    .trim()
+    .optional()
+    .describe(
+      "Teléfono registrado del paciente en el consultorio (cualquier formato; se normaliza a E.164)",
+    ),
+  patientName: z
+    .string()
+    .trim()
+    .optional()
+    .describe("Nombre del paciente tal como está registrado en el consultorio"),
   amount: z
     .number()
     .positive()
@@ -64,17 +74,6 @@ type ResolvedPlanResult =
   | { kind: "ambiguous"; planName: string; matches: PlanRow[] }
   | { kind: "not_eligible"; planName: string; status: string }
   | { kind: "not_found"; planName: string };
-
-async function findPatientByTrustedPhone(phone: string): Promise<PatientRow | null> {
-  const { data, error } = await getSupabaseAdmin()
-    .from("patients")
-    .select("id, full_name")
-    .eq("phone_e164", phone)
-    .maybeSingle();
-
-  if (error) throw new Error(`No se pudo buscar el paciente: ${error.message}`);
-  return (data as PatientRow | null) ?? null;
-}
 
 async function fetchEligiblePlans(
   patientId: string,
@@ -190,29 +189,27 @@ function buildSuccessMessage(params: {
   const { patientName, amount, planName } = params;
   const amountText = typeof amount === "number" ? ` por $${amount.toFixed(2)} MXN` : "";
   const planText = planName ? ` del plan ${planName}` : "";
-  return `Gracias, ${patientName}. Registré tu intención de pago${amountText}${planText}. Un miembro del consultorio te contactará para coordinar el pago; yo no proceso pagos ni genero links.`;
+  return `Registré la intención de pago de ${patientName}${amountText}${planText}. Un miembro del consultorio se contactará con el paciente para coordinar el pago; yo no proceso pagos ni genero links.`;
 }
 
 export default defineTool({
   description:
-    "Registra la intención de pago del paciente (paciente verificado) en payment_intents y escala a un humano. Nunca mueve dinero, nunca genera links de pago, nunca marca nada como pagado.",
+    "Registra la intención de pago del paciente que el doctor indica (por teléfono registrado o nombre) en payment_intents y escala a un humano. Exclusiva para doctores autorizados. Nunca mueve dinero, nunca genera links de pago, nunca marca nada como pagado.",
   inputSchema: registerPaymentIntentInputSchema,
-  async execute(input: RegisterPaymentIntentInput, ctx: CollectionsToolContext) {
-    const patientPhone = await resolveCollectionsPatientPhone(ctx, SECURITY_REFUSAL);
-    if ("error" in patientPhone) {
-      return { success: false, error: patientPhone.error };
+  async execute(input: RegisterPaymentIntentInput, ctx: DoctorAccessContext) {
+    const target = await authorizeAndResolvePatient(ctx, {
+      patientPhone: input.patientPhone,
+      patientName: input.patientName,
+    });
+    if ("error" in target) {
+      return { success: false, error: target.error };
     }
+    if (!("patient" in target)) {
+      return buildPatientNotResolvedError(target);
+    }
+    const patient = target.patient;
 
     try {
-      const patient = await findPatientByTrustedPhone(patientPhone.phone);
-      if (!patient) {
-        return {
-          success: false,
-          error:
-            "No encontré un paciente vinculado a este WhatsApp. Para registrar la intención de pago necesito que el número esté registrado en el consultorio.",
-        };
-      }
-
       let planResolution: ResolvedPlanResult | null = null;
       let planResolutionNote: string | undefined;
       let resolvedPlanId: string | undefined;
@@ -239,7 +236,7 @@ export default defineTool({
         commitmentText: input.commitment ?? null,
         method: input.method ?? null,
         notes: [input.notes, planResolutionNote].filter(Boolean).join(" | ") || null,
-        source: "whatsapp",
+        source: "discord",
       });
 
       const summary = buildIntentSummary({
@@ -253,7 +250,7 @@ export default defineTool({
       });
 
       const escalation = await createEveWhatsAppEscalation({
-        patientPhone: patientPhone.phone,
+        patientPhone: patient.phone_e164,
         reason: "payment_intent",
         summary,
         intent: "support",

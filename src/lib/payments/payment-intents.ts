@@ -1,6 +1,6 @@
 import { getSupabaseAdmin } from '@/lib/supabase/server';
 
-export type PaymentIntentSource = 'whatsapp' | 'manual';
+export type PaymentIntentSource = 'whatsapp' | 'manual' | 'discord';
 export type PaymentIntentStatus = 'pending' | 'confirmed' | 'fulfilled' | 'cancelled';
 
 export type CreatePaymentIntentInput = {

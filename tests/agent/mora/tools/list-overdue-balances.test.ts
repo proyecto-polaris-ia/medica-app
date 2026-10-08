@@ -36,7 +36,8 @@ const getSupabaseAdmin = vi.fn();
 
 vi.mock("@/lib/supabase/server", () => ({ getSupabaseAdmin }));
 
-const { default: tool } = await import("../../../../../agents/eva/agent/subagents/mora/tools/list-overdue-balances");
+const { DOCTOR_ACCESS_REFUSAL } = await import("../../../../agents/mora/agent/access");
+const { default: tool } = await import("../../../../agents/mora/agent/tools/list-overdue-balances");
 const execute = tool.execute as (
   input: { thresholdDays?: number },
   ctx?: unknown,
@@ -46,14 +47,16 @@ const TRUSTED_PHONE = "+5215512345678";
 const PATIENT_ID = "550e8400-e29b-41d4-a716-446655440000";
 const OTHER_PATIENT_ID = "550e8400-e29b-41d4-a716-446655440001";
 
-const trustedCtx = {
+const DOCTOR_DISCORD_ID = "111222333444555666";
+
+const doctorCtx = {
   session: {
     auth: {
       current: {
-        attributes: {
-          trustedContactSource: "whatsapp",
-          trustedPatientPhone: TRUSTED_PHONE,
-        },
+        principalId: DOCTOR_DISCORD_ID,
+        principalType: "user",
+        authenticator: "discord",
+        attributes: { channel_id: "chan-1", guild_id: "guild-1" },
       },
       initiator: null,
     },
@@ -118,39 +121,62 @@ function paymentRow(overrides: Record<string, unknown> = {}): Record<string, unk
 describe("list-overdue-balances tool", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    process.env.MORA_DISCORD_DOCTOR_IDS = DOCTOR_DISCORD_ID;
   });
 
-  it("refuses the lookup when no trusted WhatsApp phone is present", async () => {
+  it("refuses an unauthorized doctor without querying the database", async () => {
+    const outsiderCtx = {
+      session: {
+        auth: {
+          current: {
+            principalId: "000000000000000000",
+            principalType: "user",
+            authenticator: "discord",
+            attributes: {},
+          },
+          initiator: null,
+        },
+      },
+    };
     const { from } = mockTablesByQueue({});
 
-    await expect(execute({})).resolves.toEqual({
+    await expect(execute({ patientPhone: TRUSTED_PHONE }, outsiderCtx)).resolves.toMatchObject({
       success: false,
-      error:
-        "Por seguridad no puedo consultar saldos sin un WhatsApp vinculado al paciente.",
+      error: DOCTOR_ACCESS_REFUSAL,
     });
 
     expect(from).not.toHaveBeenCalled();
   });
 
-  it("never accepts a chat-typed phone as the patient phone", () => {
-    expect(JSON.stringify(tool.inputSchema)).not.toContain("patientPhone");
-    expect(JSON.stringify(tool.inputSchema)).not.toContain("phone");
+  it("requires an explicit patient reference from the doctor", async () => {
+    const { from } = mockTablesByQueue({});
+
+    await expect(execute({}, doctorCtx)).resolves.toMatchObject({
+      success: false,
+      error: expect.stringContaining("No encontré un paciente con esa referencia."),
+    });
+
+    expect(from).not.toHaveBeenCalled();
   });
 
-  it("returns an empty overduePlans list when the trusted WhatsApp is not linked to a patient", async () => {
+  it("accepts the doctor-supplied patient phone as the lookup key", () => {
+    const schema = JSON.stringify(tool.inputSchema);
+    expect(schema).toContain("patientPhone");
+    expect(schema).toContain("patientName");
+  });
+
+  it("reports a clean not-found when the phone is not linked to a patient", async () => {
     const patients = buildQuery();
     patients._result = { data: null, error: null };
     const { from } = mockTablesByQueue({ patients: [patients] });
 
-    const result = (await execute({}, trustedCtx)) as {
+    const result = (await execute({ patientPhone: TRUSTED_PHONE }, doctorCtx)) as {
       success: boolean;
-      patientFound: boolean;
-      overduePlans: unknown[];
+      error: string;
     };
 
-    expect(result.success).toBe(true);
-    expect(result.patientFound).toBe(false);
-    expect(result.overduePlans).toEqual([]);
+    expect(result.success).toBe(false);
+    expect(result.error).toContain("No encontré un paciente con esa referencia.");
     expect(from).toHaveBeenCalledTimes(1);
     expect(from).toHaveBeenCalledWith("patients");
   });
@@ -210,7 +236,7 @@ describe("list-overdue-balances tool", () => {
       payments: [payments],
     });
 
-    const result = (await execute({}, trustedCtx)) as {
+    const result = (await execute({ patientPhone: TRUSTED_PHONE }, doctorCtx)) as {
       success: boolean;
       patientFound: boolean;
       overduePlans: Array<{
@@ -277,7 +303,7 @@ describe("list-overdue-balances tool", () => {
       payments: [payments],
     });
 
-    const result = (await execute({}, trustedCtx)) as {
+    const result = (await execute({ patientPhone: TRUSTED_PHONE }, doctorCtx)) as {
       overduePlans: Array<{ treatmentPlanId: string; isPastDue: boolean; balance: number }>;
     };
 
@@ -309,7 +335,7 @@ describe("list-overdue-balances tool", () => {
       payments: [payments],
     });
 
-    const result = (await execute({ thresholdDays: 3 }, trustedCtx)) as {
+    const result = (await execute({ thresholdDays: 3 , patientPhone: TRUSTED_PHONE }, doctorCtx)) as {
       overduePlans: Array<{ isPastDue: boolean; balance: number }>;
     };
 
