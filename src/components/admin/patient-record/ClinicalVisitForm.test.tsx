@@ -23,6 +23,28 @@ const savedVisit: ClinicalVisit = {
   updatedAt: '2026-09-02T10:00:00Z',
 };
 
+// Consulta con todos los campos SOAP poblados para verificar la pre-población.
+const savedVisitFull: ClinicalVisit = {
+  ...savedVisit,
+  objective: 'Caries oclusal en primer molar inferior derecho',
+  assessment: 'Pulpitis reversible',
+  plan: 'Resina compuesta en dos citas',
+  treatment: 'Profilaxis y aplicación de flúor',
+  notes: 'Paciente toleró bien el procedimiento',
+};
+
+// Segunda consulta para verificar el cambio de una edición a otra.
+const otherVisit: ClinicalVisit = {
+  ...savedVisit,
+  id: '880e8400-e29b-41d4-a716-446655440000',
+  subjective: 'Control postoperatorio',
+  objective: 'Sin dolor a la percusión',
+  assessment: 'Evolución favorable',
+  plan: 'Observación por seis meses',
+  treatment: 'Revisión de restauración',
+  notes: 'Revisión programada en seis meses',
+};
+
 type FetchOptions = {
   visitResponse?: ClinicalVisit;
   files?: Record<string, unknown>[];
@@ -77,6 +99,25 @@ function renderForm(
     />
   );
   return { onSaved, onClose, view };
+}
+
+// Simula el montaje persistente del padre: React reutiliza la misma instancia
+// cuando cambia la prop `visit` (de null a una consulta, entre consultas o de
+// vuelta a null al cerrar).
+function rerenderForm(
+  view: ReturnType<typeof render>,
+  overrides: Partial<React.ComponentProps<typeof ClinicalVisitForm>> = {}
+) {
+  view.rerender(
+    <ClinicalVisitForm
+      patientId={PATIENT_ID}
+      visit={null}
+      isOpen
+      onClose={vi.fn()}
+      onSaved={vi.fn()}
+      {...overrides}
+    />
+  );
 }
 
 describe('ClinicalVisitForm', () => {
@@ -191,6 +232,94 @@ describe('ClinicalVisitForm', () => {
       const body = uploadCall?.[1]?.body as FormData;
       expect(body.get('clinicalVisitId')).toBe(VISIT_ID);
       expect((body.get('file') as File).name).toBe('radiografia.jpg');
+    });
+  });
+
+  describe('pre-población al cambiar la consulta seleccionada', () => {
+    beforeEach(() => {
+      global.fetch = buildFetch() as unknown as typeof fetch;
+    });
+
+    it('precarga todos los campos al abrir la edición de una consulta existente', () => {
+      const { view } = renderForm({ visit: null });
+
+      rerenderForm(view, { visit: savedVisitFull });
+
+      expect(screen.getByLabelText('Subjetivo')).toHaveValue(
+        'Dolor en molar inferior'
+      );
+      expect(screen.getByLabelText('Objetivo')).toHaveValue(
+        'Caries oclusal en primer molar inferior derecho'
+      );
+      expect(screen.getByLabelText('Valoración')).toHaveValue(
+        'Pulpitis reversible'
+      );
+      expect(screen.getByLabelText('Plan')).toHaveValue(
+        'Resina compuesta en dos citas'
+      );
+      expect(screen.getByLabelText('Tratamiento realizado')).toHaveValue(
+        'Profilaxis y aplicación de flúor'
+      );
+      expect(screen.getByLabelText('Notas')).toHaveValue(
+        'Paciente toleró bien el procedimiento'
+      );
+    });
+
+    it('vacía los campos al pasar de edición a una consulta nueva', () => {
+      const { view } = renderForm({ visit: savedVisitFull });
+
+      rerenderForm(view, { visit: null });
+
+      expect(screen.getByLabelText('Subjetivo')).toHaveValue('');
+      expect(screen.getByLabelText('Objetivo')).toHaveValue('');
+      expect(screen.getByLabelText('Valoración')).toHaveValue('');
+      expect(screen.getByLabelText('Plan')).toHaveValue('');
+      expect(screen.getByLabelText('Tratamiento realizado')).toHaveValue('');
+      expect(screen.getByLabelText('Notas')).toHaveValue('');
+    });
+
+    it('no filtra datos escritos hacia una consulta nueva', async () => {
+      const user = userEvent.setup();
+      const { view } = renderForm({ visit: savedVisitFull });
+
+      await user.type(screen.getByLabelText('Subjetivo'), ' editado');
+
+      rerenderForm(view, { visit: null });
+
+      expect(screen.getByLabelText('Subjetivo')).toHaveValue('');
+      expect(screen.getByLabelText('Objetivo')).toHaveValue('');
+      expect(screen.getByLabelText('Valoración')).toHaveValue('');
+      expect(screen.getByLabelText('Plan')).toHaveValue('');
+      expect(screen.getByLabelText('Tratamiento realizado')).toHaveValue('');
+      expect(screen.getByLabelText('Notas')).toHaveValue('');
+    });
+
+    it('actualiza los campos al cambiar a otra consulta', async () => {
+      const user = userEvent.setup();
+      const { view } = renderForm({ visit: savedVisitFull });
+
+      await user.type(screen.getByLabelText('Subjetivo'), ' editado');
+
+      rerenderForm(view, { visit: otherVisit });
+
+      expect(screen.getByLabelText('Subjetivo')).toHaveValue(
+        'Control postoperatorio'
+      );
+      expect(screen.getByLabelText('Objetivo')).toHaveValue(
+        'Sin dolor a la percusión'
+      );
+      expect(screen.getByLabelText('Valoración')).toHaveValue(
+        'Evolución favorable'
+      );
+      expect(screen.getByLabelText('Plan')).toHaveValue(
+        'Observación por seis meses'
+      );
+      expect(screen.getByLabelText('Tratamiento realizado')).toHaveValue(
+        'Revisión de restauración'
+      );
+      expect(screen.getByLabelText('Notas')).toHaveValue(
+        'Revisión programada en seis meses'
+      );
     });
   });
 });

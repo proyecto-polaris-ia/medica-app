@@ -51,6 +51,12 @@ export function ClinicalVisitForm({
   const [visitFilesLoading, setVisitFilesLoading] = useState(false);
   const [visitFilesError, setVisitFilesError] = useState<string | null>(null);
 
+  // Sincroniza el formulario con la consulta seleccionada; el componente se
+  // monta una sola vez y React reutiliza la instancia al cambiar de modo.
+  useEffect(() => {
+    setFormData(visitToInput(visit));
+  }, [visit]);
+
   // Al abrir una consulta nueva/edición se limpia el panel de archivos previo.
   useEffect(() => {
     if (isOpen) setSavedVisit(null);
