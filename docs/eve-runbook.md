@@ -21,9 +21,7 @@ binding). Cada agente raíz vive en `agents/<name>/agent/` con su propio canal.
   allowlist configurada, el canal falla cerrado.
 - Las tools de Mora ya no derivan identidad de un WhatsApp verificado: el
   doctor nombra al paciente (teléfono registrado o nombre) y la tool lo
-  resuelve contra `patients`. El sistema de delegación
-  (`src/lib/agent/delegation-bindings.ts` + tabla `agent_delegation_bindings`)
-  quedó sin consumidores y se elimina en Fase 3 (issue #160).
+  resuelve contra `patients`.
 - En WhatsApp, Eva ya no delega: ante intención de cobranza escala a un humano
   con `escalate-to-human` (transicional hasta que exista una superficie
   paciente-facing de cobranza).
