@@ -7,12 +7,12 @@ sesión.
 
 ## 1. BD / migración
 
-- [ ] 1.1 Crear `supabase/migrations/YYYYMMDDHHMMSS_user_settings.sql` (timestamp UTC real al crear, convención vigente; no secuencial): tabla `public.user_settings` (`user_id uuid pk references auth.users(id) on delete cascade`, `timezone text not null default 'America/Mexico_City'`, `created_at`/`updated_at`, `CHECK` de longitud), `enable row level security`, grants a `authenticated`, revoke a `anon` y política `user_settings_owner_all` con `(select auth.uid()) = user_id` en `using` y `with check`. Verificar con `supabase db reset` local.
+- [x] 1.1 Crear `supabase/migrations/YYYYMMDDHHMMSS_user_settings.sql` (timestamp UTC real al crear, convención vigente; no secuencial): tabla `public.user_settings` (`user_id uuid pk references auth.users(id) on delete cascade`, `timezone text not null default 'America/Mexico_City'`, `created_at`/`updated_at`, `CHECK` de longitud), `enable row level security`, grants a `authenticated`, revoke a `anon` y política `user_settings_owner_all` con `(select auth.uid()) = user_id` en `using` y `with check`. Verificar con `supabase db reset` local.
 - [ ] 1.2 Escribir `src/lib/admin/__tests__/user-settings.test.ts` contra Supabase local (`localDbEnabled`, `src/test-utils/local-db.ts`): RED de get/set, default sin fila, normalización de valor inválido y aislamiento por usuario (RLS). Cubre el escenario "Preferencia privada" del delta `admin-panel`. **Nota de chain strategy: esta tarea se ejecuta en Chain 2 junto con 3.1 (el módulo que prueba se crea ahí).**
 
 ## 2. Núcleo tz parametrizado
 
-- [ ] 2.1 Parametrizar `src/lib/admin/timezone.ts` y `src/lib/admin/clinic-time.ts`: agregar parámetro opcional `timeZone` con default `CLINIC_TZ`/`CLINIC_TIME_ZONE` a `clinicDayKey`, `clinicTimeLabel`, `toClinicLocalInput`, `clinicLocalInputToUtc`, `clinicMonthRangeUtc`, `getCalendarGrid`, `getCurrentClinicMonth`, `groupAppointmentsByDay`, `clinicDayRange`, `trailingDaysRange`; agregar `isValidIanaTimeZone` y `resolveTimeZone` a `timezone.ts`. RED/GREEN en `src/lib/admin/__tests__/timezone.test.ts` y `src/lib/admin/__tests__/clinic-time.test.ts` (casos con `timeZone` explícito + casos actuales verdes). Sin cambios en llamados operativos.
+- [x] 2.1 Parametrizar `src/lib/admin/timezone.ts` y `src/lib/admin/clinic-time.ts`: agregar parámetro opcional `timeZone` con default `CLINIC_TZ`/`CLINIC_TIME_ZONE` a `clinicDayKey`, `clinicTimeLabel`, `toClinicLocalInput`, `clinicLocalInputToUtc`, `clinicMonthRangeUtc`, `getCalendarGrid`, `getCurrentClinicMonth`, `groupAppointmentsByDay`, `clinicDayRange`, `trailingDaysRange`; agregar `isValidIanaTimeZone` y `resolveTimeZone` a `timezone.ts`. RED/GREEN en `src/lib/admin/__tests__/timezone.test.ts` y `src/lib/admin/__tests__/clinic-time.test.ts` (casos con `timeZone` explícito + casos actuales verdes). Sin cambios en llamados operativos.
 
 ## 3. Preferencia y settings UI
 

@@ -71,7 +71,7 @@ de las horas para quien está viendo la pantalla.
 
 | Archivo | Cambio |
 |---|---|
-| `supabase/migrations/0024_user_settings.sql` | New: tabla `user_settings` + RLS por usuario |
+| `supabase/migrations/<UTC-timestamp>_user_settings.sql` | New: tabla `user_settings` + RLS por usuario |
 | `src/lib/admin/timezone.ts` | Modified: helpers parametrizados por `timeZone` (default `CLINIC_TZ`) + validador IANA |
 | `src/lib/admin/clinic-time.ts` | Modified: `clinicDayRange`/`trailingDaysRange` aceptan `timeZone` (default clínica) |
 | `src/lib/admin/user-settings.ts` | New: lectura/escritura de la preferencia |
@@ -94,7 +94,7 @@ Cambio aditivo y de bajo riesgo: los instantes nunca se mueven y la
 presentación cae por default a `America/Mexico_City`, que es la convención
 vigente. Rollback = revertir el commit/PR en la rama:
 
-- La migración `0024_user_settings.sql` es aditiva (tabla nueva); revertir el
+- La migración `<UTC-timestamp>_user_settings.sql` es aditiva (tabla nueva); revertir el
   código deja la tabla sin uso y sin efecto observable.
 - Quitar el lector de preferencia y los parámetros `timeZone` de los
   componentes cliente restaura la presentación en zona clínica sin tocar datos.

@@ -67,6 +67,7 @@ create table if not exists public.user_settings (
 );
 
 alter table public.user_settings enable row level security;
+alter table public.user_settings force row level security;
 revoke all on public.user_settings from anon;
 grant select, insert, update, delete on public.user_settings to authenticated;
 
