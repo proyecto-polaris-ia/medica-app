@@ -45,6 +45,8 @@ const { DOCTOR_ACCESS_REFUSAL } = await import("../../../../agents/mora/agent/ac
 const { default: tool } = await import("../../../../agents/mora/agent/tools/register-payment-intent");
 const execute = tool.execute as (
   input: {
+    patientPhone?: string;
+    patientName?: string;
     amount?: number;
     treatmentPlanName?: string;
     commitment?: string;

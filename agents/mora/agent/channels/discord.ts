@@ -20,6 +20,18 @@ const DISCORD_CREDENTIAL_KEYS = [
 const credential = (key: (typeof DISCORD_CREDENTIAL_KEYS)[number]): string =>
   process.env[key] || "unconfigured";
 
+export type MoraDiscordCommandResult =
+  | {
+      title: string;
+      auth: {
+        principalId: string;
+        principalType: "user";
+        authenticator: "discord";
+        attributes: Record<string, string>;
+      };
+    }
+  | null;
+
 /**
  * Inbound command gate for Mora's Discord channel (issue #159).
  *
@@ -32,7 +44,7 @@ const credential = (key: (typeof DISCORD_CREDENTIAL_KEYS)[number]): string =>
  */
 export function handleMoraDiscordCommand(
   interaction: { user: { id: string }; channelId?: string; guildId?: string },
-): { auth: Record<string, unknown>; title: string } | null {
+): MoraDiscordCommandResult {
   const access = resolveDoctorAccess({
     session: {
       auth: {

@@ -41,7 +41,7 @@ vi.mock("@/lib/supabase/server", () => ({ getSupabaseAdmin }));
 const { DOCTOR_ACCESS_REFUSAL } = await import("../../../../agents/mora/agent/access");
 const { default: tool } = await import("../../../../agents/mora/agent/tools/get-patient-balance");
 const execute = tool.execute as (
-  input: { thresholdDays?: number },
+  input: { patientPhone?: string; patientName?: string; thresholdDays?: number },
   ctx?: unknown,
 ) => Promise<unknown>;
 

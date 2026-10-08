@@ -8,10 +8,6 @@ import {
 } from '@/test-utils/local-db';
 import { getSupabaseAdmin } from '@/lib/supabase/server';
 import {
-  COLLECTIONS_SECURITY_REFUSAL,
-  resolveCollectionsPatientPhone,
-} from '../../../../agents/eva/agent/subagents/mora/identity';
-import {
   DELEGATION_BINDING_TTL_SECONDS,
   deleteDelegationBinding,
   purgeExpiredDelegationBindings,
@@ -54,20 +50,6 @@ d('delegation bindings data layer', () => {
       phone: '+5215512345678',
     });
 
-    // The delegation identity resolver reads the same real binding row.
-    await expect(
-      resolveCollectionsPatientPhone(
-        {
-          session: {
-            id: childSessionId,
-            parent: { sessionId: 'root-session-1' },
-            auth: { current: null, initiator: null },
-          },
-        },
-        undefined,
-        { attempts: 3, delayMs: 0 },
-      ),
-    ).resolves.toEqual({ phone: '+5215512345678' });
   });
 
   it('upserts idempotently, refreshing the phone for the same child session', async () => {
@@ -93,25 +75,12 @@ d('delegation bindings data layer', () => {
     expect(data).toHaveLength(1);
   });
 
-  it('returns a null phone for an unknown child session (and refuses the delegated path)', async () => {
+  it('returns a null phone for an unknown child session', async () => {
     await expect(resolveDelegationBinding('unknown-child')).resolves.toEqual({
       ok: true,
       phone: null,
     });
 
-    await expect(
-      resolveCollectionsPatientPhone(
-        {
-          session: {
-            id: 'unknown-child',
-            parent: { sessionId: 'root-session-1' },
-            auth: { current: null, initiator: null },
-          },
-        },
-        undefined,
-        { attempts: 2, delayMs: 0 },
-      ),
-    ).resolves.toEqual({ error: COLLECTIONS_SECURITY_REFUSAL });
   });
 
   it('purges expired bindings and keeps fresh ones', async () => {

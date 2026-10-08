@@ -10,10 +10,16 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 const { handleMoraDiscordCommand } = await import(
-  "../../../../../agents/mora/agent/channels/discord"
+  "../../../../agents/mora/agent/channels/discord"
 );
 
 const onCommand = handleMoraDiscordCommand;
+
+type Interaction = {
+  user: { id: string };
+  channelId?: string;
+  guildId?: string;
+};
 
 const DOCTOR_DISCORD_ID = "111222333444555666";
 
