@@ -240,7 +240,7 @@ propios" y la degradación graceful de credenciales (§D11, §8).
   `EVE_PUBLIC_ROUTE_PREFIX='/clara'`) con `routes` `^/clara/eve/v1/(.*)$`, y
   rewrite `/clara/eve/v1/(.*)` → servicio `eve-clara` **antes** del catch-all
   `web`, exactamente como §8. `middleware.ts` no se toca.
-- [x] 6.4 (Opcional, no requerido por la spec) agregar en `.env.local.example`,
+- [ ] 6.4 (OMITIDA - opcional, no requerida por la spec; ver nota) agregar en `.env.local.example`,
   después de `CLARA_DRAFTING_ENABLED=false` (línea 39), `CLARA_DISCORD_STAFF_IDS`
   y `CLARA_DISCORD_ACTOR_MAP` vacías con comentario de fail-closed.
 - [x] 6.5 Documentar en el propio change (§7 del design) la tabla de variables
