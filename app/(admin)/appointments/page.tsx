@@ -14,6 +14,10 @@ import { CalendarNav } from '@/components/admin/calendar/CalendarNav';
 import { ProviderLegend } from '@/components/admin/calendar/ProviderLegend';
 import { ServiceFilter } from '@/components/admin/calendar/ServiceFilter';
 import { PatientRecordModal } from '@/components/admin/PatientRecordModal';
+import {
+  PatientSearchInput,
+  type PatientOption,
+} from '@/components/admin/PatientSearchInput';
 import { useViewerTimezone } from '@/components/admin/TimezoneProvider';
 import type { Appointment, AppointmentReminderSummary, Provider } from '@/lib/admin/types';
 import {
@@ -246,7 +250,7 @@ function listDateRangeBounds(dateFrom: string, dateTo: string) {
 function listAppointmentsRequestUrl(params: {
   page: number;
   serviceFilter: string;
-  patientFilter: string;
+  patientFilter: PatientOption | null;
   providerFilter: string;
   dateFrom: string;
   dateTo: string;
@@ -257,7 +261,7 @@ function listAppointmentsRequestUrl(params: {
   search.set('page', String(params.page));
   search.set('pageSize', String(PAGE_SIZE));
   if (params.serviceFilter) search.set('serviceId', params.serviceFilter);
-  if (params.patientFilter) search.set('patientId', params.patientFilter);
+  if (params.patientFilter) search.set('patientId', params.patientFilter.id);
   if (params.providerFilter) search.set('providerId', params.providerFilter);
   if (params.dateFrom && params.dateTo) {
     const { start, end } = listDateRangeBounds(params.dateFrom, params.dateTo);
@@ -295,7 +299,7 @@ export default function AppointmentsPage() {
   const [recordPatientId, setRecordPatientId] = useState<string | null>(null);
   
   const [serviceFilter, setServiceFilter] = useState('');
-  const [patientFilter, setPatientFilter] = useState('');
+  const [patientFilter, setPatientFilter] = useState<PatientOption | null>(null);
   const [providerFilter, setProviderFilter] = useState(urlProviderFilter ?? '');
   const [calendarProviderFilter, setCalendarProviderFilter] = useState<string[]>(
     parseProviderIds(searchParams?.get('providerId'))
@@ -627,8 +631,8 @@ export default function AppointmentsPage() {
     resetPageForFilterChange();
   }
 
-  function handlePatientFilterChange(value: string) {
-    setPatientFilter(value);
+  function handlePatientFilterChange(selection: PatientOption | null) {
+    setPatientFilter(selection);
     resetPageForFilterChange();
   }
 
@@ -659,14 +663,16 @@ export default function AppointmentsPage() {
 
   function clearFilters() {
     setServiceFilter('');
-    setPatientFilter('');
+    setPatientFilter(null);
     setProviderFilter('');
     setDateFrom('');
     setDateTo('');
     resetPageForFilterChange();
   }
 
-  const hasActiveFilters = serviceFilter || patientFilter || providerFilter || dateFrom || dateTo;
+  const hasActiveFilters = Boolean(
+    serviceFilter || patientFilter || providerFilter || dateFrom || dateTo
+  );
 
   // El estado vacío distingue filtros sin coincidencias, listado sin citas
   // registradas y página fuera de rango con resultados existentes (design §1.8).
@@ -731,10 +737,14 @@ export default function AppointmentsPage() {
           </div>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
             <div>
-              <label className="block text-xs font-medium text-gray-600">
+              <label
+                htmlFor="filter-service"
+                className="block text-xs font-medium text-gray-600"
+              >
                 Servicio
               </label>
               <select
+                id="filter-service"
                 value={serviceFilter}
                 onChange={(e) => handleServiceFilterChange(e.target.value)}
                 className="mt-1 block w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm"
@@ -748,27 +758,20 @@ export default function AppointmentsPage() {
               </select>
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-600">
-                Paciente
-              </label>
-              <select
+              <PatientSearchInput
                 value={patientFilter}
-                onChange={(e) => handlePatientFilterChange(e.target.value)}
-                className="mt-1 block w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm"
-              >
-                <option value="">Todos</option>
-                {patients.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
+                onChange={handlePatientFilterChange}
+              />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-600">
+              <label
+                htmlFor="filter-provider"
+                className="block text-xs font-medium text-gray-600"
+              >
                 Proveedor
               </label>
               <select
+                id="filter-provider"
                 value={providerFilter}
                 onChange={(e) => handleProviderFilterChange(e.target.value)}
                 className="mt-1 block w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm"

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import AppointmentsPage from './page';
 import { TimezoneProvider } from '@/components/admin/TimezoneProvider';
@@ -73,7 +73,7 @@ function buildFetchMock() {
         json: () => Promise.resolve({ appointments: [BASE_APPOINTMENT] }),
       });
     }
-    if (url === '/api/admin/patients') {
+    if (url === '/api/admin/patients' || url.startsWith('/api/admin/patients?')) {
       return Promise.resolve({
         ok: true,
         json: () => Promise.resolve({ patients: [{ id: PATIENT_ID, fullName: 'Paciente A' }] }),
@@ -658,7 +658,7 @@ function buildCalendarFetch({
     Promise.resolve({ ok: true, json: () => Promise.resolve(body) });
   return vi.fn().mockImplementation((url: string) => {
     if (url.startsWith('/api/admin/appointments')) return ok({ appointments });
-    if (url === '/api/admin/patients') return ok({ patients });
+    if (url === '/api/admin/patients' || url.startsWith('/api/admin/patients?')) return ok({ patients });
     if (url === '/api/admin/providers') return ok({ providers });
     if (url === '/api/admin/services') return ok({ services });
     return ok({});
@@ -901,7 +901,7 @@ describe('/appointments calendar provider filter', () => {
     await waitFor(() =>
       expect(screen.getAllByRole('row').length).toBeGreaterThan(1)
     );
-    const providerSelect = screen.getAllByRole('combobox')[2] as HTMLSelectElement;
+    const providerSelect = screen.getByRole('combobox', { name: 'Proveedor' }) as HTMLSelectElement;
     expect(providerSelect).toHaveValue('prov-a');
     expect(
       screen.queryByText('No hay citas que coincidan con los filtros.')
@@ -1531,7 +1531,7 @@ describe('/appointments calendar service filter', () => {
     await waitFor(() =>
       expect(screen.getAllByRole('row').length).toBeGreaterThan(1)
     );
-    const serviceSelect = screen.getAllByRole('combobox')[0] as HTMLSelectElement;
+    const serviceSelect = screen.getByRole('combobox', { name: 'Servicio' }) as HTMLSelectElement;
     expect(serviceSelect).toHaveValue('');
     const rowsBefore = screen.getAllByRole('row').length;
 
@@ -1795,11 +1795,20 @@ describe('/appointments list pagination', () => {
       total: 100,
     });
     const user = await renderList(fetchMock);
-    const comboboxes = screen.getAllByRole('combobox');
+    const serviceSelect = screen.getByRole('combobox', { name: 'Servicio' }) as HTMLSelectElement;
+    const providerSelect = screen.getByRole('combobox', { name: 'Proveedor' }) as HTMLSelectElement;
+    const patientInput = screen.getByRole('combobox', { name: 'Paciente' });
 
-    await user.selectOptions(comboboxes[0], SERVICE_ID);
-    await user.selectOptions(comboboxes[1], PATIENT_ID);
-    await user.selectOptions(comboboxes[2], PROVIDER_ID);
+    await user.selectOptions(serviceSelect, SERVICE_ID);
+    await user.selectOptions(providerSelect, PROVIDER_ID);
+    await user.click(patientInput);
+    await user.type(patientInput, 'Pac');
+    const patientOption = await screen.findByRole(
+      'option',
+      { name: 'Paciente A' },
+      { timeout: 3000 }
+    );
+    await user.click(within(patientOption).getByRole('button'));
 
     await waitFor(() => {
       const params = lastListParams(fetchMock)!;
@@ -1845,7 +1854,7 @@ describe('/appointments list pagination', () => {
       expect(lastListParams(fetchMock)!.get('page')).toBe('3')
     );
 
-    await user.selectOptions(screen.getAllByRole('combobox')[0], SERVICE_ID);
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Servicio' }), SERVICE_ID);
 
     await waitFor(() => {
       const params = lastListParams(fetchMock)!;
@@ -1985,7 +1994,7 @@ describe('/appointments list pagination', () => {
     const fetchMock = buildPaginatedFetch({ appointments: [], total: 0 });
     const user = await renderList(fetchMock);
 
-    await user.selectOptions(screen.getAllByRole('combobox')[0], SERVICE_ID);
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Servicio' }), SERVICE_ID);
 
     expect(
       await screen.findByText('No hay citas que coincidan con los filtros.')
@@ -2042,5 +2051,254 @@ describe('/appointments list pagination', () => {
       await screen.findByText('Página 2 de 5 (100 resultados)')
     ).toBeInTheDocument();
     expect(replaceMock.mock.calls.length).toBe(replaceCallsBefore);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Filtro de paciente con autocompletado en la lista (issue #169).
+// ---------------------------------------------------------------------------
+const SEARCH_CATALOG = [
+  { id: PATIENT_ID, fullName: 'Paciente A' },
+  { id: 'patient-z', fullName: 'Paciente Z' },
+];
+
+function buildPatientSearchFetch({
+  appointments = [BASE_APPOINTMENT],
+  total = appointments.length,
+  page = 1,
+}: {
+  appointments?: unknown[];
+  total?: number;
+  page?: number;
+} = {}) {
+  const ok = (body: unknown) =>
+    Promise.resolve({ ok: true, json: () => Promise.resolve(body) });
+  return vi.fn().mockImplementation((url: string) => {
+    if (url.startsWith('/api/admin/appointments')) {
+      return ok({
+        appointments,
+        pagination: {
+          total,
+          page,
+          pageSize: 20,
+          totalPages: Math.ceil(total / 20),
+        },
+      });
+    }
+    if (url.startsWith('/api/admin/patients?')) {
+      const q = (
+        new URLSearchParams(url.split('?')[1]).get('q') ?? ''
+      ).toLowerCase();
+      const matches = SEARCH_CATALOG.filter((patient) =>
+        patient.fullName.toLowerCase().includes(q)
+      );
+      return ok({
+        patients: matches,
+        page: 1,
+        pageSize: 20,
+        total: matches.length,
+        totalPages: 1,
+      });
+    }
+    if (url === '/api/admin/patients') return ok({ patients: SEARCH_CATALOG });
+    if (url === '/api/admin/providers') {
+      return ok({ providers: [{ id: PROVIDER_ID, name: 'Dra. Ana', color: '#1f77b4' }] });
+    }
+    if (url === '/api/admin/services') {
+      return ok({ services: [{ id: SERVICE_ID, name: 'Limpieza' }] });
+    }
+    return ok({});
+  });
+}
+
+async function selectPatientSuggestion(
+  user: ReturnType<typeof userEvent.setup>,
+  query: string,
+  name: string
+) {
+  const input = screen.getByRole('combobox', { name: 'Paciente' });
+  await user.click(input);
+  await user.type(input, query);
+  const option = await screen.findByRole('option', { name }, { timeout: 3000 });
+  await user.click(within(option).getByRole('button'));
+}
+
+describe('/appointments patient autocomplete filter', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    window.alert = vi.fn();
+    window.confirm = vi.fn(() => false);
+    searchParamsRef.value = new URLSearchParams();
+    replaceMock.mockClear();
+  });
+
+  it('3.1 seleccionar una sugerencia envía patientId y solicita la página 1', async () => {
+    searchParamsRef.value = new URLSearchParams('page=3');
+    const fetchMock = buildPatientSearchFetch({ total: 100, page: 3 });
+    global.fetch = fetchMock;
+    const user = userEvent.setup();
+    render(<AppointmentsPage />);
+
+    await waitFor(() => expect(lastListParams(fetchMock)!.get('page')).toBe('3'));
+
+    await selectPatientSuggestion(user, 'Pac', 'Paciente A');
+
+    await waitFor(() => {
+      const params = lastListParams(fetchMock)!;
+      expect(params.get('patientId')).toBe(PATIENT_ID);
+      expect(params.get('page')).toBe('1');
+    });
+    expect(screen.getByRole('combobox', { name: 'Paciente' })).toHaveValue(
+      'Paciente A'
+    );
+  });
+
+  it('3.2 la limpieza con ✕ quita patientId y deja el campo vacío', async () => {
+    const fetchMock = buildPatientSearchFetch();
+    global.fetch = fetchMock;
+    const user = userEvent.setup();
+    render(<AppointmentsPage />);
+    await screen.findByRole('option', { name: 'Limpieza' });
+
+    await selectPatientSuggestion(user, 'Pac', 'Paciente A');
+    await waitFor(() =>
+      expect(lastListParams(fetchMock)!.get('patientId')).toBe(PATIENT_ID)
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Limpiar paciente' }));
+
+    await waitFor(() => {
+      expect(lastListParams(fetchMock)!.get('patientId')).toBeNull();
+    });
+    expect(screen.getByRole('combobox', { name: 'Paciente' })).toHaveValue('');
+  });
+
+  it('3.2 "Limpiar filtros" quita patientId y deja el campo vacío', async () => {
+    const fetchMock = buildPatientSearchFetch();
+    global.fetch = fetchMock;
+    const user = userEvent.setup();
+    render(<AppointmentsPage />);
+    await screen.findByRole('option', { name: 'Limpieza' });
+
+    await selectPatientSuggestion(user, 'Pac', 'Paciente A');
+    await waitFor(() =>
+      expect(lastListParams(fetchMock)!.get('patientId')).toBe(PATIENT_ID)
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Limpiar filtros' }));
+
+    await waitFor(() => {
+      expect(lastListParams(fetchMock)!.get('patientId')).toBeNull();
+    });
+    expect(screen.getByRole('combobox', { name: 'Paciente' })).toHaveValue('');
+  });
+
+  it('3.3 el formulario de cita conserva el catálogo completo', async () => {
+    const fetchMock = buildPatientSearchFetch();
+    global.fetch = fetchMock;
+    const user = userEvent.setup();
+    render(<AppointmentsPage />);
+    await screen.findByRole('option', { name: 'Limpieza' });
+
+    await user.click(screen.getByRole('button', { name: 'Nueva cita' }));
+
+    const formSelect = screen.getByDisplayValue('Sin paciente') as HTMLSelectElement;
+    expect(
+      within(formSelect).getByRole('option', { name: 'Paciente A' })
+    ).toBeInTheDocument();
+    expect(
+      within(formSelect).getByRole('option', { name: 'Paciente Z' })
+    ).toBeInTheDocument();
+  });
+
+  it('3.7 combina el paciente con servicio, proveedor y rango de fechas', async () => {
+    const fetchMock = buildPatientSearchFetch({ total: 100 });
+    global.fetch = fetchMock;
+    const user = userEvent.setup();
+    const { container } = render(<AppointmentsPage />);
+    await screen.findByRole('option', { name: 'Limpieza' });
+
+    await user.selectOptions(
+      screen.getByRole('combobox', { name: 'Servicio' }),
+      SERVICE_ID
+    );
+    await user.selectOptions(
+      screen.getByRole('combobox', { name: 'Proveedor' }),
+      PROVIDER_ID
+    );
+    const [fromInput, toInput] = Array.from(
+      container.querySelectorAll('input[type="date"]')
+    ) as HTMLInputElement[];
+    fireEvent.change(fromInput, { target: { value: '2026-09-01' } });
+    fireEvent.change(toInput, { target: { value: '2026-09-30' } });
+
+    await selectPatientSuggestion(user, 'Pac', 'Paciente A');
+
+    await waitFor(() => {
+      const params = lastListParams(fetchMock)!;
+      expect(params.get('patientId')).toBe(PATIENT_ID);
+      expect(params.get('serviceId')).toBe(SERVICE_ID);
+      expect(params.get('providerId')).toBe(PROVIDER_ID);
+      expect(params.get('start')).toBe('2026-09-01T00:00:00.000Z');
+      expect(params.get('end')).toBe('2026-09-30T23:59:59.999Z');
+      expect(params.get('page')).toBe('1');
+    });
+  });
+
+  it('3.7 limpiar el paciente no altera los demás filtros', async () => {
+    const fetchMock = buildPatientSearchFetch({ total: 100 });
+    global.fetch = fetchMock;
+    const user = userEvent.setup();
+    render(<AppointmentsPage />);
+    await screen.findByRole('option', { name: 'Limpieza' });
+
+    await user.selectOptions(
+      screen.getByRole('combobox', { name: 'Servicio' }),
+      SERVICE_ID
+    );
+    await selectPatientSuggestion(user, 'Pac', 'Paciente A');
+    await waitFor(() =>
+      expect(lastListParams(fetchMock)!.get('patientId')).toBe(PATIENT_ID)
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Limpiar paciente' }));
+
+    await waitFor(() => {
+      const params = lastListParams(fetchMock)!;
+      expect(params.get('patientId')).toBeNull();
+      expect(params.get('serviceId')).toBe(SERVICE_ID);
+    });
+    expect(screen.getByRole('combobox', { name: 'Servicio' })).toHaveValue(
+      SERVICE_ID
+    );
+  });
+
+  it('3.7 cambiar Lista ↔ Calendario conserva el filtro de paciente', async () => {
+    const fetchMock = buildPatientSearchFetch();
+    global.fetch = fetchMock;
+    const user = userEvent.setup();
+    render(<AppointmentsPage />);
+    await screen.findByRole('option', { name: 'Limpieza' });
+
+    await selectPatientSuggestion(user, 'Pac', 'Paciente A');
+    await waitFor(() =>
+      expect(lastListParams(fetchMock)!.get('patientId')).toBe(PATIENT_ID)
+    );
+
+    await user.click(screen.getByRole('button', { name: /^Calendario$/ }));
+    await waitFor(
+      () => {
+        expect(screen.getAllByTestId('weekday-label')).toHaveLength(7);
+      },
+      { timeout: 10000 }
+    );
+    await user.click(screen.getByRole('button', { name: /^Lista$/ }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('combobox', { name: 'Paciente' })).toHaveValue(
+        'Paciente A'
+      );
+      expect(lastListParams(fetchMock)!.get('patientId')).toBe(PATIENT_ID);
+    });
   });
 });
