@@ -50,13 +50,37 @@ columnas (`start_at` por defecto `desc`, `created_at`).
    estados vacíos). 74/74 pruebas de los archivos tocados en GREEN
    (13 del componente + 61 de la página); `npm test` completo 1462/0;
    typecheck/lint limpios.
-5. [ ] Verificación: `db:start` + `db:reset` + `npm run test:local`,
-   `lint`, `typecheck`, `build`.
-6. [ ] Commits de unidad de trabajo (Conventional Commits) con evidencia.
+5. [x] Verificación (verificador `gentle-ai-verify`, @ `e230ef7`): `db:start`
+   + `db:reset` OK (24 migraciones); `test:local` 1718 passed con UNA sola falla
+   = timeout del advisory lock en `booking.test.ts` (preexistente, pasada en
+   aislamiento 5/5; suites del feature 26/26 enfocadas); `npm test` 1462/0;
+   typecheck limpio; lint 0 errores (2 warnings de `page.tsx` preexisten en el
+   merge-base); `build` OK (11/11 páginas); knip sin hallazgos nuevos.
+6. [x] Commits de unidad de trabajo (ver abajo).
+
+## Hallazgos advisories de la revisión nativa (no bloqueantes, trabajo posterior)
+
+- `R3-sort-whitelist-spec-mismatch` (WARNING) — `openspec/changes/agregar-paginacion-citas/specs/admin-appointments/spec.md:90-96`: el delta aún dice whitelist `{start_at, created_at}`; la implementación dejó 7 llaves (design §1.4 ya lo documenta). Actualizar el delta al archivar.
+- `R3-stale-response-race` (WARNING) — `app/(admin)/appointments/page.tsx:443-456`: respuesta tardía de un request anterior podría pisar el estado de una página/filtro más nuevo (falta guard de obsolescencia en `loadData`).
+- `R3-empty-state-filtered-oor` (SUGGESTION) — `page.tsx:655-661`: refinamiento posible del mensaje cuando la página activa está fuera de rango con filtros activos.
+- `R3-parse-page-untested` (SUGGESTION) — `page.tsx:210-214`: `parsePage` sin prueba unitaria dedicada.
 
 ## Evidencia de commits
 
 - `4888930` docs(openspec): propose agregar-paginacion-citas change for issue #168 — artefactos OpenSpec + rastreo de feature (tarea 1).
 - Revisión nativa del candidato documental cerrada: lineage `review-f71be7c46b849ea4`, riesgo bajo, autoridad quemada.
 - Backend (tareas 2–3): commit `8442588`; RED route 23 fail → 30/30 GREEN; RED data 11 fail → 13/13 GREEN; typecheck limpio; lint 0 errores (25 warnings preexistentes). Revisión nativa del candidato backend: consentimiento declinado para este candidato (sin lineage).
-- Frontend (tarea 4): RED Pagination (import inexistente) → 13/13 GREEN; RED page 12 fail → 74/74 GREEN; `npm test` 1462 passed / 0 failed; typecheck limpio; lint 0 errores sin warnings nuevos.
+- Frontend (tarea 4): commit `e230ef7`; RED Pagination (import inexistente) → 13/13 GREEN; RED page 12 fail → 74/74 GREEN; `npm test` 1462 passed / 0 failed; typecheck limpio; lint 0 errores sin warnings nuevos.
+- Revisión nativa del candidato frontend: APROBADA (lineage `review-24ba7fada041e48c`, lente review-reliability, 4 hallazgos advisories no bloqueantes registrados arriba, autoridad quemada).
+- Revisión nativa del registro de hallazgos: APROBADA (lineage `review-351a1b009e0f41dd`, riesgo bajo, autoridad quemada).
+- Cierre del candidato completo: `docs(openspec)` (commit de cierre con este documento).
+
+## Siguientes pasos (decisiones del usuario)
+
+- Push de la rama y PR (issue #168); archivado del change OpenSpec al merge
+  (actualizando el delta del whitelist a 7 llaves — hallazgo
+  `R3-sort-whitelist-spec-mismatch`).
+- Limpieza futura: `listAppointments` quedó production-dead (solo tests la
+  importan; knip no la marca por eso).
+- Hallazgos advisories de la revisión (guard de respuesta tardía, prueba de
+  `parsePage`, refinamiento de empty state) como trabajo posterior.
