@@ -9,8 +9,14 @@ import {
 import {
   createPatient,
   deletePatient,
+  escapePostgrestIlikeTerm,
   getPatient,
   listPatients,
+  listPatientsPage,
+  normalizePatientsPagination,
+  PATIENTS_DEFAULT_PAGE,
+  PATIENTS_DEFAULT_PAGE_SIZE,
+  PATIENTS_MAX_PAGE_SIZE,
   searchPatients,
   updatePatient,
   updatePatientEmail,
@@ -220,6 +226,222 @@ d('patients service', () => {
 
       await expect(searchPatients('zzzz')).resolves.toEqual([]);
     });
+
+    it('trata % y _ como literales, no como comodines', async () => {
+      const literal = await createPatient({
+        fullName: 'Ana 100%',
+        phoneE164: '+5215511111111',
+      });
+      await createPatient({
+        fullName: 'Ana 100X',
+        phoneE164: '+5215522222222',
+      });
+
+      await expect(searchPatients('100%')).resolves.toEqual([literal]);
+      await expect(searchPatients('100_')).resolves.toEqual([]);
+    });
+  });
+
+  describe('listPatientsPage', () => {
+    it('usa page 1 / pageSize 20 por defecto y devuelve metadatos reales', async () => {
+      const first = await createPatient({
+        fullName: 'María García',
+        phoneE164: '+5215512345678',
+        notes: 'Nota',
+      });
+      const second = await createPatient({
+        fullName: 'Pedro López',
+        phoneE164: '+5215599999999',
+      });
+      const third = await createPatient({
+        fullName: 'Ana Ruiz',
+        phoneE164: '+5215588888888',
+      });
+
+      const result = await listPatientsPage();
+
+      expect(result).toMatchObject({
+        page: 1,
+        pageSize: 20,
+        totalCount: 3,
+        totalPages: 1,
+      });
+      // Orden estable: created_at desc (el último creado primero).
+      expect(result.patients.map((patient) => patient.id)).toEqual([
+        third.id,
+        second.id,
+        first.id,
+      ]);
+      // Misma forma mapeada que `listPatients` (contrato vigente del recurso).
+      expect(result.patients[2]).toMatchObject({
+        id: first.id,
+        fullName: 'María García',
+        phoneE164: '+5215512345678',
+        email: null,
+        notes: 'Nota',
+        birthDate: null,
+        sex: null,
+        address: null,
+        occupation: null,
+        referralSource: null,
+        secondaryPhone: null,
+        emergencyContactName: null,
+        emergencyContactPhone: null,
+        emergencyContactRelationship: null,
+      });
+    });
+
+    it('reparte el listado por páginas sin repetir ni perder pacientes', async () => {
+      const first = await createPatient({
+        fullName: 'María García',
+        phoneE164: '+5215512345678',
+      });
+      const second = await createPatient({
+        fullName: 'Pedro López',
+        phoneE164: '+5215599999999',
+      });
+      const third = await createPatient({
+        fullName: 'Ana Ruiz',
+        phoneE164: '+5215588888888',
+      });
+
+      const page1 = await listPatientsPage({ page: 1, pageSize: 2 });
+      const page2 = await listPatientsPage({ page: 2, pageSize: 2 });
+
+      expect(page1).toMatchObject({ page: 1, pageSize: 2, totalCount: 3, totalPages: 2 });
+      expect(page1.patients.map((patient) => patient.id)).toEqual([third.id, second.id]);
+      expect(page2).toMatchObject({ page: 2, pageSize: 2, totalCount: 3, totalPages: 2 });
+      expect(page2.patients.map((patient) => patient.id)).toEqual([first.id]);
+
+      // La segunda página continúa el orden; no repite ni omite ids.
+      const seen = [...page1.patients, ...page2.patients].map((patient) => patient.id);
+      expect(new Set(seen).size).toBe(3);
+      expect(seen).toEqual([third.id, second.id, first.id]);
+
+      // El orden es estable entre llamadas consecutivas (sin duplicados).
+      const page1Again = await listPatientsPage({ page: 1, pageSize: 2 });
+      expect(page1Again.patients.map((patient) => patient.id)).toEqual([third.id, second.id]);
+    });
+
+    it('combina búsqueda y paginación sobre el total filtrado', async () => {
+      const anaOne = await createPatient({
+        fullName: 'Ana Uno',
+        phoneE164: '+5215511111111',
+      });
+      const anaTwo = await createPatient({
+        fullName: 'Ana Dos',
+        phoneE164: '+5215522222222',
+      });
+      const anaThree = await createPatient({
+        fullName: 'Ana Tres',
+        phoneE164: '+5215533333333',
+      });
+      const other = await createPatient({
+        fullName: 'Beto Sin Coincidencia',
+        phoneE164: '+5215544444444',
+      });
+
+      const page1 = await listPatientsPage({ q: 'Ana', page: 1, pageSize: 2 });
+      const page2 = await listPatientsPage({ q: 'Ana', page: 2, pageSize: 2 });
+
+      // `total` cuenta solo coincidencias (3), no la tabla completa (4):
+      // el filtro se aplica antes del recorte de página.
+      expect(page1).toMatchObject({ page: 1, pageSize: 2, totalCount: 3, totalPages: 2 });
+      expect(page1.patients.map((patient) => patient.id)).toEqual([anaThree.id, anaTwo.id]);
+      expect(page2).toMatchObject({ page: 2, pageSize: 2, totalCount: 3, totalPages: 2 });
+      expect(page2.patients.map((patient) => patient.id)).toEqual([anaOne.id]);
+      expect([...page1.patients, ...page2.patients].map((patient) => patient.id)).not.toContain(
+        other.id
+      );
+    });
+
+    it('trata q vacío o solo espacios como listado sin filtro', async () => {
+      await createPatient({ fullName: 'María García', phoneE164: '+5215512345678' });
+      await createPatient({ fullName: 'Pedro López', phoneE164: '+5215599999999' });
+
+      await expect(listPatientsPage({ q: '' })).resolves.toMatchObject({
+        totalCount: 2,
+        page: 1,
+      });
+      await expect(listPatientsPage({ q: '   ' })).resolves.toMatchObject({
+        totalCount: 2,
+        page: 1,
+      });
+    });
+
+    it('normaliza page y pageSize también dentro de listPatientsPage', async () => {
+      await createPatient({ fullName: 'María García', phoneE164: '+5215512345678' });
+
+      await expect(listPatientsPage({ page: 0, pageSize: 0 })).resolves.toMatchObject({
+        page: 1,
+        pageSize: 20,
+        totalCount: 1,
+      });
+      await expect(listPatientsPage({ page: 1, pageSize: 1000 })).resolves.toMatchObject({
+        page: 1,
+        pageSize: 100,
+      });
+    });
+
+    it('reporta metadatos coherentes cuando no hay pacientes', async () => {
+      const result = await listPatientsPage();
+
+      expect(result.patients).toEqual([]);
+      expect(result).toMatchObject({ page: 1, pageSize: 20, totalCount: 0, totalPages: 1 });
+    });
+
+    it('reporta total 0 y totalPages 1 cuando la búsqueda no tiene coincidencias', async () => {
+      await createPatient({ fullName: 'María García', phoneE164: '+5215512345678' });
+
+      const result = await listPatientsPage({ q: 'zzzz' });
+
+      expect(result.patients).toEqual([]);
+      expect(result).toMatchObject({ page: 1, pageSize: 20, totalCount: 0, totalPages: 1 });
+    });
+
+    it('devuelve una página vacía fuera de rango con los metadatos reales', async () => {
+      await createPatient({ fullName: 'María García', phoneE164: '+5215512345678' });
+      await createPatient({ fullName: 'Pedro López', phoneE164: '+5215599999999' });
+
+      const result = await listPatientsPage({ page: 99, pageSize: 20 });
+
+      expect(result.patients).toEqual([]);
+      expect(result).toMatchObject({ totalCount: 2, totalPages: 1 });
+    });
+
+    it('trata % y _ como literales en la búsqueda paginada', async () => {
+      const literal = await createPatient({
+        fullName: 'Ana 100%',
+        phoneE164: '+5215511111111',
+      });
+      await createPatient({
+        fullName: 'Ana 100X',
+        phoneE164: '+5215522222222',
+      });
+
+      const percent = await listPatientsPage({ q: '100%' });
+      expect(percent.patients.map((patient) => patient.id)).toEqual([literal.id]);
+      expect(percent.totalCount).toBe(1);
+
+      const underscore = await listPatientsPage({ q: '100_' });
+      expect(underscore.patients).toEqual([]);
+      expect(underscore.totalCount).toBe(0);
+    });
+
+    it('resuelve sin lanzar con caracteres reservados de .or() en q', async () => {
+      await createPatient({ fullName: 'Ana, María', phoneE164: '+5215511111111' });
+      await createPatient({ fullName: 'Ana par(en)', phoneE164: '+5215522222222' });
+
+      for (const q of ['a,b', '(', ')', 'x"y', 'a\\b']) {
+        const result = await listPatientsPage({ q });
+        expect(result).toMatchObject({ page: 1, pageSize: 20 });
+        expect(Array.isArray(result.patients)).toBe(true);
+      }
+
+      // Los paréntesis y la coma son literales buscables, no sintaxis de `.or()`.
+      await expect(listPatientsPage({ q: 'a,' })).resolves.toMatchObject({ totalCount: 1 });
+      await expect(listPatientsPage({ q: '(en)' })).resolves.toMatchObject({ totalCount: 1 });
+    });
   });
 
   describe('updatePatientEmail', () => {
@@ -341,5 +563,62 @@ d('patients service', () => {
       });
       await expect(getPatient(created.id)).resolves.toEqual(patient);
     });
+  });
+});
+
+/**
+ * Suite pura (sin BD): corre también con `npm run test`.
+ *
+ * Expectativas verificadas contra el PostgREST local (tarea 1.5): dentro de un
+ * valor citado PostgREST des-escapa un nivel, así que los comodines LIKE viajan
+ * con barra invertida doble (`\\%`) para llegar literales a Postgres.
+ */
+describe('escapePostgrestIlikeTerm', () => {
+  it('envuelve el término en comillas con comodines externos', () => {
+    expect(escapePostgrestIlikeTerm('ana')).toBe('"%ana%"');
+    expect(escapePostgrestIlikeTerm('')).toBe('"%%"');
+  });
+
+  it('escapa los comodines LIKE % y _ para que sean literales', () => {
+    expect(escapePostgrestIlikeTerm('50%')).toBe('"%50\\\\%%"');
+    expect(escapePostgrestIlikeTerm('a_b')).toBe('"%a\\\\_b%"');
+  });
+
+  it('cita los caracteres reservados de .or() para que no corten la expresión', () => {
+    expect(escapePostgrestIlikeTerm('a,b')).toBe('"%a,b%"');
+    expect(escapePostgrestIlikeTerm('(')).toBe('"%(%"');
+    expect(escapePostgrestIlikeTerm(')')).toBe('"%)%"');
+  });
+
+  it('escapa comillas dobles y diagonales invertidas', () => {
+    expect(escapePostgrestIlikeTerm('x"y')).toBe('"%x\\"y%"');
+    expect(escapePostgrestIlikeTerm('a\\b')).toBe('"%a\\\\\\\\b%"');
+  });
+});
+
+describe('normalizePatientsPagination', () => {
+  it('usa los valores por defecto cuando faltan y expone las constantes', () => {
+    expect(normalizePatientsPagination(null, null)).toEqual({ page: 1, pageSize: 20 });
+    expect(normalizePatientsPagination(undefined, undefined)).toEqual({ page: 1, pageSize: 20 });
+    expect(PATIENTS_DEFAULT_PAGE).toBe(1);
+    expect(PATIENTS_DEFAULT_PAGE_SIZE).toBe(20);
+    expect(PATIENTS_MAX_PAGE_SIZE).toBe(100);
+  });
+
+  it('resuelve a defaults los valores no numéricos, cero, negativos y no enteros', () => {
+    for (const invalid of ['', 'abc', 0, -1, 1.5, '1.5', '0', '-3', NaN, Infinity]) {
+      expect(normalizePatientsPagination(invalid, invalid)).toEqual({ page: 1, pageSize: 20 });
+    }
+  });
+
+  it('acepta números y cadenas numéricas positivas', () => {
+    expect(normalizePatientsPagination(3, 50)).toEqual({ page: 3, pageSize: 50 });
+    expect(normalizePatientsPagination('3', '50')).toEqual({ page: 3, pageSize: 50 });
+  });
+
+  it('satura pageSize al máximo permitido', () => {
+    expect(normalizePatientsPagination('1', '101')).toEqual({ page: 1, pageSize: 100 });
+    expect(normalizePatientsPagination(1, 1000)).toEqual({ page: 1, pageSize: 100 });
+    expect(normalizePatientsPagination(1, 100)).toEqual({ page: 1, pageSize: 100 });
   });
 });
