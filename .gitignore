@@ -55,6 +55,7 @@ opencode.json
 !/.eve/vercel-services/
 /.eve/vercel-services/*
 !/.eve/vercel-services/eve-eva/
+!/.eve/vercel-services/eve-mora/
 
 # Archify: diagramas generados (regenerar con bin/archify.mjs finalize)
 .archify/
