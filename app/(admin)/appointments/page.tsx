@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { DataTable } from '@/components/admin/DataTable';
 import { EmptyState } from '@/components/admin/EmptyState';
 import { ErrorState } from '@/components/admin/ErrorState';
@@ -11,6 +11,7 @@ import { LoadingState } from '@/components/admin/LoadingState';
 import { MonthCalendar } from '@/components/admin/calendar/MonthCalendar';
 import { CalendarNav } from '@/components/admin/calendar/CalendarNav';
 import { ProviderLegend } from '@/components/admin/calendar/ProviderLegend';
+import { ServiceFilter } from '@/components/admin/calendar/ServiceFilter';
 import { PatientRecordModal } from '@/components/admin/PatientRecordModal';
 import { useViewerTimezone } from '@/components/admin/TimezoneProvider';
 import type { Appointment, AppointmentReminderSummary, Provider } from '@/lib/admin/types';
@@ -131,9 +132,74 @@ function reminderLabel(
     : 'Recordatorio día mismo programado';
 }
 
+// Parseo defensivo del parámetro de URL del calendario. `'all'` se tolera solo
+// al leer (enlaces escritos a mano); el estado interno nunca usa ese centinela:
+// la selección vacía `[]` es la única representación de "todos".
+function parseIdList(raw: string | null | undefined): string[] {
+  if (!raw) return [];
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const value of raw.split(',')) {
+    const trimmed = value.trim();
+    if (trimmed.length === 0 || trimmed === 'all') continue;
+    if (seen.has(trimmed)) continue;
+    seen.add(trimmed);
+    result.push(trimmed);
+  }
+  return result;
+}
+
+// #174: conserva el nombre y el comportamiento (tolerante a `all`, vacíos).
+function parseProviderIds(raw: string | null | undefined): string[] {
+  return parseIdList(raw);
+}
+
+// #177: mismo contrato de parseo para servicios.
+function parseServiceIds(raw: string | null | undefined): string[] {
+  return parseIdList(raw);
+}
+
+// Siguiente conjunto de selección al alternar una entrada de la leyenda.
+function nextCalendarSelection(
+  effective: string[],
+  id: string
+): string[] {
+  return effective.includes(id)
+    ? effective.filter((value) => value !== id)
+    : [...effective, id];
+}
+
+// Expansión `[]`→`allIds`: el estado vacío significa "todos", así que al
+// alternar una entrada se parte del universo visible completo.
+function effectiveSelection(selected: string[], allIds: string[]): string[] {
+  return selected.length === 0 ? allIds : selected;
+}
+
+// Normalización inversa: "todos los ids" se guarda como `[]` (misma
+// representación de "todos").
+function normalizeSelection(next: string[], allIds: string[]): string[] {
+  return next.length === allIds.length ? [] : next;
+}
+
+// URL destino del filtro del calendario: compone ambos parámetros y omite los
+// vacíos (providerId primero, serviceId después; orden determinista de #174).
+// `URLSearchParams` codifica la coma como `%2C`; se decodifica para conservar la
+// forma exacta de URL de #174 (`providerId=prov-a,prov-b`).
+function calendarFilterUrl(providerIds: string[], serviceIds: string[]): string {
+  const params = new URLSearchParams();
+  if (providerIds.length > 0) params.set('providerId', providerIds.join(','));
+  if (serviceIds.length > 0) params.set('serviceId', serviceIds.join(','));
+  const query = params.toString().replace(/%2C/g, ',');
+  return query.length > 0 ? `/appointments?${query}` : '/appointments';
+}
+
 export default function AppointmentsPage() {
   const searchParams = useSearchParams();
-  const urlProviderFilter = searchParams?.get('providerId') ?? undefined;
+  const router = useRouter();
+  const rawProviderId = searchParams?.get('providerId') ?? '';
+  // La lista solo honra un id único; `a,b` es del calendario y no le corresponde.
+  const urlProviderFilter =
+    rawProviderId && !rawProviderId.includes(',') ? rawProviderId : undefined;
   const viewerTz = useViewerTimezone();
 
   const [appointments, setAppointments] = useState<Appointment[]>([]);
@@ -155,6 +221,14 @@ export default function AppointmentsPage() {
   const [serviceFilter, setServiceFilter] = useState('');
   const [patientFilter, setPatientFilter] = useState('');
   const [providerFilter, setProviderFilter] = useState(urlProviderFilter ?? '');
+  const [calendarProviderFilter, setCalendarProviderFilter] = useState<string[]>(
+    parseProviderIds(searchParams?.get('providerId'))
+  );
+  // Estado separado del `<select>` de servicio de la lista (`serviceFilter`):
+  // el calendario admite multi-selección y solo él escribe `serviceId`.
+  const [calendarServiceFilter, setCalendarServiceFilter] = useState<string[]>(
+    parseServiceIds(searchParams?.get('serviceId'))
+  );
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [sortField, setSortField] = useState<SortField>('startAt');
@@ -166,8 +240,22 @@ export default function AppointmentsPage() {
     [providers]
   );
 
+  const calendarAppointments = useMemo(() => {
+    const providerActive = calendarProviderFilter.length > 0;
+    const serviceActive = calendarServiceFilter.length > 0;
+    // `[]` = todos en ambos filtros: sin nada activo se devuelve el mes completo.
+    if (!providerActive && !serviceActive) return appointments;
+    const selectedProviders = new Set(calendarProviderFilter);
+    const selectedServices = new Set(calendarServiceFilter);
+    return appointments.filter(
+      (a) =>
+        (!providerActive || selectedProviders.has(a.providerId)) &&
+        (!serviceActive || selectedServices.has(a.serviceId))
+    );
+  }, [appointments, calendarProviderFilter, calendarServiceFilter]);
+
   const blocksByDay = useMemo(() => {
-    const enriched = appointments.map((appointment) => ({
+    const enriched = calendarAppointments.map((appointment) => ({
       id: appointment.id,
       patientName: refName(patients, appointment.patientId ?? '') || 'Sin paciente',
       serviceName: refName(services, appointment.serviceId),
@@ -178,12 +266,77 @@ export default function AppointmentsPage() {
       status: appointment.status,
     }));
     return groupAppointmentsByDay(enriched, providerColor, viewerTz);
-  }, [appointments, patients, services, providerColor, viewerTz]);
+  }, [calendarAppointments, patients, services, providerColor, viewerTz]);
 
   const visibleProviders = useMemo(() => {
     const providerIds = new Set(appointments.map((a) => a.providerId));
     return providers.filter((p) => providerIds.has(p.id));
   }, [appointments, providers]);
+
+  // Universo del control de servicios: los servicios con citas en el mes
+  // **sin filtrar** (no de `calendarAppointments`), de modo que un servicio
+  // deseleccionado siga visible aun con un filtro de proveedores activo. El
+  // nombre cae en `refName`, que devuelve el id si falta en el catálogo.
+  const visibleServices = useMemo<Reference[]>(() => {
+    const seen = new Set<string>();
+    const result: Reference[] = [];
+    for (const appointment of appointments) {
+      const id = appointment.serviceId;
+      if (seen.has(id)) continue;
+      seen.add(id);
+      result.push({ id, name: refName(services, id) });
+    }
+    return result;
+  }, [appointments, services]);
+
+  // El handler escribe la URL (proyección del estado), sin `useEffect`: el
+  // estado local es la fuente de verdad y se inicializa una sola vez desde la
+  // URL (deep link). El guard evita reescrituras redundantes.
+  const applyCalendarFilters = useCallback(
+    (nextProvider: string[], nextService: string[]) => {
+      // Guard de reescritura redundante: si ninguno de los dos filtros cambia,
+      // no se toca ni el estado ni la URL.
+      if (
+        nextProvider.join(',') === calendarProviderFilter.join(',') &&
+        nextService.join(',') === calendarServiceFilter.join(',')
+      ) {
+        return;
+      }
+      setCalendarProviderFilter(nextProvider);
+      setCalendarServiceFilter(nextService);
+      router.replace(calendarFilterUrl(nextProvider, nextService));
+    },
+    [calendarProviderFilter, calendarServiceFilter, router]
+  );
+
+  function toggleCalendarProvider(id: string) {
+    const allIds = visibleProviders.map((p) => p.id);
+    const next = nextCalendarSelection(
+      effectiveSelection(calendarProviderFilter, allIds),
+      id
+    );
+    // `[]` y "todos los ids" son equivalentes: se guarda `[]`. Caso borde
+    // aceptado (design.md §2.5): desmarcar el último proveedor visible vuelve
+    // a "todos" porque no existe representación de "ninguno visible".
+    applyCalendarFilters(
+      normalizeSelection(next, allIds),
+      calendarServiceFilter
+    );
+  }
+
+  function toggleCalendarService(id: string) {
+    const allIds = visibleServices.map((s) => s.id);
+    const next = nextCalendarSelection(
+      effectiveSelection(calendarServiceFilter, allIds),
+      id
+    );
+    // Mismo caso borde aceptado que en proveedores: desmarcar el último
+    // servicio visible vuelve a "todos" (`[]`).
+    applyCalendarFilters(
+      calendarProviderFilter,
+      normalizeSelection(next, allIds)
+    );
+  }
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -526,13 +679,34 @@ export default function AppointmentsPage() {
       )}
 
       {view === 'calendar' && (
-        <div className="mb-4 flex items-center justify-between">
+        <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <CalendarNav
             year={visibleMonth.year}
             month={visibleMonth.month}
             onChange={(year, month) => setVisibleMonth({ year, month })}
           />
-          <ProviderLegend providers={visibleProviders} />
+          <div className="flex flex-wrap items-center gap-3">
+            <ProviderLegend
+              providers={visibleProviders}
+              selectedIds={calendarProviderFilter}
+              onToggle={toggleCalendarProvider}
+            />
+            <ServiceFilter
+              services={visibleServices}
+              selectedIds={calendarServiceFilter}
+              onToggle={toggleCalendarService}
+            />
+            {(calendarProviderFilter.length > 0 ||
+              calendarServiceFilter.length > 0) && (
+              <button
+                type="button"
+                onClick={() => applyCalendarFilters([], [])}
+                className="text-sm text-blue-600 hover:text-blue-800"
+              >
+                Limpiar filtros
+              </button>
+            )}
+          </div>
         </div>
       )}
 
