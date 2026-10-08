@@ -12,21 +12,21 @@
 
 ## Fase 2 — Datos de presentación (`endLabel`)
 
-- [ ] 2.1 RED: en `src/lib/admin/__tests__/timezone.test.ts`, agregar un caso que
+- [x] 2.1 RED: en `src/lib/admin/__tests__/timezone.test.ts`, agregar un caso que
   espere `endLabel` por bloque en la zona del observador y la hora de fin
   correspondiente; capturar el fallo (campo inexistente).
-- [ ] 2.2 GREEN: en `src/lib/admin/timezone.ts`, agregar `endLabel: string` a
+- [x] 2.2 GREEN: en `src/lib/admin/timezone.ts`, agregar `endLabel: string` a
   `CalendarBlock` y derivarlo en `groupAppointmentsByDay` con
   `clinicTimeLabel(appointment.endAt, timeZone)`; suite de `timezone` en verde.
 
 ## Fase 3 — Componente `AgendaView`
 
-- [ ] 3.1 RED: crear
+- [x] 3.1 RED: crear
   `src/components/admin/calendar/__tests__/AgendaView.test.tsx` con los casos de
   agrupación/orden, encabezado de día, campos completos, "Sin citas", clic en
   cita → `onSelectBlock`, clic en paciente → `onSelectPatient`, scroll
   vertical/clases responsivas y `scrollIntoView` de "Hoy" (mock).
-- [ ] 3.2 GREEN: implementar `src/components/admin/calendar/AgendaView.tsx`
+- [x] 3.2 GREEN: implementar `src/components/admin/calendar/AgendaView.tsx`
   (props espejo de `MonthCalendar`, días vía `getCalendarGrid`, filas con el
   patrón de `DayAppointmentsModal`, encabezados pegajosos, contenedor con scroll,
   botón "Hoy" con guard); suite de `AgendaView` en verde.
@@ -35,24 +35,24 @@
 
 ## Fase 4 — Integración en la página
 
-- [ ] 4.1 Extender `ViewMode` a `'list' | 'calendar' | 'agenda'` y agregar el
+- [x] 4.1 Extender `ViewMode` a `'list' | 'calendar' | 'agenda'` y agregar el
   tercer botón **Agenda** en `app/(admin)/appointments/page.tsx` (`role="group"`).
-- [ ] 4.2 Compartir la rama de fetch del mes entre `'calendar'` y `'agenda'`
+- [x] 4.2 Compartir la rama de fetch del mes entre `'calendar'` y `'agenda'`
   (`clinicMonthRangeUtc`) y montar la fila `CalendarNav`/filtros para ambas.
-- [ ] 4.3 Enriquecer el memo `blocksByDay` copiando `providerName: refName(providers,
+- [x] 4.3 Enriquecer el memo `blocksByDay` copiando `providerName: refName(providers,
   appointment.providerId)` y `notes: appointment.notes`; ajustar dependencias.
-- [ ] 4.4 Renderizar `<AgendaView ... />` con el mismo `blocksByDay`, `viewerTz`,
+- [x] 4.4 Renderizar `<AgendaView ... />` con el mismo `blocksByDay`, `viewerTz`,
   `handleSelectBlock` y `openPatientRecord` cuando `view === 'agenda'`.
-- [ ] 4.5 RED→GREEN en `app/(admin)/appointments/page.test.tsx`: tres opciones de
+- [x] 4.5 RED→GREEN en `app/(admin)/appointments/page.test.tsx`: tres opciones de
   toggle; activar Agenda muestra las citas agrupadas; alternar Calendario ↔
   Agenda no dispara un segundo rango; filtros de proveedor y servicio aplican a
   la agenda; carga/errores se comparten.
 
 ## Fase 5 — Verificación
 
-- [ ] 5.1 Suite enfocada en verde: `npm test` sobre las suites de `AgendaView`,
+- [x] 5.1 Suite enfocada en verde: `npm test` sobre las suites de `AgendaView`,
   `timezone` y `page` (o `npm test` completo si es asequible).
-- [ ] 5.2 `npx tsc --noEmit` sin errores.
+- [x] 5.2 `npx tsc --noEmit` sin errores.
 - [ ] 5.3 `npm run lint` sin errores nuevos.
 - [ ] 5.4 `npm run build` sin errores.
 - [ ] 5.5 Reporte de verificación (sdd-verify) con evidencia y comparación contra
