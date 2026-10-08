@@ -56,11 +56,6 @@ const registerPaymentIntentInputSchema = z.object({
 
 type RegisterPaymentIntentInput = z.infer<typeof registerPaymentIntentInputSchema>;
 
-type PatientRow = {
-  id: string;
-  full_name: string;
-};
-
 type PlanRow = {
   id: string;
   patient_id: string;
@@ -74,26 +69,6 @@ type ResolvedPlanResult =
   | { kind: "ambiguous"; planName: string; matches: PlanRow[] }
   | { kind: "not_eligible"; planName: string; status: string }
   | { kind: "not_found"; planName: string };
-
-async function fetchEligiblePlans(
-  patientId: string,
-  planName: string,
-): Promise<PlanRow[]> {
-  const { data, error } = await getSupabaseAdmin()
-    .from("treatment_plans")
-    .select("id, patient_id, name, status, total_amount")
-    .eq("patient_id", patientId)
-    .ilike("name", planName)
-    .in("status", [...ELIGIBLE_PLAN_STATUSES])
-    .order("created_at", { ascending: false })
-    .limit(10);
-
-  if (error) throw new Error(`No se pudo buscar el plan: ${error.message}`);
-  return ((data ?? []) as unknown as PlanRow[]).map((row) => ({
-    ...row,
-    name: row.name.trim().toLowerCase() === planName.trim().toLowerCase() ? row.name : row.name,
-  }));
-}
 
 async function resolveEligiblePlan(
   patientId: string,

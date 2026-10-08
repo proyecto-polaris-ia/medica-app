@@ -2,12 +2,6 @@ import { discordChannel } from "eve/channels/discord";
 
 import { resolveDoctorAccess } from "../access";
 
-const DISCORD_CREDENTIAL_KEYS = [
-  "DISCORD_APPLICATION_ID",
-  "DISCORD_BOT_TOKEN",
-  "DISCORD_PUBLIC_KEY",
-] as const;
-
 /**
  * Resolve a credential from the environment, falling back to a non-empty
  * placeholder when it is absent. `eve` derives the channel's webhook route
@@ -17,7 +11,12 @@ const DISCORD_CREDENTIAL_KEYS = [
  * credential-less builds (e.g. Vercel preview) still register the route while
  * degrading gracefully, mirroring the WhatsApp channel of Eva.
  */
-const credential = (key: (typeof DISCORD_CREDENTIAL_KEYS)[number]): string =>
+type DiscordCredentialKey =
+  | "DISCORD_APPLICATION_ID"
+  | "DISCORD_BOT_TOKEN"
+  | "DISCORD_PUBLIC_KEY";
+
+const credential = (key: DiscordCredentialKey): string =>
   process.env[key] || "unconfigured";
 
 export type MoraDiscordCommandResult =
