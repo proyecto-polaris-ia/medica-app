@@ -5,14 +5,14 @@
 > `onboarding-context`, `flows/onboarding-*`, `ai/whatsapp-inbound-agent` y
 > `ai/whatsapp-llm-provider`— se eliminó junto con las flags de routing. El canal
 > de WhatsApp lo atiende el agente **Eve** y el webhook solo verifica la firma de
-> Meta y reenvía cada mensaje a `/eve/v1/whatsapp`.
+> Meta y reenvía cada mensaje a `/eva/eve/v1/whatsapp`.
 
 ## Estado actual
 
 ```
 Meta WhatsApp Cloud API
   → POST /api/whatsapp/webhook   (verifica x-hub-signature-256)
-  → POST /eve/v1/whatsapp        (agente Eve; sin flag ni fallback legacy)
+  → POST /eva/eve/v1/whatsapp        (agente Eve; sin flag ni fallback legacy)
 ```
 
 - **Webhook**: `app/api/whatsapp/webhook/route.ts` — `GET` atiende la
@@ -31,7 +31,7 @@ Meta WhatsApp Cloud API
 ## Documentación vigente
 
 - Arquitectura general: [`../architecture.md`](../architecture.md) (secciones 3, 5 y 8).
-- Instrucciones del agente Eve: [`../agent/instructions.md`](../agent/instructions.md).
+- Instrucciones del agente Eve: [`../agents/eva/agent/instructions.md`](../agents/eva/agent/instructions.md).
 - Operación (monitoreo y rollback): [`eve-runbook.md`](eve-runbook.md).
 - Plan de migración y estado final de la Etapa 7:
   [`eve/eve-migration-plan.md`](eve/eve-migration-plan.md).

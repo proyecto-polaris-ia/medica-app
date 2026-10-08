@@ -33,7 +33,7 @@ de cobranza y seguimiento no tienen número propio: se alcanzan por
 1. `GET` — verificación de Meta (`hub.mode`, `hub.verify_token`, `hub.challenge`).
 2. `POST` — verifica la firma `x-hub-signature-256`, parsea el payload, emite el
    indicador de "escribiendo" y un registro de observabilidad, y **siempre**
-   reenvía el cuerpo crudo a `/eve/v1/whatsapp` (propagando la cabecera de firma
+   reenvía el cuerpo crudo a `/eva/eve/v1/whatsapp` (propagando la cabecera de firma
    de Meta); la respuesta de Eve se refleja al cliente.
 3. Si el reenvío falla, responde `502` y registra `webhook.failed`. No hay
    fallback: Meta reintenta la entrega.
@@ -144,4 +144,4 @@ errores de reenvío.
 
 - Arquitectura: [`../architecture.md`](../architecture.md) (secciones 3 y 5).
 - Plan de migración: [`eve/eve-migration-plan.md`](eve/eve-migration-plan.md).
-- Instrucciones del agente: [`../agent/instructions.md`](../agent/instructions.md).
+- Instrucciones del agente: [`../agents/eva/agent/instructions.md`](../agents/eva/agent/instructions.md).

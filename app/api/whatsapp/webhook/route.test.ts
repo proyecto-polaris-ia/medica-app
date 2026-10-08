@@ -105,7 +105,7 @@ describe('POST /api/whatsapp/webhook (Eve-only forwarding)', () => {
     expect(res.status).toBe(200);
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const [url, init] = fetchMock.mock.calls[0];
-    expect(String(url)).toContain('/eve/v1/whatsapp');
+    expect(String(url)).toContain('/eva/eve/v1/whatsapp');
     expect(init?.method).toBe('POST');
     expect((init?.headers as Record<string, string>)['x-hub-signature-256']).toBe('sha256=abc');
     expect(init?.body).toBe(RAW_BODY);
