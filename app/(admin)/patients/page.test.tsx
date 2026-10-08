@@ -505,6 +505,39 @@ describe('/patients empty states', () => {
     expect(screen.getByRole('button', { name: 'Limpiar búsqueda' })).toBeInTheDocument();
   });
 
+  it('clears the search from the no-results state and restores the paginated list', async () => {
+    const user = userEvent.setup();
+    currentPatients = makeManyPatients(25);
+    render(<PatientsPage />);
+    await screen.findByText('Paciente 01');
+
+    fireEvent.change(searchInput(), { target: { value: 'zzzz' } });
+    act(() => {
+      vi.advanceTimersByTime(300);
+    });
+
+    await screen.findByText('Sin coincidencias para esta búsqueda.');
+    expect(screen.queryByText('No hay pacientes registrados.')).not.toBeInTheDocument();
+    expect(screen.queryByRole('table')).not.toBeInTheDocument();
+    fetchMock.mockClear();
+
+    await user.click(screen.getByRole('button', { name: 'Limpiar búsqueda' }));
+
+    await within(table()).findByText('Paciente 01');
+    expect(searchInput()).toHaveValue('');
+    expect(screen.getByText('Página 1 de 2')).toBeInTheDocument();
+    expect(within(table()).queryByText('Paciente 21')).not.toBeInTheDocument();
+    expect(screen.queryByText('Sin coincidencias para esta búsqueda.')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(SUGGESTIONS_LABEL)).not.toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(replaceMock).toHaveBeenCalledWith('/patients');
+    });
+    const restoredUrls = listUrls();
+    expect(restoredUrls.some((url) => url.includes('q='))).toBe(false);
+    expect(restoredUrls.some((url) => url.includes('page=1'))).toBe(true);
+  });
+
   it('shows the no-patients message when the registry is empty', async () => {
     currentPatients = [];
     render(<PatientsPage />);
