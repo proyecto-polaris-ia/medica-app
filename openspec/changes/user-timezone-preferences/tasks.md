@@ -8,7 +8,7 @@ sesión.
 ## 1. BD / migración
 
 - [x] 1.1 Crear `supabase/migrations/YYYYMMDDHHMMSS_user_settings.sql` (timestamp UTC real al crear, convención vigente; no secuencial): tabla `public.user_settings` (`user_id uuid pk references auth.users(id) on delete cascade`, `timezone text not null default 'America/Mexico_City'`, `created_at`/`updated_at`, `CHECK` de longitud), `enable row level security`, grants a `authenticated`, revoke a `anon` y política `user_settings_owner_all` con `(select auth.uid()) = user_id` en `using` y `with check`. Verificar con `supabase db reset` local.
-- [ ] 1.2 Escribir `src/lib/admin/__tests__/user-settings.test.ts` contra Supabase local (`localDbEnabled`, `src/test-utils/local-db.ts`): RED de get/set, default sin fila, normalización de valor inválido y aislamiento por usuario (RLS). Cubre el escenario "Preferencia privada" del delta `admin-panel`. **Nota de chain strategy: esta tarea se ejecuta en Chain 2 junto con 3.1 (el módulo que prueba se crea ahí).**
+- [x] 1.2 Escribir `src/lib/admin/__tests__/user-settings.test.ts` contra Supabase local (`localDbEnabled`, `src/test-utils/local-db.ts`): RED de get/set, default sin fila, normalización de valor inválido y aislamiento por usuario (RLS). Cubre el escenario "Preferencia privada" del delta `admin-panel`. **Nota de chain strategy: esta tarea se ejecuta en Chain 2 junto con 3.1 (el módulo que prueba se crea ahí).**
 
 ## 2. Núcleo tz parametrizado
 
@@ -16,8 +16,8 @@ sesión.
 
 ## 3. Preferencia y settings UI
 
-- [ ] 3.1 Crear `src/lib/admin/user-settings.ts` (`getUserTimezone`, `setUserTimezone` con validación y upsert vía `createSupabaseServerClient()`), `src/lib/admin/viewer-timezone.ts` (`getViewerTimezone` con `cache` de React) y `app/api/admin/settings/timezone/route.ts` (`GET`/`PUT` con `requireUser()`, `401` sin sesión y `400` con valor inválido). Completar 1.2 para get/set y validación.
-- [ ] 3.2 Crear `src/components/admin/TimezoneProvider.tsx` (`TimezoneProvider`/`useViewerTimezone`, default `CLINIC_TZ`) y montarlo en `app/(admin)/layout.tsx` con la preferencia leída en servidor; agregar nav `Configuración` → `/settings`. Crear `app/(admin)/settings/page.tsx` y `src/components/admin/settings/TimezoneSettingsForm.tsx` (valor vigente, guardado válido, error sin sobrescribir). RED/GREEN: `TimezoneProvider.test.tsx` + test del formulario. Cubre "Timezone preference settings UI".
+- [x] 3.1 Crear `src/lib/admin/user-settings.ts` (`getUserTimezone`, `setUserTimezone` con validación y upsert vía `createSupabaseServerClient()`), `src/lib/admin/viewer-timezone.ts` (`getViewerTimezone` con `cache` de React) y `app/api/admin/settings/timezone/route.ts` (`GET`/`PUT` con `requireUser()`, `401` sin sesión y `400` con valor inválido). Completar 1.2 para get/set y validación.
+- [x] 3.2 Crear `src/components/admin/TimezoneProvider.tsx` (`TimezoneProvider`/`useViewerTimezone`, default `CLINIC_TZ`) y montarlo en `app/(admin)/layout.tsx` con la preferencia leída en servidor; agregar nav `Configuración` → `/settings`. Crear `app/(admin)/settings/page.tsx` y `src/components/admin/settings/TimezoneSettingsForm.tsx` (valor vigente, guardado válido, error sin sobrescribir). RED/GREEN: `TimezoneProvider.test.tsx` + test del formulario. Cubre "Timezone preference settings UI".
 
 ## 4. Presentación por vista
 
