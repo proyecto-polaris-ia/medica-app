@@ -4,6 +4,7 @@ import { useState } from 'react';
 import type { ClinicalVisit } from '@/lib/admin/types';
 import { useViewerTimezone } from '@/components/admin/TimezoneProvider';
 import { EmptyState } from '@/components/admin/EmptyState';
+import { ExpandableText } from '@/components/admin/ExpandableText';
 import { LoadingState } from '@/components/admin/LoadingState';
 import { ErrorState } from '@/components/admin/ErrorState';
 import { ClinicalVisitForm } from './ClinicalVisitForm';
@@ -131,31 +132,41 @@ export function PatientVisitsTab({
                   <dt className="text-xs font-semibold uppercase tracking-wide text-gray-500">
                     Objetivo
                   </dt>
-                  <dd className="text-sm text-gray-900">{visit.objective ?? '—'}</dd>
+                  <dd className="text-sm text-gray-900">
+                    <ExpandableText text={visit.objective} />
+                  </dd>
                 </div>
                 <div className="sm:col-span-2">
                   <dt className="text-xs font-semibold uppercase tracking-wide text-gray-500">
                     Valoración
                   </dt>
-                  <dd className="text-sm text-gray-900">{visit.assessment ?? '—'}</dd>
+                  <dd className="text-sm text-gray-900">
+                    <ExpandableText text={visit.assessment} />
+                  </dd>
                 </div>
                 <div className="sm:col-span-2">
                   <dt className="text-xs font-semibold uppercase tracking-wide text-gray-500">
                     Plan
                   </dt>
-                  <dd className="text-sm text-gray-900">{visit.plan ?? '—'}</dd>
+                  <dd className="text-sm text-gray-900">
+                    <ExpandableText text={visit.plan} />
+                  </dd>
                 </div>
                 <div>
                   <dt className="text-xs font-semibold uppercase tracking-wide text-gray-500">
                     Tratamiento
                   </dt>
-                  <dd className="text-sm text-gray-900">{visit.treatment ?? '—'}</dd>
+                  <dd className="text-sm text-gray-900">
+                    <ExpandableText text={visit.treatment} />
+                  </dd>
                 </div>
                 <div>
                   <dt className="text-xs font-semibold uppercase tracking-wide text-gray-500">
                     Notas
                   </dt>
-                  <dd className="text-sm text-gray-900">{visit.notes ?? '—'}</dd>
+                  <dd className="text-sm text-gray-900">
+                    <ExpandableText text={visit.notes} />
+                  </dd>
                 </div>
               </dl>
             </article>
