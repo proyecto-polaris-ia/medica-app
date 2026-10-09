@@ -42,38 +42,38 @@ de `app/(admin)/appointments/page.test.tsx`: mock de `next/navigation` —
 `useSearchParams`/`useRouter` — y mock de `fetch` para
 `/api/admin/business-hours` y `/api/admin/providers`).
 
-- [ ] 1.1 RED: el panel de filtros renderiza el título "Filtros" y un `<select>`
+- [x] 1.1 RED: el panel de filtros renderiza el título "Filtros" y un `<select>`
   de proveedores con las opciones del catálogo y "Todos" seleccionado por defecto,
   mostrando la tabla completa.
   - Cubre: "Filtro por proveedor en la lista de horarios" → escenario "Selección
     por defecto muestra todos los horarios" (D2, D6).
   - Verificación: `npx vitest run "app/(admin)/business-hours/page.test.tsx"` → falla.
-- [ ] 1.2 RED: seleccionar un proveedor muestra solo sus horarios y "Todos"
+- [x] 1.2 RED: seleccionar un proveedor muestra solo sus horarios y "Todos"
   restaura la lista completa, sin emitir una nueva petición al endpoint.
   - Cubre: "Filtro por proveedor en la lista de horarios" → escenarios "Seleccionar
     un proveedor filtra sus horarios", "Regresar a 'Todos' restaura la lista
     completa" y "El filtro no cambia la petición al endpoint" (D1, D6).
   - Verificación: `npx vitest run "app/(admin)/business-hours/page.test.tsx"` → falla.
-- [ ] 1.3 RED: "Limpiar filtro" no existe sin filtro, aparece al seleccionar un
+- [x] 1.3 RED: "Limpiar filtro" no existe sin filtro, aparece al seleccionar un
   proveedor, devuelve a "Todos" y no altera los horarios cargados.
   - Cubre: "Limpieza del filtro por proveedor" → sus tres escenarios (D4, D6).
   - Verificación: `npx vitest run "app/(admin)/business-hours/page.test.tsx"` → falla.
-- [ ] 1.4 RED: seleccionar escribe `?providerId=` con `router.replace`; un deep
+- [x] 1.4 RED: seleccionar escribe `?providerId=` con `router.replace`; un deep
   link inicializa el filtro; sin parámetro se muestran todos; un `providerId`
   desconocido cae en "Todos".
   - Cubre: "Sincronización del filtro con la URL" → sus tres escenarios, más el
     borde de `providerId` desconocido (§4.1 de `design.md`) (D3, D6).
   - Verificación: `npx vitest run "app/(admin)/business-hours/page.test.tsx"` → falla.
-- [ ] 1.5 RED: el filtro se conserva cuando editar y eliminar recargan los datos.
+- [x] 1.5 RED: el filtro se conserva cuando editar y eliminar recargan los datos.
   - Cubre: "Persistencia del filtro y estado vacío del proveedor" → escenarios "El
     filtro sobrevive a la edición" y "El filtro sobrevive a la eliminación" (D4, D6).
   - Verificación: `npx vitest run "app/(admin)/business-hours/page.test.tsx"` → falla.
-- [ ] 1.6 RED: un proveedor sin horarios muestra el estado vacío propio; una lista
+- [x] 1.6 RED: un proveedor sin horarios muestra el estado vacío propio; una lista
   sin horarios conserva el mensaje general.
   - Cubre: "Persistencia del filtro y estado vacío del proveedor" → escenario
     "Proveedor sin horarios muestra su propio estado vacío" (D5, D6).
   - Verificación: `npx vitest run "app/(admin)/business-hours/page.test.tsx"` → falla.
-- [ ] 1.7 Registrar la evidencia RED de la suite (conteo de fallos y mensaje
+- [x] 1.7 Registrar la evidencia RED de la suite (conteo de fallos y mensaje
   representativo) antes de implementar.
 
 ---
@@ -82,33 +82,33 @@ de `app/(admin)/appointments/page.test.tsx`: mock de `next/navigation` —
 
 Archivo: `app/(admin)/business-hours/page.tsx`.
 
-- [ ] 2.1 GREEN: agregar `useSearchParams`/`useRouter`, el estado `providerFilter`
+- [x] 2.1 GREEN: agregar `useSearchParams`/`useRouter`, el estado `providerFilter`
   inicializado desde `?providerId=`, la derivación `activeProviderFilter` validada
   contra `providers` y el helper `businessHoursUrl(providerId)` (D3).
   - Verificación: `npx vitest run "app/(admin)/business-hours/page.test.tsx"` →
     tarea 1.4 en verde; `npx tsc --noEmit` sin errores.
-- [ ] 2.2 GREEN: agregar el panel de filtros arriba del `DataTable` con el título
+- [x] 2.2 GREEN: agregar el panel de filtros arriba del `DataTable` con el título
   "Filtros", el `<select id="filter-provider">` con "Todos" y el botón "Limpiar
   filtro" visible solo con filtro activo (D2, D4).
   - Verificación: `npx vitest run "app/(admin)/business-hours/page.test.tsx"` →
     tareas 1.1 y 1.3 en verde.
-- [ ] 2.3 GREEN: derivar `filteredHours` en memoria y pasarlo al `DataTable`; el
+- [x] 2.3 GREEN: derivar `filteredHours` en memoria y pasarlo al `DataTable`; el
   handler reescribe la URL con `router.replace` (D1, D3).
   - Verificación: `npx vitest run "app/(admin)/business-hours/page.test.tsx"` →
     tareas 1.2 y 1.4 en verde.
-- [ ] 2.4 GREEN: renderizar `EmptyState` con el mensaje propio del proveedor
+- [x] 2.4 GREEN: renderizar `EmptyState` con el mensaje propio del proveedor
   cuando hay filtro y cero filas, conservando el mensaje general sin filtro (D5).
   - Verificación: `npx vitest run "app/(admin)/business-hours/page.test.tsx"` →
     tarea 1.6 en verde.
-- [ ] 2.5 GREEN: confirmar que `handleSubmit` (`:84-109`) y `handleDelete`
+- [x] 2.5 GREEN: confirmar que `handleSubmit` (`:84-109`) y `handleDelete`
   (`:111-122`) conservan el filtro tras `loadData()` y ajustar solo si la
   derivación lo requiere (D4).
   - Verificación: `npx vitest run "app/(admin)/business-hours/page.test.tsx"` →
     tarea 1.5 en verde.
-- [ ] 2.6 TRIANGULATE: bordes — `providerId` desconocido en la URL, catálogo de
+- [x] 2.6 TRIANGULATE: bordes — `providerId` desconocido en la URL, catálogo de
   proveedores vacío, limpiar tras editar, seleccionar → limpiar → seleccionar,
   proveedor sin horarios con `hours` total no vacío y `hours` total vacío.
-- [ ] 2.7 REFACTOR: extraer a helpers con nombre la derivación de filas y el
+- [x] 2.7 REFACTOR: extraer a helpers con nombre la derivación de filas y el
   mensaje vacío sin cambiar el contrato observable.
   - Verificación: `npx vitest run "app/(admin)/business-hours/page.test.tsx"`
     sigue en verde.
@@ -117,18 +117,18 @@ Archivo: `app/(admin)/business-hours/page.tsx`.
 
 ## Fase 3 — Verificación
 
-- [ ] 3.1 Suite focal:
+- [x] 3.1 Suite focal:
   `npx vitest run "app/(admin)/business-hours/page.test.tsx"` → verde.
-- [ ] 3.2 Suite completa: `npm test` → verde (registrar cualquier fallo
+- [x] 3.2 Suite completa: `npm test` → verde (registrar cualquier fallo
   preexistente ajeno al change).
-- [ ] 3.3 Typecheck: `npx tsc --noEmit` → sin errores.
-- [ ] 3.4 Build: `npm run build` → sin errores.
-- [ ] 3.5 Trazabilidad: mapear los 4 requirements de
+- [x] 3.3 Typecheck: `npx tsc --noEmit` → sin errores.
+- [x] 3.4 Build: `npm run build` → sin errores.
+- [x] 3.5 Trazabilidad: mapear los 4 requirements de
   `specs/admin-panel/spec.md` y sus escenarios a pruebas que pasan.
-- [ ] 3.6 Trazabilidad de decisiones: confirmar las 6 decisiones de `design.md` §3
+- [x] 3.6 Trazabilidad de decisiones: confirmar las 6 decisiones de `design.md` §3
   implementadas y verificadas (D1 filtrado client-side, D2 select nativo, D3 URL,
   D4 persistencia, D5 estado vacío, D6 pruebas).
-- [ ] 3.7 Invariantes por diff: `app/api/admin/business-hours/route.ts`,
+- [x] 3.7 Invariantes por diff: `app/api/admin/business-hours/route.ts`,
   `src/lib/admin/business-hours.ts`, `src/components/admin/EmptyState.tsx`,
   `DataTable.tsx`, `FormModal.tsx`, `LoadingState.tsx`, `ErrorState.tsx`,
   `Pagination.tsx` y `package.json` sin cambios; `travelhub-app` intacto.

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { DataTable } from '@/components/admin/DataTable';
 import { EmptyState } from '@/components/admin/EmptyState';
 import { ErrorState } from '@/components/admin/ErrorState';
@@ -23,7 +24,18 @@ type BusinessHour = {
 const DAYS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
 const emptyHour = { providerId: '', dayOfWeek: 1, startTime: '09:00', endTime: '17:00' };
 
+// URL destino de la sincronía del filtro con el historial: `providerId` solo
+// cuando hay selección, `/business-hours` limpio cuando no. `router.replace`
+// (no `push`) evita apilar una entrada por cada cambio de filtro.
+function businessHoursUrl(providerId: string): string {
+  return providerId
+    ? `/business-hours?providerId=${encodeURIComponent(providerId)}`
+    : '/business-hours';
+}
+
 export default function BusinessHoursPage() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
   const [hours, setHours] = useState<BusinessHour[]>([]);
   const [providers, setProviders] = useState<Provider[]>([]);
   const [loading, setLoading] = useState(true);
@@ -32,6 +44,17 @@ export default function BusinessHoursPage() {
   const [editing, setEditing] = useState<BusinessHour | null>(null);
   const [form, setForm] = useState(emptyHour);
   const [submitting, setSubmitting] = useState(false);
+  // Lectura única de la URL al inicializar (deep link), sin `useEffect` de
+  // sincronía: el handler es quien proyecta el estado a la URL. Vive separado
+  // de `hours`, así sobrevive a las recargas de edición y eliminación.
+  const [providerFilter, setProviderFilter] = useState(
+    () => searchParams?.get('providerId') ?? ''
+  );
+  // El catálogo llega async: un id que no exista en `providers` (enlace viejo o
+  // proveedor dado de baja) cae en "Todos" y no filtra.
+  const activeProviderFilter = providers.some((p) => p.id === providerFilter)
+    ? providerFilter
+    : '';
 
   async function loadData() {
     setLoading(true);
@@ -125,6 +148,17 @@ export default function BusinessHoursPage() {
     return providers.find((p) => p.id === id)?.name ?? id;
   }
 
+  // Filtrado en memoria sobre los horarios ya cargados (D1): no toca la petición
+  // al endpoint ni su contrato y no dispara refetch al cambiar de proveedor.
+  const filteredHours = activeProviderFilter
+    ? hours.filter((h) => h.providerId === activeProviderFilter)
+    : hours;
+
+  function handleProviderFilterChange(value: string) {
+    setProviderFilter(value);
+    router.replace(businessHoursUrl(value));
+  }
+
   return (
     <div>
       <div className="mb-6 flex items-center justify-between">
@@ -137,12 +171,55 @@ export default function BusinessHoursPage() {
         </button>
       </div>
 
+      <div className="mb-4 rounded-lg border bg-white p-4 shadow-sm">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-sm font-semibold text-gray-700">Filtros</h2>
+          {activeProviderFilter && (
+            <button
+              onClick={() => handleProviderFilterChange('')}
+              className="text-sm text-blue-600 hover:text-blue-800"
+            >
+              Limpiar filtro
+            </button>
+          )}
+        </div>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          <div>
+            <label
+              htmlFor="filter-provider"
+              className="block text-xs font-medium text-gray-600"
+            >
+              Proveedor
+            </label>
+            <select
+              id="filter-provider"
+              value={activeProviderFilter}
+              onChange={(e) => handleProviderFilterChange(e.target.value)}
+              className="mt-1 block w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+            >
+              <option value="">Todos</option>
+              {providers.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+      </div>
+
       {loading && <LoadingState />}
       {error && <ErrorState message={error} onRetry={loadData} />}
-      {!loading && !error && hours.length === 0 && (
-        <EmptyState message="No hay horarios registrados." />
+      {!loading && !error && filteredHours.length === 0 && (
+        <EmptyState
+          message={
+            activeProviderFilter
+              ? 'No hay horarios registrados para este proveedor.'
+              : 'No hay horarios registrados.'
+          }
+        />
       )}
-      {!loading && !error && hours.length > 0 && (
+      {!loading && !error && filteredHours.length > 0 && (
         <DataTable
           columns={[
             { header: 'Proveedor', cell: (h) => providerName(h.providerId) },
@@ -150,7 +227,7 @@ export default function BusinessHoursPage() {
             { header: 'Inicio', cell: (h) => h.startTime },
             { header: 'Fin', cell: (h) => h.endTime },
           ]}
-          rows={hours}
+          rows={filteredHours}
           onEdit={openEdit}
           onDelete={handleDelete}
         />
