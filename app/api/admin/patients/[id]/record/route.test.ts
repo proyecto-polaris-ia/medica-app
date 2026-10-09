@@ -40,11 +40,9 @@ describe('GET /api/admin/patients/[id]/record', () => {
     expect(getPatientRecord).not.toHaveBeenCalled();
   });
 
-  it('returns the patient record for authenticated admins', async () => {
+  it('returns the patient record without appointment lists', async () => {
     (getPatientRecord as ReturnType<typeof vi.fn>).mockResolvedValue({
       patient: { id: PATIENT_ID, fullName: 'Daniel Rodríguez' },
-      upcomingAppointments: [],
-      attendedAppointments: [],
     });
 
     const res = await GET(
@@ -56,6 +54,9 @@ describe('GET /api/admin/patients/[id]/record', () => {
     expect(res.status).toBe(200);
     expect(getPatientRecord).toHaveBeenCalledWith(PATIENT_ID);
     expect(body.record.patient.fullName).toBe('Daniel Rodríguez');
+    // Las citas del expediente viven en los endpoints paginados dedicados.
+    expect(body.record).not.toHaveProperty('upcomingAppointments');
+    expect(body.record).not.toHaveProperty('attendedAppointments');
   });
 
   it('returns 404 when the patient does not exist', async () => {

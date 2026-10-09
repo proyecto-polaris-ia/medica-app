@@ -241,8 +241,12 @@ export type PatientRecordAppointment = Omit<Appointment, 'reminders'> & {
 
 export type PatientRecord = {
   patient: Patient;
-  upcomingAppointments: PatientRecordAppointment[];
-  attendedAppointments: PatientRecordAppointment[];
+};
+
+/** Página de citas del expediente tal como la devuelve la capa de datos. */
+export type PatientAppointmentsPage = {
+  appointments: PatientRecordAppointment[];
+  total: number;
 };
 
 export type ProviderAppointment = {

@@ -7,7 +7,6 @@ import type {
   Patient,
   PatientFile,
   PatientReceivableSummary,
-  PatientRecord,
   Payment,
   TreatmentPlan,
 } from '@/lib/admin/types';
@@ -32,7 +31,8 @@ type TabId =
 
 type PatientRecordTabsProps = {
   patient: Patient;
-  record: PatientRecord;
+  /** `true` en `/patients/[id]`: sincroniza la paginación de citas con la URL. */
+  syncUrl?: boolean;
   medicalHistory: MedicalHistory;
   clinicalVisits: ClinicalVisit[];
   visitsLoading: boolean;
@@ -67,7 +67,7 @@ const TABS: { id: TabId; label: string }[] = [
 
 export function PatientRecordTabs({
   patient,
-  record,
+  syncUrl,
   medicalHistory,
   clinicalVisits,
   visitsLoading,
@@ -143,7 +143,9 @@ export function PatientRecordTabs({
             onVisitsChanged={onVisitsChanged}
           />
         )}
-        {activeTab === 'appointments' && <PatientAppointmentsTab record={record} />}
+        {activeTab === 'appointments' && (
+          <PatientAppointmentsTab patient={patient} syncUrl={syncUrl} />
+        )}
         {activeTab === 'plans' && (
           <TreatmentPlansTab
             patientId={patient.id}

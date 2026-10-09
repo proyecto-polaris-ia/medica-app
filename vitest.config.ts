@@ -16,6 +16,12 @@ export default defineConfig({
   test: {
     globals: true,
     setupFiles: ['./vitest.setup.ts'],
+    // Las suites de datos locales (test:local) serializan el truncado del
+    // esquema public con un advisory lock (src/test-utils/local-db.ts). Con
+    // ~25 suites en paralelo, la espera del lock puede superar los 10s
+    // default y matar el beforeAll ("Hook timed out"). El lock serializa de
+    // todos modos: dar margen suficiente para esperar el turno.
+    hookTimeout: 60_000,
     coverage: {
       // Keep producing coverage summaries even when tests fail, so the
       // sanity-kit dashboard can report coverage independently of test health.

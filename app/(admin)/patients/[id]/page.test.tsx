@@ -6,6 +6,11 @@ import PatientRecordPage from './page';
 const PATIENT_ID = '550e8400-e29b-41d4-a716-446655440000';
 const VISIT_ID = '660e8400-e29b-41d4-a716-446655440000';
 
+const { replaceMock, searchParamsRef } = vi.hoisted(() => ({
+  replaceMock: vi.fn(),
+  searchParamsRef: { value: new URLSearchParams() },
+}));
+
 const BASE_PATIENT = {
   id: PATIENT_ID,
   fullName: 'Juan Pérez',
@@ -27,8 +32,6 @@ const BASE_PATIENT = {
 
 const BASE_RECORD = {
   patient: BASE_PATIENT,
-  upcomingAppointments: [],
-  attendedAppointments: [],
 };
 
 const EMPTY_HISTORY = {
@@ -52,6 +55,9 @@ const EMPTY_HISTORY = {
 
 vi.mock('next/navigation', () => ({
   useParams: () => ({ id: PATIENT_ID }),
+  useRouter: () => ({ replace: replaceMock, push: vi.fn(), refresh: vi.fn() }),
+  useSearchParams: () => searchParamsRef.value,
+  usePathname: () => `/patients/${PATIENT_ID}`,
 }));
 
 function buildFetchMock(overrides: {
@@ -62,12 +68,16 @@ function buildFetchMock(overrides: {
   paymentsResponse?: Record<string, unknown>;
   paymentsOk?: boolean;
   files?: Record<string, unknown>[];
+  upcoming?: Record<string, unknown>[];
+  attended?: Record<string, unknown>[];
 } = {}) {
   const record = overrides.record ?? BASE_RECORD;
   const history = overrides.history ?? EMPTY_HISTORY;
   const visits = overrides.visits ?? [];
   const treatmentPlans = overrides.treatmentPlans ?? [];
   const files = overrides.files ?? [];
+  const upcoming = overrides.upcoming ?? [];
+  const attended = overrides.attended ?? [];
   const paymentsResponse = overrides.paymentsResponse ?? {
     payments: [],
     summary: {
@@ -113,6 +123,28 @@ function buildFetchMock(overrides: {
       return Promise.resolve({ ok: true, json: () => Promise.resolve({ files }) });
     }
 
+    if (urlString.startsWith(`/api/admin/patients/${PATIENT_ID}/appointments/upcoming`)) {
+      return Promise.resolve({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            appointments: upcoming,
+            pagination: { total: upcoming.length, page: 1, pageSize: 10, totalPages: 1 },
+          }),
+      });
+    }
+
+    if (urlString.startsWith(`/api/admin/patients/${PATIENT_ID}/appointments/attended`)) {
+      return Promise.resolve({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            appointments: attended,
+            pagination: { total: attended.length, page: 1, pageSize: 10, totalPages: 1 },
+          }),
+      });
+    }
+
     if (urlString === `/api/admin/patients/${PATIENT_ID}/clinical-visits` && init?.method === 'POST') {
       return Promise.resolve({
         ok: true,
@@ -150,6 +182,8 @@ function buildFetchMock(overrides: {
 describe('/patients/[id] clinical record UI', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    replaceMock.mockClear();
+    searchParamsRef.value = new URLSearchParams();
     window.alert = vi.fn();
     window.confirm = vi.fn(() => true);
   });
@@ -456,26 +490,26 @@ describe('/patients/[id] clinical record UI', () => {
     expect(fetchMock).toHaveBeenCalledWith(`/api/admin/patients/${PATIENT_ID}/treatment-plans`);
   });
 
-  it('keeps the Citas tab using the existing record endpoint', async () => {
+  it('consume los endpoints paginados de citas en la pestaña Citas', async () => {
     const user = userEvent.setup();
     const fetchMock = buildFetchMock({
-      record: {
-        ...BASE_RECORD,
-        upcomingAppointments: [
-          {
-            id: 'appt-1',
-            patientId: PATIENT_ID,
-            serviceId: 'svc-1',
-            providerId: 'prov-1',
-            startAt: '2026-09-10T14:00:00Z',
-            endAt: '2026-09-10T14:30:00Z',
-            status: 'confirmed',
-            notes: null,
-            serviceName: 'Limpieza',
-            providerName: 'Dra. Ana',
-          },
-        ],
-      },
+      upcoming: [
+        {
+          id: 'appt-1',
+          patientId: PATIENT_ID,
+          serviceId: 'svc-1',
+          providerId: 'prov-1',
+          startAt: '2026-09-10T14:00:00Z',
+          endAt: '2026-09-10T14:30:00Z',
+          status: 'confirmed',
+          notes: null,
+          createdAt: '2026-09-01T10:00:00Z',
+          updatedAt: '2026-09-01T10:00:00Z',
+          serviceName: 'Limpieza',
+          providerName: 'Dra. Ana',
+        },
+      ],
+      attended: [],
     });
     global.fetch = fetchMock;
     render(<PatientRecordPage />);
@@ -489,7 +523,14 @@ describe('/patients/[id] clinical record UI', () => {
     await waitFor(() => {
       expect(screen.getByText('Limpieza')).toBeInTheDocument();
     });
-
-    expect(fetchMock).toHaveBeenCalledWith(`/api/admin/patients/${PATIENT_ID}/record`);
+    expect(
+      screen.getByText('No hay citas asistidas registradas para este paciente.')
+    ).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith(
+      `/api/admin/patients/${PATIENT_ID}/appointments/upcoming?page=1&pageSize=10`
+    );
+    expect(fetchMock).toHaveBeenCalledWith(
+      `/api/admin/patients/${PATIENT_ID}/appointments/attended?page=1&pageSize=10`
+    );
   });
 });

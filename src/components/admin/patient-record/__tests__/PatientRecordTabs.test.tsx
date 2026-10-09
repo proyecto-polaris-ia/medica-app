@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
-import type { MedicalHistory, Patient, PatientRecord, PatientReceivableSummary } from '@/lib/admin/types';
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import type { MedicalHistory, Patient, PatientReceivableSummary } from '@/lib/admin/types';
 import { PatientRecordTabs } from '../PatientRecordTabs';
 
 const PATIENT_ID = '550e8400-e29b-41d4-a716-446655440000';
@@ -22,12 +23,6 @@ const PATIENT: Patient = {
   emergencyContactRelationship: null,
   createdAt: '2026-09-01T10:00:00Z',
   updatedAt: '2026-09-01T10:00:00Z',
-};
-
-const RECORD: PatientRecord = {
-  patient: PATIENT,
-  upcomingAppointments: [],
-  attendedAppointments: [],
 };
 
 const PAYMENTS_SUMMARY: PatientReceivableSummary = {
@@ -68,7 +63,6 @@ function renderTabs(medicalHistory: MedicalHistory) {
   return render(
     <PatientRecordTabs
       patient={PATIENT}
-      record={RECORD}
       medicalHistory={medicalHistory}
       clinicalVisits={[]}
       visitsLoading={false}
@@ -128,5 +122,63 @@ describe('PatientRecordTabs onboarding badge', () => {
     renderTabs(history());
 
     expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('la pestaña Citas consume los endpoints paginados del expediente', async () => {
+    const fetchMock = vi.fn().mockImplementation((input: RequestInfo | URL) => {
+      const url = input.toString();
+      if (url.startsWith(`/api/admin/patients/${PATIENT_ID}/appointments/upcoming`)) {
+        return Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              appointments: [
+                {
+                  id: 'appt-1',
+                  patientId: PATIENT_ID,
+                  serviceId: 'svc-1',
+                  providerId: 'prov-1',
+                  startAt: '2026-09-10T14:00:00Z',
+                  endAt: '2026-09-10T14:30:00Z',
+                  status: 'confirmed',
+                  notes: null,
+                  createdAt: '2026-09-01T10:00:00Z',
+                  updatedAt: '2026-09-01T10:00:00Z',
+                  serviceName: 'Limpieza',
+                  providerName: 'Dra. Ana',
+                },
+              ],
+              pagination: { total: 1, page: 1, pageSize: 10, totalPages: 1 },
+            }),
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            appointments: [],
+            pagination: { total: 0, page: 1, pageSize: 10, totalPages: 0 },
+          }),
+      });
+    });
+    global.fetch = fetchMock;
+    const user = userEvent.setup();
+    renderTabs(history());
+
+    await user.click(screen.getByRole('tab', { name: 'Citas' }));
+
+    expect(await screen.findByText('Limpieza')).toBeInTheDocument();
+    expect(
+      screen.getByText('No hay citas asistidas registradas para este paciente.')
+    ).toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        `/api/admin/patients/${PATIENT_ID}/appointments/upcoming?page=1&pageSize=10`
+      );
+      expect(fetchMock).toHaveBeenCalledWith(
+        `/api/admin/patients/${PATIENT_ID}/appointments/attended?page=1&pageSize=10`
+      );
+    });
   });
 });

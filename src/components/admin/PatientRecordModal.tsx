@@ -54,7 +54,7 @@ export function PatientRecordModal({
         </div>
         {loading && <p className="text-sm text-gray-500">Cargando expediente...</p>}
         {error && <p className="text-sm text-red-600">{error}</p>}
-        {!loading && !error && record && <PatientRecordView record={record} />}
+        {!loading && !error && record && <PatientRecordView patient={record.patient} />}
       </div>
     </div>
   );
