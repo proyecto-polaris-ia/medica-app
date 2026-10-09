@@ -236,6 +236,8 @@ export type CalendarBlock = {
   patientName: string;
   serviceName: string;
   startLabel: string;
+  /** Hora de fin del rango, en la misma zona que `startLabel`. */
+  endLabel?: string;
   color: string;
   status: import('./types').AppointmentStatus;
   // Opcionales: los consumidores que ya los tienen a la mano los copian para
@@ -251,7 +253,7 @@ export function groupAppointmentsByDay(
     serviceName: string;
     providerId: string;
     startAt: string;
-    endAt: string;
+    endAt?: string | null;
     status: import('./types').AppointmentStatus;
     patientId?: string | null;
     providerName?: string;
@@ -276,6 +278,9 @@ export function groupAppointmentsByDay(
     };
 
     // Se copian solo si vienen presentes: no se inventan valores.
+    if (appointment.endAt) {
+      block.endLabel = clinicTimeLabel(appointment.endAt, timeZone);
+    }
     if (appointment.providerName !== undefined) {
       block.providerName = appointment.providerName;
     }
