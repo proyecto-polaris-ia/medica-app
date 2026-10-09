@@ -30,8 +30,13 @@ Ciclo SDD/OpenSpec: proposal → spec → design → tasks → apply → verify 
     `w-40 text-right inputMode="decimal"`, Diente intacto.
   - `tsc --noEmit` exit 0; `lint` exit 0 (warnings preexistentes); suite del
     plan 7/7 passed.
-- [ ] 4. Verificar: `npx tsc --noEmit`, `npm run lint`, `npm run test`, `npm run build`.
-- [ ] 5. Archive del change OpenSpec + commits de unidad de trabajo.
+- [x] 4. Verificación PASS (gentle-ai-verify, task mv0ckbx0-4-m23x): `npm test`
+      1789/1789, `build` exit 0, `tsc` exit 0, `lint` 0 errores, backward
+      compat confirmada (6 call sites sin cambios). Reporte:
+      `verify-report.md` en el change.
+- [x] 5. Archive + commits: change archivado en
+      `openspec/changes/archive/2026-10-08-ensanchar-modal-plan-tratamiento/`.
+      Commits: `9fde8c6` feat(admin-ui) y `29b7d19` docs(openspec).
 - [ ] 6. Push + PR (pendiente de decisión del usuario).
 
 ## Evidencia
