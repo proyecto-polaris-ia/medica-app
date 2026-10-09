@@ -70,11 +70,18 @@ Estado: en progreso
    knip sin hallazgos. Único warning: la edición concurrente del propio doc
    ODD durante la verificación (edición del orquestador, benigna). RED del
    TDD no re-observable post-commit (verificado por evidencia del apply).
-6. [ ] Archive del change OpenSpec + PR (Closes #171). — archive hecho
-   (`openspec/changes/archive/2026-10-08-agregar-paginacion-filtro-horarios/`,
-   spec fusionada en `openspec/specs/admin-business-hours/spec.md`, 11
-   requirements / 31 escenarios verificados sin drift). Pendiente: commit,
-   revisión nativa del candidato final, push + PR (decisión del usuario).
+6. [x] Archive del change OpenSpec + PR (Closes #171). — archive
+   comprometido (`9fa1419`): change en
+   `openspec/changes/archive/2026-10-08-agregar-paginacion-filtro-horarios/`,
+   capability `admin-business-hours` fusionada (11 requirements / 31
+   escenarios, sin drift). **Revisión nativa del candidato final approved**
+   (target `sha256:bc8f2713…`, lineage `review-aa955b96e2c7c454`, lente
+   `review-reliability`, autoridad quemada). Hallazgos informativos de
+   seguimiento: R3-url-param-loss-01 WARNING (`page.tsx:49-55`, el builder de
+   URL puede descartar params desconocidos), R3-huge-page-offset-01
+   (`route.ts:34`), R3-normalize-empty-untested-01 (`page.tsx:123-130`,
+   normalización a página 1 con total=0 sin prueba dedicada). Pendiente
+   (decisión del usuario): push + PR `Closes #171`.
 
 ## Revisión nativa (RDD)
 
