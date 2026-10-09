@@ -60,136 +60,165 @@ frontend después). La decisión de PR no es de este plan.
 
 ### 1. Pruebas de datos — `src/lib/admin/__tests__/business-hours.test.ts` (`npm run test:local`)
 
-- [ ] 1.1 RED (D1): `listBusinessHoursPage({ page: 1, pageSize: 2 })` con más de
+- [x] 1.1 RED (D1): `listBusinessHoursPage({ page: 1, pageSize: 2 })` con más de
   2 horarios devuelve 2 filas, `total` = total del conjunto y una página 2 con
   filas distintas. Requirement: "Paginación del listado de horarios del panel".
-- [ ] 1.2 RED (D1, D8): `total` no depende de la página y `totalPages` del
+- [x] 1.2 RED (D1, D8): `total` no depende de la página y `totalPages` del
   conjunto filtrado es coherente. Requirement: "Metadatos de paginación sobre el
   conjunto filtrado".
-- [ ] 1.3 RED (D1): filtro por proveedor devuelve solo horarios de ese proveedor
+- [x] 1.3 RED (D1): filtro por proveedor devuelve solo horarios de ese proveedor
   y `total` = 7 (fixture con dos proveedores). Requirement: "Filtro server-side
   por proveedor".
-- [ ] 1.4 RED (D1): orden `created_at desc, id desc` estable — dos páginas
+- [x] 1.4 RED (D1): orden `created_at desc, id desc` estable — dos páginas
   consecutivas con `created_at` idénticos no repiten filas. Requirement: "Orden
   estable del listado de horarios".
-- [ ] 1.5 RED (D1, D4): `parseUuid` inválido lanza `ValidationError`.
+- [x] 1.5 RED (D1, D4): `parseUuid` inválido lanza `ValidationError`.
   Requirement: "Filtro server-side por proveedor".
-- [ ] 1.6 RED (D2): página fuera de rango (`range` excedido, `PGRST103`)
+- [x] 1.6 RED (D2): página fuera de rango (`range` excedido, `PGRST103`)
   devuelve `businessHours: []` con `total` real y sin lanzar error.
   Requirement: "Paginación del listado de horarios del panel".
-- [ ] 1.7 Actualizar las pruebas existentes de `listBusinessHours()` a la lectura
+- [x] 1.7 Actualizar las pruebas existentes de `listBusinessHours()` a la lectura
   paginada (la función se retira; D2).
 
 ### 2. Implementación de datos — `src/lib/admin/business-hours.ts` (GREEN)
 
-- [ ] 2.1 GREEN (D1): `listBusinessHoursPage` con `count: 'exact'`, filtro
+- [x] 2.1 GREEN (D1): `listBusinessHoursPage` con `count: 'exact'`, filtro
   `provider_id`, orden `created_at desc, id desc` y `range`.
-- [ ] 2.2 GREEN (D2): manejo de `PGRST103` con reconteo sin `range`; retiro de
+- [x] 2.2 GREEN (D2): manejo de `PGRST103` con reconteo sin `range`; retiro de
   `listBusinessHours()`.
-- [ ] 2.3 Refactor en verde: reusar `SELECT_COLUMNS`/`mapRow` y sin lógica
+- [x] 2.3 Refactor en verde: reusar `SELECT_COLUMNS`/`mapRow` y sin lógica
   duplicada.
 
 ### 3. Pruebas de ruta — `app/api/admin/business-hours/route.test.ts` (`npm test`)
 
-- [ ] 3.1 RED (D3, D5): `GET ?page=2&pageSize=20` llama a
+- [x] 3.1 RED (D3, D5): `GET ?page=2&pageSize=20` llama a
   `listBusinessHoursPage` con los parámetros esperados y responde
   `{ businessHours, pagination }` con `totalPages` calculado.
   Requirement: "Paginación del listado de horarios del panel".
-- [ ] 3.2 RED (D3): sin parámetros usa `page=1`, `pageSize=20`.
-- [ ] 3.3 RED (D5): `businessHours` conserva forma y campos (respuesta aditiva).
-- [ ] 3.4 RED (D3, D4): `400` con `{ error: 'invalid_request' }` para `page=0`,
+- [x] 3.2 RED (D3): sin parámetros usa `page=1`, `pageSize=20`.
+- [x] 3.3 RED (D5): `businessHours` conserva forma y campos (respuesta aditiva).
+- [x] 3.4 RED (D3, D4): `400` con `{ error: 'invalid_request' }` para `page=0`,
   `pageSize=101`, `pageSize=abc` y `providerId` no UUID, sin cuerpo de datos.
   Requirement: "Validación de los parámetros de paginación" y "Filtro
   server-side por proveedor".
-- [ ] 3.5 RED (D4): `providerId` vacío o ausente llega como `undefined` a la
+- [x] 3.5 RED (D4): `providerId` vacío o ausente llega como `undefined` a la
   capa de datos (sin filtro).
-- [ ] 3.6 RED: `401` sin sesión; `POST` conserva su contrato `201`
+- [x] 3.6 RED: `401` sin sesión; `POST` conserva su contrato `201`
   `{ businessHour }`.
 
 ### 4. Implementación de ruta — `app/api/admin/business-hours/route.ts` (GREEN)
 
-- [ ] 4.1 GREEN (D3): parsers locales `parsePageParam`/`parsePageSizeParam`
+- [x] 4.1 GREEN (D3): parsers locales `parsePageParam`/`parsePageSizeParam`
   (`/^\d+$/` + `Number.isSafeInteger`, `DEFAULT_PAGE_SIZE = 20`,
   `MAX_PAGE_SIZE = 100`).
-- [ ] 4.2 GREEN (D4, D5): lectura de `providerId` (vacío → `undefined`),
+- [x] 4.2 GREEN (D4, D5): lectura de `providerId` (vacío → `undefined`),
   llamada a `listBusinessHoursPage` y respuesta
   `{ businessHours, pagination }` con `totalPages = Math.ceil(total / pageSize)`.
-- [ ] 4.3 Refactor en verde: el `GET` conserva `handleAdminRequest` +
+- [x] 4.3 Refactor en verde: el `GET` conserva `handleAdminRequest` +
   `requireUser()`; `POST` intacto.
 
 ## Fase 2 — Frontend (RED → GREEN)
 
 ### 5. Pruebas de UI — `app/(admin)/business-hours/page.test.tsx` (nuevo, `npm test`)
 
-- [ ] 5.1 RED (D6, D7): la página fetcha `/api/admin/business-hours?page=1` (o
+- [x] 5.1 RED (D6, D7): la página fetcha `/api/admin/business-hours?page=1` (o
   sin `page`) y monta `Pagination` debajo de la tabla con "Página 1 de Y (N
   resultados)". Requirement: "Control de paginación en la vista de horarios".
-- [ ] 5.2 RED (D6, D7): avanzar de página refetcha con `page=2` y muestra las
+- [x] 5.2 RED (D6, D7): avanzar de página refetcha con `page=2` y muestra las
   filas de esa página; el `select` de filtro conserva su valor.
-- [ ] 5.3 RED (D8): `?page=2&providerId=<uuid>` inicializa página y filtro;
+- [x] 5.3 RED (D8): `?page=2&providerId=<uuid>` inicializa página y filtro;
   cambiar de página escribe `page=2` con `router.replace`; página 1 no se
   escribe; `providerId` se escribe solo con filtro activo.
   Requirement: "Sincronización de la lista con la URL".
-- [ ] 5.4 RED (D8, D9): activar la página ya activa no reescribe la URL ni
+- [x] 5.4 RED (D8, D9): activar la página ya activa no reescribe la URL ni
   refetcha.
-- [ ] 5.5 RED (D9): seleccionar un proveedor vuelve a `page=1` y elimina `page`
+- [x] 5.5 RED (D9): seleccionar un proveedor vuelve a `page=1` y elimina `page`
   de la URL; "Limpiar filtro" vuelve a página 1 y elimina `providerId`.
   Requirement: "Reinicio a la primera página al cambiar el filtro".
-- [ ] 5.6 RED (D10): panel de filtro con `<option value="">Todos</option>` y una
+- [x] 5.6 RED (D10): panel de filtro con `<option value="">Todos</option>` y una
   opción por proveedor; "Limpiar filtro" solo visible con filtro activo.
   Requirement: "Panel de filtro por proveedor en la vista de horarios".
-- [ ] 5.7 RED (D10): estado vacío diferenciado —
+- [x] 5.7 RED (D10): estado vacío diferenciado —
   "No hay horarios registrados." sin filtro y mensaje de filtro sin
   coincidencias con limpiar cuando el filtro no tiene resultados.
   Requirement: "Estados vacíos diferenciados en la vista de horarios".
-- [ ] 5.8 RED (D9): `?page=99` con 1 página normaliza a la última página sin
+- [x] 5.8 RED (D9): `?page=99` con 1 página normaliza a la última página sin
   estado de error y sin tabla vacía. Requirement: "Normalización de una página
   fuera de rango".
-- [ ] 5.9 RED (D6): la carga y el error conservan `LoadingState`/`ErrorState` y
+- [x] 5.9 RED (D6): la carga y el error conservan `LoadingState`/`ErrorState` y
   el reintento repite la combinación página + filtro vigente.
 
 ### 6. Implementación de UI — `app/(admin)/business-hours/page.tsx` (GREEN)
 
-- [ ] 6.1 GREEN (D6): estado `page`, `providerFilter`, `hours` y `pagination`;
+- [x] 6.1 GREEN (D6): estado `page`, `providerFilter`, `hours` y `pagination`;
   `loadData()` construye `URLSearchParams` y consume `pagination`.
-- [ ] 6.2 GREEN (D7): `Pagination` bajo el `DataTable` con
+- [x] 6.2 GREEN (D7): `Pagination` bajo el `DataTable` con
   `ariaLabel="Paginación de horarios"`; 20 filas por página; sin selector de
   `pageSize`.
-- [ ] 6.3 GREEN (D8): `useSearchParams` + `router.replace` con guardia de
+- [x] 6.3 GREEN (D8): `useSearchParams` + `router.replace` con guardia de
   reescritura; página 1 omitida; `providerId` solo con filtro.
-- [ ] 6.4 GREEN (D9): reset a página 1 al cambiar o limpiar el filtro;
+- [x] 6.4 GREEN (D9): reset a página 1 al cambiar o limpiar el filtro;
   normalización a `pagination.totalPages` cuando `page > totalPages` con
   `total > 0`.
-- [ ] 6.5 GREEN (D10): panel de filtro (select + "Limpiar filtro") y estados
+- [x] 6.5 GREEN (D10): panel de filtro (select + "Limpiar filtro") y estados
   vacíos diferenciados; `DataTable` solo con filas.
-- [ ] 6.6 Refactor en verde: extraer helpers puros (`buildListQuery`,
+- [x] 6.6 Refactor en verde: extraer helpers puros (`buildListQuery`,
   `normalizePage`) dentro del archivo si mejora la legibilidad; sin tocar
   `src/components/admin/Pagination.tsx`.
 
 ## Fase 3 — Verificación
 
-- [ ] 7.1 `npm test` en verde (rutas + UI).
-- [ ] 7.2 `supabase start` + `supabase db reset` + `npm run test:local` en verde
+- [x] 7.1 `npm test` en verde (rutas + UI).
+- [x] 7.2 `supabase start` + `supabase db reset` + `npm run test:local` en verde
   (suite de datos de `business-hours`).
-- [ ] 7.3 `npx tsc --noEmit`, `npm run lint` y `npm run build` en verde.
-- [ ] 7.4 Validación del change: `npx openspec validate
+- [x] 7.3 `npx tsc --noEmit`, `npm run lint` y `npm run build` en verde.
+- [x] 7.4 Validación del change: `npx openspec validate
   agregar-paginacion-filtro-horarios` (si el CLI está disponible en el entorno;
   si no, revisar a mano los requirements y los criterios de éxito del proposal).
-- [ ] 7.5 Revisión manual de los criterios de éxito del `proposal.md` uno a uno,
+- [x] 7.5 Revisión manual de los criterios de éxito del `proposal.md` uno a uno,
   incluyendo que `knip` no reporte exports huérfanos tras retirar
   `listBusinessHours()`.
 
 ## Fase 4 — Cierre
 
-- [ ] 8.1 Commits por unidad de trabajo (Conventional Commits), con pruebas y
+- [x] 8.1 Commits por unidad de trabajo (Conventional Commits), con pruebas y
   docs del change juntos: (1) backend/datos, (2) frontend. Presupuesto: ≤ 2
-  commits.
+  commits. Identidad: `facf16d` (backend/datos), `029f499` (frontend); el
+  commit de docs OpenSpec `d6c9ab5` los precede.
 - [ ] 8.2 PR hacia `main` con `Closes #171` (y referencia a #170); decidir PR
   único o encadenado según el pronóstico de carga y la política del repo.
-- [ ] 8.3 `openspec archive` del change (mueve la carpeta a
+  No realizado en este change: la rama no tiene upstream y el PR todavía no se
+  abrió; el orquestador/padre es dueño de la apertura del PR.
+- [x] 8.3 `openspec archive` del change (mueve la carpeta a
   `openspec/changes/archive/YYYY-MM-DD-agregar-paginacion-filtro-horarios/` y
   hace merge del delta en `openspec/specs/admin-business-hours/spec.md`), tras
-  el merge.
+  el merge. Realizado: carpeta archivada en
+  `openspec/changes/archive/2026-10-08-agregar-paginacion-filtro-horarios/` y
+  delta fusionado en `openspec/specs/admin-business-hours/spec.md` (11
+  requirements / 31 escenarios).
 - [ ] 8.4 Revisión nativa (Gentle AI, RDD) sobre el diff de producción; el
   reporte de verificación de este change es la evidencia de registro y la
   revisión es el chequeo independiente.
+  No realizada aún: la revisión nativa correrá sobre el candidato final del
+  feature; los candidatos de docs (`d6c9ab5`, approved) y docs+backend
+  (`facf16d`, admisión del revisor fallida de forma determinista, dejado
+  explícitamente sin revisar por decisión del usuario) están registrados en el
+  doc ODD del feature. Pendiente del orquestador/padre.
+
+## Verificación
+
+Resultado: **PASS WITH WARNINGS**. Evidencia observada:
+
+- `npm run test:local`: 196 archivos / 2100 pruebas pasan (exit 0, cero
+  fallas; el flake histórico del advisory lock no se reprodujo;
+  `booking.test.ts` 5/5 en aislamiento).
+- `npm test`: 1812 passed / 288 skipped, 0 fallas.
+- `npx tsc --noEmit`: limpio.
+- `npm run lint`: 0 errores / 25 warnings preexistentes, ninguno en archivos
+  tocados por el change.
+- `npm run build`: OK, 11/11 páginas.
+- `knip`: sin hallazgos.
+- Commits del feature: `facf16d` (backend), `029f499` (frontend).
+
+Único warning de proceso: la RED del TDD ya no es re-observable post-commit
+(queda evidenciada por el registro del apply); no afecta el veredicto.

@@ -53,14 +53,28 @@ Estado: en progreso
    malformado) y respuesta `{ businessHours, pagination }`. TDD RED→GREEN:
    23/23 route + 15/15 datos contra Supabase local; `tsc --noEmit` limpio. —
    commit `facf16d`.
-4. [ ] Pruebas de datos contra Supabase local (`npm run test:local`, suites del
-   módulo).
-5. [ ] Frontend: controles de paginación bajo la tabla, URL deep-linkeable,
-   reset a página 1 al cambiar filtro de proveedor, estado vacío.
-6. [ ] Verificación: pruebas + typecheck + lint + build (subagente
-   `gentle-ai-verify`).
-7. [ ] Commits de unidad de trabajo en la rama (evidencia abajo).
-8. [ ] Archive del change OpenSpec + PR (Closes #171).
+4. [x] Frontend: `/business-hours` consume el endpoint paginado; panel de
+   filtro por proveedor ("Todos" + "Limpiar filtro"); `Pagination` bajo la
+   tabla; URL `?page=n&providerId=…` (page 1 omitida) con guardia de
+   reescritura; reset a página 1 al cambiar filtro; normalización fuera de
+   rango (incl. total=0 con page>1); estados vacíos diferenciados.
+   TDD RED→GREEN: 11/11 de página + 13/13 Pagination; tsc y lint limpios. —
+   commit `029f499`.
+5. [x] Verificación completa (subagente `gentle-ai-verify`, @ `029f499`):
+   **PASS WITH WARNINGS** — `db:start`+`db:reset` OK; `test:local` 196
+   archivos / 2100 pruebas (exit 0, cero fallas; el flake histórico del
+   advisory lock no se reprodujo, booking.test.ts 5/5 en aislamiento);
+   suites del feature 23/23 + 15/15 + 24/24; `npm test` 1812 passed /
+   288 skipped, 0 fallas; `tsc --noEmit` limpio; lint 0 errores (25 warnings
+   preexistentes, ninguno en archivos tocados); `build` OK (11/11 páginas);
+   knip sin hallazgos. Único warning: la edición concurrente del propio doc
+   ODD durante la verificación (edición del orquestador, benigna). RED del
+   TDD no re-observable post-commit (verificado por evidencia del apply).
+6. [ ] Archive del change OpenSpec + PR (Closes #171). — archive hecho
+   (`openspec/changes/archive/2026-10-08-agregar-paginacion-filtro-horarios/`,
+   spec fusionada en `openspec/specs/admin-business-hours/spec.md`, 11
+   requirements / 31 escenarios verificados sin drift). Pendiente: commit,
+   revisión nativa del candidato final, push + PR (decisión del usuario).
 
 ## Revisión nativa (RDD)
 
