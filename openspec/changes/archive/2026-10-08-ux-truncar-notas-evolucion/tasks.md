@@ -54,8 +54,8 @@ Cada tarea cita los escenarios del delta
 
 ## Fase 4 — Archivo y commit
 
-- [ ] 4.1 Work-unit commits convencionales (prueba+componente / integración /
+- [x] 4.1 Work-unit commits convencionales (prueba+componente / integración /
   archivo SDD) en la rama del worktree.
-- [ ] 4.2 Mover `openspec/changes/ux-truncar-notas-evolucion/` a
+- [x] 4.2 Mover `openspec/changes/ux-truncar-notas-evolucion/` a
   `openspec/changes/archive/2026-XX-XX-ux-truncar-notas-evolucion/` y fusionar
   el delta en `openspec/specs/clinical-record/spec.md`.
