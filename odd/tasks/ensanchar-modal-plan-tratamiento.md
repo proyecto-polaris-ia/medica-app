@@ -37,7 +37,8 @@ Ciclo SDD/OpenSpec: proposal → spec → design → tasks → apply → verify 
 - [x] 5. Archive + commits: change archivado en
       `openspec/changes/archive/2026-10-08-ensanchar-modal-plan-tratamiento/`.
       Commits: `9fde8c6` feat(admin-ui) y `29b7d19` docs(openspec).
-- [ ] 6. Push + PR (pendiente de decisión del usuario).
+- [x] 6. Push + PR: PR [#213](https://github.com/proyecto-polaris-ia/medica-app/pull/213)
+      creada con `Closes #183` y label `type:feature`.
 
 ## Evidencia
 
