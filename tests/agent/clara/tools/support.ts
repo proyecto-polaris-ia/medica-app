@@ -14,10 +14,8 @@
 import { vi } from "vitest";
 
 export const STAFF_DISCORD_ID = "111222333444555666";
-export const OTHER_STAFF_DISCORD_ID = "234567890123456789";
 export const ACTOR_USER_ID = "550e8400-e29b-41d4-a716-446655440000";
 export const PATIENT_ID = "6f9619ff-8b86-d011-b42d-00cf4fc964ff";
-export const OTHER_PATIENT_ID = "7c9e6679-7425-40de-944b-e07fc1f90ae7";
 export const DRAFT_ID = "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d";
 
 export type QueryResult = { data: unknown; error: { message?: string } | null };
@@ -62,21 +60,6 @@ export function buildQuery(result: QueryResult = { data: [], error: null }): Que
   query.then = (onFulfilled, onRejected) =>
     Promise.resolve(query._result).then(onFulfilled, onRejected);
   return query;
-}
-
-/** Builder que resuelve `data` (array) y `error: null`. */
-export function rows(data: unknown[]): Query {
-  return buildQuery({ data, error: null });
-}
-
-/** Builder que resuelve una fila única o `null` en `maybeSingle`/`single`. */
-export function row(data: unknown): Query {
-  return buildQuery({ data, error: null });
-}
-
-/** Simula un fallo de lectura con `error.message`. */
-export function failing(message: string): Query {
-  return buildQuery({ data: null, error: { message } });
 }
 
 /** Encola builders por tabla y hace que `from` consuma la cola correcta. */
