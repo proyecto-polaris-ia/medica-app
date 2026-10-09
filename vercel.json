@@ -64,6 +64,23 @@
           ]
         }
       ]
+    },
+    "eve-nora": {
+      "framework": "eve",
+      "root": ".eve/vercel-services/eve-nora",
+      "buildCommand": "cd '../../../agents/nora' && export EVE_INTERNAL_BUILD_OUTPUT_DIRECTORY='../../.eve/vercel-services/eve-nora/.vercel/output' && export EVE_INTERNAL_HOST_BUILD_OUTPUT_DIRECTORY='../../.vercel/output' && export EVE_PUBLIC_ROUTE_PREFIX='/nora' && export EVE_INTERNAL_AGENT_WORKSPACE_MEMBER=1 && node '../../node_modules/eve/bin/eve.js' build",
+      "routes": [
+        {
+          "src": "^/nora/eve/v1/(.*)$",
+          "transforms": [
+            {
+              "args": "/eve/v1/$1",
+              "op": "set",
+              "type": "request.path"
+            }
+          ]
+        }
+      ]
     }
   },
   "rewrites": [
@@ -83,6 +100,12 @@
       "source": "/clara/eve/v1/(.*)",
       "destination": {
         "service": "eve-clara"
+      }
+    },
+    {
+      "source": "/nora/eve/v1/(.*)",
+      "destination": {
+        "service": "eve-nora"
       }
     },
     {
