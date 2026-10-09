@@ -104,7 +104,7 @@ Cada tarea cita los requirements del delta
 
 - [x] 6.1 Commits por unidad de trabajo (Conventional Commits) con pruebas y
   docs juntos; identidad: `8fb4aca`, `e32df20`, `a00adbb`, `e72ccb1`.
-- [ ] 6.2 Push y PR hacia `main` (issue #180) — decisión del usuario.
+- [x] 6.2 Push y PR hacia `main`: https://github.com/proyecto-polaris-ia/medica-app/pull/212
 - [ ] 6.3 `openspec archive` del change (CLI no instalado en este entorno;
   ejecutarlo donde exista `openspec`, tras el merge).
 

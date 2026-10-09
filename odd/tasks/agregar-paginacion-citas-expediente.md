@@ -14,7 +14,7 @@ Estado: OpenSpec change `openspec/changes/agregar-paginacion-citas-expediente/`.
 - [ ] 4. RED UI: PatientRecordView con secciones independientes, URL y modal
 - [ ] 5. GREEN: capa de datos + endpoints + UI
 - [x] 6. Verificación: unit, test:local, tsc, lint, build
-- [ ] 7. Cierre: PR (decisión del usuario) + openspec archive (CLI ausente aquí)
+- [x] 7. Cierre: PR https://github.com/proyecto-polaris-ia/medica-app/pull/212; openspec archive pendiente (CLI ausente aquí)
 
 ## Decisiones clave
 
