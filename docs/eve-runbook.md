@@ -26,19 +26,29 @@ binding). Cada agente raíz vive en `agents/<name>/agent/` con su propio canal.
   `Diagnostics 0 errors, 0 warnings`. Su autorización es la allowlist
   `CLARA_DISCORD_STAFF_IDS` (fail-closed, doble check canal + tools) y no
   atiende WhatsApp ni envía mensajes.
+- **Nora** (`agents/nora/agent/`): agente raíz de métricas del consultorio con
+  canal Discord propio para doctores autorizados (issue #162). La ruta del
+  canal es `/nora/eve/v1/discord` (servicio Vercel `eve-nora`). Verifícalo tras
+  cada deploy: `npx eve info --agent nora` debe reportar `Diagnostics 0 errors,
+  0 warnings`. Su autorización es la allowlist `NORA_DISCORD_DOCTOR_IDS`
+  (fail-closed, doble check canal + tools). Es de **solo lectura**: proyecta el
+  motor `src/lib/admin/metrics/` (ocupación, no-shows y conteos por status) y
+  no escribe en Supabase, no reprograma, no cancela y no envía mensajes.
 - Las tools de Mora ya no derivan identidad de un WhatsApp verificado: el
   doctor nombra al paciente (teléfono registrado o nombre) y la tool lo
   resuelve contra `patients`.
 - En WhatsApp, Eva ya no delega: ante intención de cobranza escala a un humano
   con `escalate-to-human` (transicional hasta que exista una superficie
   paciente-facing de cobranza).
-- Nora NO es un agente raíz: sigue siendo una capacidad admin/jobs (spec
-  `dashboard-metrics`). Clara tampoco es un agente de WhatsApp —no atiende
+- Clara tampoco es un agente de WhatsApp —no atiende
   pacientes ni envía mensajes— pero **sí** es un agente raíz con canal
-  Discord de staff (ver arriba).
+  Discord de staff. Nora tampoco atiende WhatsApp —su canal es Discord de
+  doctores— pero **sí** es un agente raíz de métricas de solo lectura (ver
+  arriba).
 
 Setup del canal de Discord de Mora: `docs/mora-discord-setup.md`.
 Setup del canal de Discord de Clara: `docs/clara-discord-setup.md`.
+Setup del canal de Discord de Nora: `docs/nora-discord-setup.md`.
 
 ## Modelo de reenvío (Eve-only)
 

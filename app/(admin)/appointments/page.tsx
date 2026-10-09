@@ -10,6 +10,7 @@ import { FormModal } from '@/components/admin/FormModal';
 import { LoadingState } from '@/components/admin/LoadingState';
 import { Pagination } from '@/components/admin/Pagination';
 import { MonthCalendar } from '@/components/admin/calendar/MonthCalendar';
+import { AgendaView } from '@/components/admin/calendar/AgendaView';
 import { CalendarNav } from '@/components/admin/calendar/CalendarNav';
 import { ProviderLegend } from '@/components/admin/calendar/ProviderLegend';
 import { ServiceFilter } from '@/components/admin/calendar/ServiceFilter';
@@ -35,7 +36,7 @@ type Reference = {
   name: string;
 };
 
-type ViewMode = 'list' | 'calendar';
+type ViewMode = 'list' | 'calendar' | 'agenda';
 type SortField = 'startAt' | 'endAt' | 'patient' | 'service' | 'provider' | 'status';
 type SortDirection = 'asc' | 'desc';
 
@@ -293,6 +294,10 @@ export default function AppointmentsPage() {
   const [form, setForm] = useState(emptyAppointment);
   const [submitting, setSubmitting] = useState(false);
   const [view, setView] = useState<ViewMode>('list');
+  // Modo del request de datos: la agenda comparte el rango del mes con la
+  // cuadrícula, así que alternar `calendar ↔ agenda` no cambia el request.
+  const requestMode: 'list' | 'calendar' =
+    view === 'list' ? 'list' : 'calendar';
   const [visibleMonth, setVisibleMonth] = useState(() =>
     getCurrentClinicMonth(viewerTz)
   );
@@ -350,12 +355,14 @@ export default function AppointmentsPage() {
       serviceName: refName(services, appointment.serviceId),
       patientId: appointment.patientId,
       providerId: appointment.providerId,
+      providerName: refName(providers, appointment.providerId),
       startAt: appointment.startAt,
       endAt: appointment.endAt,
       status: appointment.status,
+      notes: appointment.notes,
     }));
     return groupAppointmentsByDay(enriched, providerColor, viewerTz);
-  }, [calendarAppointments, patients, services, providerColor, viewerTz]);
+  }, [calendarAppointments, patients, services, providers, providerColor, viewerTz]);
 
   const visibleProviders = useMemo(() => {
     const providerIds = new Set(appointments.map((a) => a.providerId));
@@ -432,7 +439,7 @@ export default function AppointmentsPage() {
     setError(null);
     try {
       const requestUrl =
-        view === 'calendar'
+        requestMode === 'calendar'
           ? (() => {
               const { startAt, endAt } = clinicMonthRangeUtc(
                 visibleMonth.year,
@@ -467,7 +474,7 @@ export default function AppointmentsPage() {
       setAppointments(receivedAppointments);
       // El modo lista trae metadatos; se tolera su ausencia (mocks y respuestas
       // legacy) derivando el total de la página recibida.
-      if (view === 'list') {
+      if (requestMode === 'list') {
         setPagination(
           apptData.pagination ?? {
             total: receivedAppointments.length,
@@ -491,7 +498,7 @@ export default function AppointmentsPage() {
       setLoading(false);
     }
   }, [
-    view,
+    requestMode,
     visibleMonth,
     viewerTz,
     page,
@@ -691,6 +698,7 @@ export default function AppointmentsPage() {
             <button
               type="button"
               onClick={() => setView('list')}
+              aria-pressed={view === 'list'}
               className={[
                 'rounded-l-md border px-4 py-2 text-sm font-medium',
                 view === 'list'
@@ -703,14 +711,28 @@ export default function AppointmentsPage() {
             <button
               type="button"
               onClick={() => setView('calendar')}
+              aria-pressed={view === 'calendar'}
               className={[
-                'rounded-r-md border px-4 py-2 text-sm font-medium',
+                'border px-4 py-2 text-sm font-medium',
                 view === 'calendar'
                   ? 'border-blue-600 bg-blue-600 text-white'
                   : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50',
               ].join(' ')}
             >
               Calendario
+            </button>
+            <button
+              type="button"
+              onClick={() => setView('agenda')}
+              aria-pressed={view === 'agenda'}
+              className={[
+                'rounded-r-md border px-4 py-2 text-sm font-medium',
+                view === 'agenda'
+                  ? 'border-blue-600 bg-blue-600 text-white'
+                  : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50',
+              ].join(' ')}
+            >
+              Agenda
             </button>
           </div>
           <button
@@ -810,7 +832,7 @@ export default function AppointmentsPage() {
         </div>
       )}
 
-      {view === 'calendar' && (
+      {(view === 'calendar' || view === 'agenda') && (
         <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <CalendarNav
             year={visibleMonth.year}
@@ -987,6 +1009,17 @@ export default function AppointmentsPage() {
 
       {!loading && !error && view === 'calendar' && (
         <MonthCalendar
+          year={visibleMonth.year}
+          month={visibleMonth.month}
+          blocksByDay={blocksByDay}
+          timeZone={viewerTz}
+          onSelectBlock={handleSelectBlock}
+          onSelectPatient={openPatientRecord}
+        />
+      )}
+
+      {!loading && !error && view === 'agenda' && (
+        <AgendaView
           year={visibleMonth.year}
           month={visibleMonth.month}
           blocksByDay={blocksByDay}

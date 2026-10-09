@@ -2284,7 +2284,6 @@ describe('/appointments patient autocomplete filter', () => {
     await waitFor(() =>
       expect(lastListParams(fetchMock)!.get('patientId')).toBe(PATIENT_ID)
     );
-
     await user.click(screen.getByRole('button', { name: /^Calendario$/ }));
     await waitFor(
       () => {
@@ -2299,6 +2298,186 @@ describe('/appointments patient autocomplete filter', () => {
         'Paciente A'
       );
       expect(lastListParams(fetchMock)!.get('patientId')).toBe(PATIENT_ID);
+    });  });
+});
+
+// Vista de agenda (change agregar-vista-agenda-calendario, issue #175).
+// ---------------------------------------------------------------------------
+function agendaBlock(name: string | RegExp) {
+  return screen.queryByRole('button', { name });
+}
+
+async function openAgenda(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByRole('button', { name: /^Agenda$/ }));
+  await waitFor(
+    () => {
+      expect(screen.getAllByTestId('agenda-day').length).toBeGreaterThan(0);
+    },
+    { timeout: 10000 }
+  );
+}
+
+function rangeRequestCalls(fetchMock: { mock: { calls: unknown[][] } }) {
+  return fetchMock.mock.calls.filter((call) => {
+    const url = call[0];
+    return (
+      typeof url === 'string' &&
+      url.startsWith('/api/admin/appointments?') &&
+      url.includes('start=') &&
+      url.includes('end=')
+    );
+  });
+}
+
+describe('/appointments agenda view', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    window.alert = vi.fn();
+    window.confirm = vi.fn(() => false);
+    searchParamsRef.value = new URLSearchParams();
+    replaceMock.mockClear();
+  });
+
+  it('14.1 el toggle ofrece las tres vistas y distingue la activa', async () => {
+    global.fetch = buildCalendarFetch();
+    render(<AppointmentsPage />);
+
+    const lista = await screen.findByRole('button', { name: /^Lista$/ });
+    const calendario = screen.getByRole('button', { name: /^Calendario$/ });
+    const agenda = screen.getByRole('button', { name: /^Agenda$/ });
+
+    expect(lista).toHaveAttribute('aria-pressed', 'true');
+    expect(calendario).toHaveAttribute('aria-pressed', 'false');
+    expect(agenda).toHaveAttribute('aria-pressed', 'false');
+
+    const user = userEvent.setup();
+    await user.click(agenda);
+
+    expect(agenda).toHaveAttribute('aria-pressed', 'true');
+    expect(lista).toHaveAttribute('aria-pressed', 'false');
+  });
+
+  it('14.2 activar Agenda muestra las citas del mes agrupadas por día', async () => {
+    global.fetch = buildCalendarFetch();
+    const user = userEvent.setup();
+    render(<AppointmentsPage />);
+
+    await openAgenda(user);
+
+    await waitFor(() => {
+      expect(agendaBlock(/08:00 Limpieza — Paciente A/)).toBeInTheDocument();
+      expect(agendaBlock(/09:00 Limpieza — Paciente B/)).toBeInTheDocument();
+      expect(agendaBlock(/10:00 Limpieza — Paciente C/)).toBeInTheDocument();
     });
+    expect(screen.queryAllByTestId('weekday-label')).toHaveLength(0);
+    expect(screen.getAllByTestId('agenda-day').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Sin citas').length).toBeGreaterThan(0);
+  });
+
+  it('14.4 activar una cita de la agenda abre el formulario de edición', async () => {
+    global.fetch = buildCalendarFetch();
+    const user = userEvent.setup();
+    render(<AppointmentsPage />);
+
+    await openAgenda(user);
+    await waitFor(() =>
+      expect(agendaBlock(/08:00 Limpieza — Paciente A/)).toBeInTheDocument()
+    );
+
+    await user.click(
+      screen.getByRole('button', { name: /08:00 Limpieza — Paciente A/ })
+    );
+
+    expect(screen.getByText('Editar cita')).toBeInTheDocument();
+  });
+
+  it('14.4 activar el paciente de la agenda abre el expediente sin abrir la edición', async () => {
+    global.fetch = buildFetchMock();
+    const user = userEvent.setup();
+    render(<AppointmentsPage />);
+
+    await openAgenda(user);
+
+    await user.click(
+      screen.getByRole('button', { name: 'Ver expediente de Paciente A' })
+    );
+
+    expect(await screen.findByText('Expediente del paciente')).toBeInTheDocument();
+    expect(screen.queryByText('Editar cita')).not.toBeInTheDocument();
+  });
+
+  it('14.5 la agenda aplica el filtro de proveedor', async () => {
+    global.fetch = buildCalendarFetch();
+    const user = userEvent.setup();
+    render(<AppointmentsPage />);
+
+    await openAgenda(user);
+    await waitFor(() =>
+      expect(agendaBlock(/09:00 Limpieza — Paciente B/)).toBeInTheDocument()
+    );
+
+    await user.click(legendEntry(/Dr\. Beto/));
+
+    await waitFor(() => {
+      expect(agendaBlock(/08:00 Limpieza — Paciente A/)).toBeInTheDocument();
+      expect(agendaBlock(/09:00 Limpieza — Paciente B/)).not.toBeInTheDocument();
+    });
+  });
+
+  it('14.5 la agenda compone los filtros de proveedor y servicio', async () => {
+    global.fetch = buildCalendarFetch({
+      services: CAL_SERVICES,
+      providers: [CAL_PROVIDERS[0], CAL_PROVIDERS[1]],
+      patients: CAL_PATIENTS,
+      appointments: [
+        calAppointment('appt-xa', 'prov-a', 'patient-a', 10, 8, 'service-1'),
+        calAppointment('appt-ya', 'prov-a', 'patient-c', 10, 9, 'service-2'),
+        calAppointment('appt-xb', 'prov-b', 'patient-b', 10, 10, 'service-1'),
+      ],
+    });
+    const user = userEvent.setup();
+    render(<AppointmentsPage />);
+
+    await openAgenda(user);
+    await waitFor(() =>
+      expect(agendaBlock(/10:00 Limpieza — Paciente B/)).toBeInTheDocument()
+    );
+
+    // Deseleccionar Ortodoncia (service-2) y luego Dr. Beto (prov-b).
+    await user.click(serviceEntry('Ortodoncia'));
+    await user.click(legendEntry(/Dr\. Beto/));
+
+    await waitFor(() => {
+      expect(agendaBlock(/08:00 Limpieza — Paciente A/)).toBeInTheDocument();
+      expect(
+        agendaBlock(/09:00 Ortodoncia — Paciente C/)
+      ).not.toBeInTheDocument();
+      expect(
+        agendaBlock(/10:00 Limpieza — Paciente B/)
+      ).not.toBeInTheDocument();
+    });
+  });
+
+  it('14.6 alternar Calendario ↔ Agenda no duplica la petición de rango del mes', async () => {
+    const fetchMock = buildCalendarFetch();
+    global.fetch = fetchMock;
+    const user = userEvent.setup();
+    render(<AppointmentsPage />);
+
+    await openCalendar(user);
+    const before = rangeRequestCalls(fetchMock).length;
+    expect(before).toBeGreaterThan(0);
+
+    await openAgenda(user);
+    expect(rangeRequestCalls(fetchMock).length).toBe(before);
+
+    await user.click(screen.getByRole('button', { name: /^Calendario$/ }));
+    await waitFor(
+      () => {
+        expect(screen.getAllByTestId('weekday-label')).toHaveLength(7);
+      },
+      { timeout: 10000 }
+    );
+    expect(rangeRequestCalls(fetchMock).length).toBe(before);
   });
 });

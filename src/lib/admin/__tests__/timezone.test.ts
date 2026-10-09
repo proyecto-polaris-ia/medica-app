@@ -238,3 +238,67 @@ describe('timezone helpers', () => {
     });
   });
 });
+
+// La fila de la agenda necesita la hora de fin del rango, derivada de `endAt`.
+describe('groupAppointmentsByDay endLabel', () => {
+  it('derives the end label in clinic time by default', () => {
+    const groups = groupAppointmentsByDay(
+      [
+        {
+          id: 'a1',
+          patientName: 'Ana',
+          serviceName: 'Limpieza',
+          providerId: 'p1',
+          startAt: '2026-06-10T14:00:00.000Z',
+          endAt: '2026-06-10T14:30:00.000Z',
+          status: 'confirmed',
+        },
+      ],
+      () => '#000000'
+    );
+
+    expect(groups['2026-06-10'][0].startLabel).toBe('08:00');
+    expect(groups['2026-06-10'][0].endLabel).toBe('08:30');
+  });
+
+  it('derives the end label in the observer zone (PDT)', () => {
+    const groups = groupAppointmentsByDay(
+      [
+        {
+          id: 'a1',
+          patientName: 'Ana',
+          serviceName: 'Limpieza',
+          providerId: 'p1',
+          startAt: '2026-06-10T06:30:00.000Z',
+          endAt: '2026-06-10T07:00:00.000Z',
+          status: 'confirmed',
+        },
+      ],
+      () => '#000000',
+      LOS_ANGELES
+    );
+
+    expect(groups['2026-06-09'][0].startLabel).toBe('23:30');
+    expect(groups['2026-06-09'][0].endLabel).toBe('00:00');
+  });
+
+  it('omits endLabel when endAt is null or absent', () => {
+    const base = {
+      id: 'a1',
+      patientName: 'Ana',
+      serviceName: 'Limpieza',
+      providerId: 'p1',
+      startAt: '2026-06-10T14:00:00.000Z',
+      status: 'confirmed' as const,
+    };
+
+    const withNull = groupAppointmentsByDay(
+      [{ ...base, endAt: null }],
+      () => '#000000'
+    );
+    expect(withNull['2026-06-10'][0].endLabel).toBeUndefined();
+
+    const withMissing = groupAppointmentsByDay([base], () => '#000000');
+    expect(withMissing['2026-06-10'][0].endLabel).toBeUndefined();
+  });
+});

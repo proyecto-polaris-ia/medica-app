@@ -64,7 +64,8 @@ alternativa: si el reenvío falla responde `502` y registra `webhook.failed`.
 Workspace multi-agente: cada agente raíz vive en `agents/<name>/agent/` con su
 propio canal y se despliega como servicio Vercel independiente
 (`eve-eva` → `/eva/eve/v1/*`, `eve-mora` → `/mora/eve/v1/*`,
-`eve-clara` → `/clara/eve/v1/*`; ver `vercel.json`).
+`eve-clara` → `/clara/eve/v1/*`, `eve-nora` → `/nora/eve/v1/*`; ver
+`vercel.json`).
 
 - **Eva** (`agents/eva/agent/`): recepción y citas por WhatsApp.
   `instructions.md` define instrucciones y guardrails; `tools/*.ts` expone las
@@ -88,6 +89,16 @@ propio canal y se despliega como servicio Vercel independiente
   doctores autorizados le hablan por Discord; Clara **no** atiende WhatsApp,
   **no** atiende pacientes y **no** envía mensajes: importa la lógica de
   `src/lib/admin/follow-up/` sin moverla ni duplicarla.
+- **Nora** (`agents/nora/agent/`): analista de métricas del consultorio, con
+  canal Discord propio (`channels/discord.ts`, ruta `/nora/eve/v1/discord`),
+  tools de solo lectura (`get-dashboard-summary`, `get-provider-metrics`,
+  `get-occupancy`, `get-no-shows`, `get-appointment-stats`), skills
+  `metrics-reporting.md` y `data-interpretation.md`, y módulo de acceso
+  `access.ts` (allowlist de doctores `NORA_DISCORD_DOCTOR_IDS`, fail-closed).
+  Los doctores autorizados le hablan por Discord; Nora **no** escribe en
+  Supabase, **no** reprograma ni cancela citas y **no** envía mensajes:
+  proyecta el `DashboardMetricsView` del motor `src/lib/admin/metrics/` sin
+  recalcular métricas.
 - En WhatsApp, Eva escala las intenciones de cobranza a un humano
   (`escalate-to-human`); la delegación a subagentes se retiró con el issue
   #159.
