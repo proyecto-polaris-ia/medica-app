@@ -801,7 +801,7 @@ describe('/appointments calendar provider filter', () => {
 
     await waitFor(() => {
       expect(replaceMock).toHaveBeenCalledWith(
-        '/appointments?providerId=prov-a,prov-b'
+        '/appointments?view=calendar&providerId=prov-a,prov-b'
       );
     });
   });
@@ -837,7 +837,7 @@ describe('/appointments calendar provider filter', () => {
     await user.click(screen.getByRole('button', { name: 'Limpiar filtros' }));
 
     await waitFor(() => {
-      expect(replaceMock).toHaveBeenCalledWith('/appointments');
+      expect(replaceMock).toHaveBeenCalledWith('/appointments?view=calendar');
     });
     expect(calendarBlock(/08:00 Limpieza — Paciente A/)).toBeInTheDocument();
     expect(calendarBlock(/09:00 Limpieza — Paciente B/)).toBeInTheDocument();
@@ -857,6 +857,10 @@ describe('/appointments calendar provider filter', () => {
     await waitFor(() =>
       expect(calendarBlock(/08:00 Limpieza — Paciente A/)).toBeInTheDocument()
     );
+
+    // #176: abrir el calendario escribe `view=calendar`; el guard del filtro es
+    // lo que se verifica, así que se limpia la escritura de apertura.
+    replaceMock.mockClear();
 
     await user.click(legendEntry(/Dra\. Ana/));
 
@@ -937,8 +941,6 @@ describe('/appointments calendar provider filter', () => {
     expect(legendEntry(/Dra\. Ana/)).toHaveAttribute('aria-pressed', 'true');
     expect(legendEntry(/Dr\. Beto/)).toHaveAttribute('aria-pressed', 'true');
 
-    const replaceCallsBefore = replaceMock.mock.calls.length;
-
     await user.click(screen.getByRole('button', { name: /^Lista$/ }));
     await waitFor(() =>
       expect(screen.getAllByRole('combobox').length).toBeGreaterThan(0)
@@ -957,7 +959,11 @@ describe('/appointments calendar provider filter', () => {
     expect(legendEntry(/Dra\. Ana/)).toHaveAttribute('aria-pressed', 'true');
     expect(legendEntry(/Dr\. Beto/)).toHaveAttribute('aria-pressed', 'true');
     expect(calendarBlock(/10:00 Limpieza — Paciente C/)).not.toBeInTheDocument();
-    expect(replaceMock.mock.calls.length).toBe(replaceCallsBefore);
+    // #176: alternar la vista proyecta view/mode en la URL; los filtros
+    // sobreviven y la última escritura refleja el regreso a Calendario.
+    expect(replaceMock).toHaveBeenLastCalledWith(
+      '/appointments?view=calendar&providerId=prov-a,prov-b'
+    );
   });
 
   it('3.3 la fila es responsiva y "Limpiar filtros" solo existe con filtro activo', async () => {
@@ -1022,28 +1028,31 @@ describe('/appointments calendar provider filter', () => {
     await user.click(legendEntry(/Dra\. Caro/));
     await waitFor(() =>
       expect(replaceMock).toHaveBeenCalledWith(
-        '/appointments?providerId=prov-a,prov-b'
+        '/appointments?view=calendar&providerId=prov-a,prov-b'
       )
     );
 
     // Reactivar C -> [A, B, C] equivale a "todos" -> se guarda [].
     await user.click(legendEntry(/Dra\. Caro/));
     await waitFor(() =>
-      expect(replaceMock).toHaveBeenLastCalledWith('/appointments')
+      expect(replaceMock).toHaveBeenLastCalledWith(
+        '/appointments?view=calendar'
+      )
     );
 
     // Desactivar A -> [B, C].
     await user.click(legendEntry(/Dra\. Ana/));
     await waitFor(() =>
       expect(replaceMock).toHaveBeenLastCalledWith(
-        '/appointments?providerId=prov-b,prov-c'
+        '/appointments?view=calendar&providerId=prov-b,prov-c'
       )
     );
 
     expect(replaceMock.mock.calls.map((call) => call[0])).toEqual([
-      '/appointments?providerId=prov-a,prov-b',
-      '/appointments',
-      '/appointments?providerId=prov-b,prov-c',
+      '/appointments?view=calendar',
+      '/appointments?view=calendar&providerId=prov-a,prov-b',
+      '/appointments?view=calendar',
+      '/appointments?view=calendar&providerId=prov-b,prov-c',
     ]);
   });
 });
@@ -1259,7 +1268,7 @@ describe('/appointments calendar service filter', () => {
 
     await waitFor(() => {
       expect(replaceMock).toHaveBeenCalledWith(
-        '/appointments?serviceId=service-1,service-2'
+        '/appointments?view=calendar&serviceId=service-1,service-2'
       );
     });
   });
@@ -1319,7 +1328,7 @@ describe('/appointments calendar service filter', () => {
     await user.click(serviceEntry('Revisión'));
     await waitFor(() =>
       expect(replaceMock).toHaveBeenLastCalledWith(
-        '/appointments?serviceId=service-1,service-2'
+        '/appointments?view=calendar&serviceId=service-1,service-2'
       )
     );
 
@@ -1328,7 +1337,7 @@ describe('/appointments calendar service filter', () => {
 
     await waitFor(() => {
       expect(replaceMock).toHaveBeenLastCalledWith(
-        '/appointments?providerId=prov-a&serviceId=service-1,service-2'
+        '/appointments?view=calendar&providerId=prov-a&serviceId=service-1,service-2'
       );
     });
   });
@@ -1393,8 +1402,6 @@ describe('/appointments calendar service filter', () => {
     await waitFor(() =>
       expect(calendarBlock(/08:00 Limpieza — Paciente A/)).toBeInTheDocument()
     );
-    const replaceCallsBefore = replaceMock.mock.calls.length;
-
     await user.click(screen.getByRole('button', { name: /^Lista$/ }));
     await waitFor(() =>
       expect(screen.getAllByRole('combobox').length).toBeGreaterThan(0)
@@ -1418,7 +1425,11 @@ describe('/appointments calendar service filter', () => {
     expect(
       calendarBlock(/11:00 Revisión — Paciente B/)
     ).not.toBeInTheDocument();
-    expect(replaceMock.mock.calls.length).toBe(replaceCallsBefore);
+    // #176: alternar la vista proyecta view/mode en la URL; los filtros
+    // sobreviven y la última escritura refleja el regreso a Calendario.
+    expect(replaceMock).toHaveBeenLastCalledWith(
+      '/appointments?view=calendar&providerId=prov-a&serviceId=service-1,service-2'
+    );
   });
 
   it('3.5 "Limpiar filtros" reinicia ambos filtros con una sola escritura', async () => {
@@ -1446,12 +1457,14 @@ describe('/appointments calendar service filter', () => {
       calendarBlock(/10:00 Ortodoncia — Paciente C/)
     ).not.toBeInTheDocument();
 
+    replaceMock.mockClear();
+
     await user.click(screen.getByRole('button', { name: 'Limpiar filtros' }));
 
     await waitFor(() => {
-      expect(replaceMock).toHaveBeenCalledWith('/appointments');
+      expect(replaceMock).toHaveBeenCalledWith('/appointments?view=calendar');
     });
-    expect(replaceMock.mock.calls).toEqual([['/appointments']]);
+    expect(replaceMock.mock.calls).toEqual([['/appointments?view=calendar']]);
     expect(calendarBlock(/08:00 Limpieza — Paciente A/)).toBeInTheDocument();
     expect(calendarBlock(/09:00 Limpieza — Paciente B/)).toBeInTheDocument();
     expect(calendarBlock(/10:00 Ortodoncia — Paciente C/)).toBeInTheDocument();
@@ -1645,28 +1658,31 @@ describe('/appointments calendar service filter', () => {
     await user.click(serviceEntry('Revisión'));
     await waitFor(() =>
       expect(replaceMock).toHaveBeenLastCalledWith(
-        '/appointments?serviceId=service-1,service-2'
+        '/appointments?view=calendar&serviceId=service-1,service-2'
       )
     );
 
     // Reactivar Z -> [X, Y, Z] equivale a "todos" -> se guarda [].
     await user.click(serviceEntry('Revisión'));
     await waitFor(() =>
-      expect(replaceMock).toHaveBeenLastCalledWith('/appointments')
+      expect(replaceMock).toHaveBeenLastCalledWith(
+        '/appointments?view=calendar'
+      )
     );
 
     // Desactivar X -> [Y, Z].
     await user.click(serviceEntry('Limpieza'));
     await waitFor(() =>
       expect(replaceMock).toHaveBeenLastCalledWith(
-        '/appointments?serviceId=service-2,service-3'
+        '/appointments?view=calendar&serviceId=service-2,service-3'
       )
     );
 
     expect(replaceMock.mock.calls.map((call) => call[0])).toEqual([
-      '/appointments?serviceId=service-1,service-2',
-      '/appointments',
-      '/appointments?serviceId=service-2,service-3',
+      '/appointments?view=calendar',
+      '/appointments?view=calendar&serviceId=service-1,service-2',
+      '/appointments?view=calendar',
+      '/appointments?view=calendar&serviceId=service-2,service-3',
     ]);
   });
 
@@ -1691,14 +1707,16 @@ describe('/appointments calendar service filter', () => {
     await user.click(serviceEntry('Ortodoncia'));
     await waitFor(() =>
       expect(replaceMock).toHaveBeenLastCalledWith(
-        '/appointments?serviceId=service-1'
+        '/appointments?view=calendar&serviceId=service-1'
       )
     );
 
     await user.click(screen.getByRole('button', { name: 'Limpiar filtros' }));
 
     await waitFor(() =>
-      expect(replaceMock).toHaveBeenLastCalledWith('/appointments')
+      expect(replaceMock).toHaveBeenLastCalledWith(
+        '/appointments?view=calendar'
+      )
     );
     expect(calendarBlock(/09:00 Ortodoncia — Paciente B/)).toBeInTheDocument();
   });
@@ -2031,8 +2049,6 @@ describe('/appointments list pagination', () => {
     const user = await renderList(fetchMock);
 
     await screen.findByText('Página 2 de 5 (100 resultados)');
-    const replaceCallsBefore = replaceMock.mock.calls.length;
-
     await user.click(screen.getByRole('button', { name: /^Calendario$/ }));
     await waitFor(
       () => {
@@ -2048,7 +2064,8 @@ describe('/appointments list pagination', () => {
     expect(
       await screen.findByText('Página 2 de 5 (100 resultados)')
     ).toBeInTheDocument();
-    expect(replaceMock.mock.calls.length).toBe(replaceCallsBefore);
+    // #176: el regreso a Lista normaliza la URL sin `view` y conserva la página.
+    expect(replaceMock).toHaveBeenLastCalledWith('/appointments?page=2');
   });
 });
 
@@ -2305,11 +2322,31 @@ function agendaBlock(name: string | RegExp) {
   return screen.queryByRole('button', { name });
 }
 
+// #176: la agenda es una sub-vista del Calendario; el acceso es
+// Calendario → sub-toggle Agenda.
 async function openAgenda(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByRole('button', { name: /^Calendario$/ }));
+  await waitFor(
+    () => {
+      expect(screen.getAllByTestId('weekday-label')).toHaveLength(7);
+    },
+    { timeout: 10000 }
+  );
   await user.click(screen.getByRole('button', { name: /^Agenda$/ }));
   await waitFor(
     () => {
       expect(screen.getAllByTestId('agenda-day').length).toBeGreaterThan(0);
+    },
+    { timeout: 10000 }
+  );
+}
+
+// Abre el calendario en modo Grilla (default) y espera la cuadrícula.
+async function openCalendarGrid(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByRole('button', { name: /^Calendario$/ }));
+  await waitFor(
+    () => {
+      expect(screen.getAllByTestId('weekday-label')).toHaveLength(7);
     },
     { timeout: 10000 }
   );
@@ -2336,23 +2373,40 @@ describe('/appointments agenda view', () => {
     replaceMock.mockClear();
   });
 
-  it('14.1 el toggle ofrece las tres vistas y distingue la activa', async () => {
+  it('14.1 el toggle ofrece Lista y Calendario con sub-toggle Grilla/Agenda', async () => {
     global.fetch = buildCalendarFetch();
+    const user = userEvent.setup();
     render(<AppointmentsPage />);
 
     const lista = await screen.findByRole('button', { name: /^Lista$/ });
     const calendario = screen.getByRole('button', { name: /^Calendario$/ });
-    const agenda = screen.getByRole('button', { name: /^Agenda$/ });
 
+    // Dos vistas de primer nivel: Lista activa por defecto.
     expect(lista).toHaveAttribute('aria-pressed', 'true');
     expect(calendario).toHaveAttribute('aria-pressed', 'false');
-    expect(agenda).toHaveAttribute('aria-pressed', 'false');
+    // Sin Agenda de primer nivel ni sub-toggle fuera del calendario.
+    expect(screen.queryByRole('button', { name: /^Agenda$/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Grilla$/ })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('group', { name: 'Modo de calendario' })
+    ).not.toBeInTheDocument();
 
-    const user = userEvent.setup();
-    await user.click(agenda);
+    await user.click(calendario);
+    await waitFor(() =>
+      expect(screen.getAllByTestId('weekday-label')).toHaveLength(7)
+    );
 
-    expect(agenda).toHaveAttribute('aria-pressed', 'true');
+    expect(calendario).toHaveAttribute('aria-pressed', 'true');
     expect(lista).toHaveAttribute('aria-pressed', 'false');
+    // Sub-toggle: Grilla activa por defecto.
+    expect(screen.getByRole('button', { name: /^Grilla$/ })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    );
+    expect(screen.getByRole('button', { name: /^Agenda$/ })).toHaveAttribute(
+      'aria-pressed',
+      'false'
+    );
   });
 
   it('14.2 activar Agenda muestra las citas del mes agrupadas por día', async () => {
@@ -2456,20 +2510,23 @@ describe('/appointments agenda view', () => {
     });
   });
 
-  it('14.6 alternar Calendario ↔ Agenda no duplica la petición de rango del mes', async () => {
+  it('14.6 alternar Grilla ↔ Agenda no duplica la petición de rango del mes', async () => {
     const fetchMock = buildCalendarFetch();
     global.fetch = fetchMock;
     const user = userEvent.setup();
     render(<AppointmentsPage />);
 
-    await openCalendar(user);
+    await openCalendarGrid(user);
     const before = rangeRequestCalls(fetchMock).length;
     expect(before).toBeGreaterThan(0);
 
-    await openAgenda(user);
+    await user.click(screen.getByRole('button', { name: /^Agenda$/ }));
+    await waitFor(() =>
+      expect(screen.getAllByTestId('agenda-day').length).toBeGreaterThan(0)
+    );
     expect(rangeRequestCalls(fetchMock).length).toBe(before);
 
-    await user.click(screen.getByRole('button', { name: /^Calendario$/ }));
+    await user.click(screen.getByRole('button', { name: /^Grilla$/ }));
     await waitFor(
       () => {
         expect(screen.getAllByTestId('weekday-label')).toHaveLength(7);
@@ -2477,5 +2534,256 @@ describe('/appointments agenda view', () => {
       { timeout: 10000 }
     );
     expect(rangeRequestCalls(fetchMock).length).toBe(before);
+  });
+
+  it('16.1 sin view/mode la vista por defecto es Lista y no hay sub-toggle', async () => {
+    global.fetch = buildCalendarFetch();
+    render(<AppointmentsPage />);
+
+    expect(await screen.findByRole('button', { name: /^Lista$/ })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    );
+    expect(screen.queryByRole('button', { name: /^Grilla$/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Agenda$/ })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('group', { name: 'Modo de calendario' })
+    ).not.toBeInTheDocument();
+  });
+
+  it('16.2 view=calendar monta el calendario con Grilla activa', async () => {
+    searchParamsRef.value = new URLSearchParams('view=calendar');
+    global.fetch = buildCalendarFetch();
+    render(<AppointmentsPage />);
+
+    await waitFor(() =>
+      expect(screen.getAllByTestId('weekday-label')).toHaveLength(7)
+    );
+    expect(screen.getByRole('button', { name: /^Calendario$/ })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    );
+    expect(screen.getByRole('button', { name: /^Grilla$/ })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    );
+    expect(screen.getByRole('button', { name: /^Agenda$/ })).toHaveAttribute(
+      'aria-pressed',
+      'false'
+    );
+  });
+
+  it('16.3 view=calendar&mode=agenda renderiza la agenda', async () => {
+    searchParamsRef.value = new URLSearchParams('view=calendar&mode=agenda');
+    global.fetch = buildCalendarFetch();
+    render(<AppointmentsPage />);
+
+    await waitFor(() =>
+      expect(screen.getAllByTestId('agenda-day').length).toBeGreaterThan(0)
+    );
+    expect(screen.getByRole('button', { name: /^Calendario$/ })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    );
+    expect(screen.getByRole('button', { name: /^Agenda$/ })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    );
+    expect(screen.queryAllByTestId('weekday-label')).toHaveLength(0);
+  });
+
+  it('16.4 el enlace legacy view=agenda se normaliza a view=calendar&mode=agenda', async () => {
+    searchParamsRef.value = new URLSearchParams('view=agenda');
+    global.fetch = buildCalendarFetch();
+    const user = userEvent.setup();
+    render(<AppointmentsPage />);
+
+    await waitFor(() =>
+      expect(screen.getAllByTestId('agenda-day').length).toBeGreaterThan(0)
+    );
+    expect(screen.getByRole('button', { name: /^Agenda$/ })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    );
+
+    // Primera escritura: Grilla normaliza `view`…
+    await user.click(screen.getByRole('button', { name: /^Grilla$/ }));
+    await waitFor(() =>
+      expect(replaceMock).toHaveBeenLastCalledWith('/appointments?view=calendar')
+    );
+    // … y Agenda vuelve a codificar `mode`.
+    await user.click(screen.getByRole('button', { name: /^Agenda$/ }));
+    await waitFor(() =>
+      expect(replaceMock).toHaveBeenLastCalledWith(
+        '/appointments?view=calendar&mode=agenda'
+      )
+    );
+  });
+
+  it('16.5 una vista inválida cae en Lista y un modo inválido cae en Grilla', async () => {
+    searchParamsRef.value = new URLSearchParams('view=desconocido');
+    global.fetch = buildCalendarFetch();
+    const { unmount } = render(<AppointmentsPage />);
+
+    expect(await screen.findByRole('button', { name: /^Lista$/ })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    );
+    expect(screen.queryByRole('button', { name: /^Grilla$/ })).not.toBeInTheDocument();
+    unmount();
+
+    searchParamsRef.value = new URLSearchParams('view=calendar&mode=otro');
+    render(<AppointmentsPage />);
+    await waitFor(() =>
+      expect(screen.getAllByTestId('weekday-label')).toHaveLength(7)
+    );
+    expect(screen.getByRole('button', { name: /^Grilla$/ })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    );
+    expect(screen.getByRole('button', { name: /^Agenda$/ })).toHaveAttribute(
+      'aria-pressed',
+      'false'
+    );
+  });
+
+  it('16.5 un mode huérfano sin view cae en Lista', async () => {
+    searchParamsRef.value = new URLSearchParams('mode=agenda');
+    global.fetch = buildCalendarFetch();
+    render(<AppointmentsPage />);
+
+    expect(await screen.findByRole('button', { name: /^Lista$/ })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    );
+    expect(screen.queryByRole('button', { name: /^Grilla$/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Agenda$/ })).not.toBeInTheDocument();
+  });
+
+  it('16.6 alternar el modo conserva los filtros y compone la URL en orden', async () => {
+    searchParamsRef.value = new URLSearchParams(
+      'view=calendar&providerId=prov-a,prov-b&serviceId=service-1&page=2'
+    );
+    global.fetch = buildCalendarFetch({
+      services: CAL_SERVICES,
+      providers: [CAL_PROVIDERS[0], CAL_PROVIDERS[1]],
+      patients: CAL_PATIENTS,
+      appointments: [
+        calAppointment('appt-a', 'prov-a', 'patient-a', 10, 8, 'service-1'),
+        calAppointment('appt-b', 'prov-b', 'patient-b', 10, 9, 'service-1'),
+      ],
+    });
+    const user = userEvent.setup();
+    render(<AppointmentsPage />);
+
+    await waitFor(() =>
+      expect(screen.getAllByTestId('weekday-label')).toHaveLength(7)
+    );
+
+    await user.click(screen.getByRole('button', { name: /^Agenda$/ }));
+    await waitFor(() =>
+      expect(replaceMock).toHaveBeenLastCalledWith(
+        '/appointments?page=2&view=calendar&mode=agenda&providerId=prov-a,prov-b&serviceId=service-1'
+      )
+    );
+
+    await waitFor(() =>
+      expect(agendaBlock(/08:00 Limpieza — Paciente A/)).toBeInTheDocument()
+    );
+    expect(legendEntry(/Dra\. Ana/)).toHaveAttribute('aria-pressed', 'true');
+    expect(legendEntry(/Dr\. Beto/)).toHaveAttribute('aria-pressed', 'true');
+
+    // Volver a Grilla conserva la selección y actualiza solo el modo.
+    await user.click(screen.getByRole('button', { name: /^Grilla$/ }));
+    await waitFor(() =>
+      expect(replaceMock).toHaveBeenLastCalledWith(
+        '/appointments?page=2&view=calendar&providerId=prov-a,prov-b&serviceId=service-1'
+      )
+    );
+    expect(legendEntry(/Dra\. Ana/)).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('16.7 el sub-toggle es operable por teclado y anuncia su estado', async () => {
+    searchParamsRef.value = new URLSearchParams('view=calendar');
+    global.fetch = buildCalendarFetch();
+    const user = userEvent.setup();
+    render(<AppointmentsPage />);
+
+    await waitFor(() =>
+      expect(screen.getAllByTestId('weekday-label')).toHaveLength(7)
+    );
+
+    const group = screen.getByRole('group', { name: 'Modo de calendario' });
+    const grilla = within(group).getByRole('button', { name: /^Grilla$/ });
+    const agenda = within(group).getByRole('button', { name: /^Agenda$/ });
+    expect(grilla).toHaveAttribute('aria-pressed', 'true');
+    expect(agenda).toHaveAttribute('aria-pressed', 'false');
+
+    grilla.focus();
+    expect(grilla).toHaveFocus();
+    await user.keyboard('{Tab}');
+    expect(agenda).toHaveFocus();
+    await user.keyboard('{Enter}');
+
+    await waitFor(() => expect(agenda).toHaveAttribute('aria-pressed', 'true'));
+    await waitFor(() =>
+      expect(screen.getAllByTestId('agenda-day').length).toBeGreaterThan(0)
+    );
+  });
+
+  it('16.8 regresar de Lista a Calendario conserva el último modo local', async () => {
+    searchParamsRef.value = new URLSearchParams('view=calendar&mode=agenda');
+    global.fetch = buildCalendarFetch();
+    const user = userEvent.setup();
+    render(<AppointmentsPage />);
+
+    await waitFor(() =>
+      expect(screen.getAllByTestId('agenda-day').length).toBeGreaterThan(0)
+    );
+
+    await user.click(screen.getByRole('button', { name: /^Lista$/ }));
+    await waitFor(() =>
+      expect(screen.getByRole('combobox', { name: 'Servicio' })).toBeInTheDocument()
+    );
+
+    await user.click(screen.getByRole('button', { name: /^Calendario$/ }));
+    await waitFor(() =>
+      expect(screen.getAllByTestId('agenda-day').length).toBeGreaterThan(0)
+    );
+    expect(screen.getByRole('button', { name: /^Agenda$/ })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    );
+    await waitFor(() =>
+      expect(replaceMock).toHaveBeenLastCalledWith(
+        '/appointments?view=calendar&mode=agenda'
+      )
+    );
+  });
+
+  it('16.9 cambiar de mes y alternar el modo conserva el mes visible', async () => {
+    global.fetch = buildCalendarFetch();
+    const user = userEvent.setup();
+    render(<AppointmentsPage />);
+
+    await openCalendarGrid(user);
+    await user.click(screen.getByRole('button', { name: 'Mes siguiente' }));
+
+    const monthLabel = () =>
+      document.querySelector('span.min-w-\\[8rem\\]')?.textContent ?? '';
+    const expectedMonth = monthLabel();
+    expect(expectedMonth.length).toBeGreaterThan(0);
+
+    await user.click(screen.getByRole('button', { name: /^Agenda$/ }));
+    await waitFor(() =>
+      expect(screen.getAllByTestId('agenda-day').length).toBeGreaterThan(0)
+    );
+    expect(monthLabel()).toBe(expectedMonth);
+
+    await user.click(screen.getByRole('button', { name: /^Grilla$/ }));
+    await waitFor(() =>
+      expect(screen.getAllByTestId('weekday-label')).toHaveLength(7)
+    );
+    expect(monthLabel()).toBe(expectedMonth);
   });
 });

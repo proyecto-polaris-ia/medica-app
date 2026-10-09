@@ -36,7 +36,8 @@ type Reference = {
   name: string;
 };
 
-type ViewMode = 'list' | 'calendar' | 'agenda';
+type ViewMode = 'list' | 'calendar';
+type CalendarSubMode = 'grid' | 'agenda';
 type SortField = 'startAt' | 'endAt' | 'patient' | 'service' | 'provider' | 'status';
 type SortDirection = 'asc' | 'desc';
 
@@ -208,19 +209,25 @@ function normalizeSelection(next: string[], allIds: string[]): string[] {
 }
 
 // URL destino de la sincronía con el historial: compone `page` (solo si > 1),
-// `providerId` y `serviceId`, omitiendo los vacíos (orden determinista
-// page → providerId → serviceId) y devuelve `/appointments` si no queda ningún
-// parámetro. La comparten el filtro del calendario y el cambio de página para
-// que no se pisen (design §1.6/§2.5).
+// `view`/`mode` (omitiendo los defaults `list`/`grid`; `mode` solo con
+// `view=calendar`), `providerId` y `serviceId`, omitiendo los vacíos (orden
+// determinista page → view → mode → providerId → serviceId) y devuelve
+// `/appointments` si no queda ningún parámetro. La comparten los filtros del
+// calendario, el cambio de página y los toggles de vista/modo para que no se
+// pisen (design §3).
 // `URLSearchParams` codifica la coma como `%2C`; se decodifica para conservar la
 // forma exacta de URL de #174 (`providerId=prov-a,prov-b`).
 function appointmentsUrl(
   page: number,
   providerIds: string[],
-  serviceIds: string[]
+  serviceIds: string[],
+  view: ViewMode,
+  mode: CalendarSubMode
 ): string {
   const params = new URLSearchParams();
   if (page > 1) params.set('page', String(page));
+  if (view === 'calendar') params.set('view', 'calendar');
+  if (view === 'calendar' && mode === 'agenda') params.set('mode', 'agenda');
   if (providerIds.length > 0) params.set('providerId', providerIds.join(','));
   if (serviceIds.length > 0) params.set('serviceId', serviceIds.join(','));
   const query = params.toString().replace(/%2C/g, ',');
@@ -233,6 +240,26 @@ function parsePage(raw: string | null | undefined): number {
   if (!raw || !/^\d+$/.test(raw)) return 1;
   const value = Number(raw);
   return Number.isSafeInteger(value) && value >= 1 ? value : 1;
+}
+
+// #176: estado resuelto de vista/modo a partir de la URL. `view` ausente o
+// inválido cae en lista; `mode` solo se honra con `view=calendar` (modo huérfano
+// cae en lista/grilla). El enlace legacy `?view=agenda` (#175) se migra a
+// `calendar + agenda`.
+type ViewState = { view: ViewMode; mode: CalendarSubMode };
+
+function parseViewState(params: URLSearchParams | null | undefined): ViewState {
+  const rawView = params?.get('view') ?? '';
+  const rawMode = params?.get('mode') ?? '';
+
+  // Legacy #175: ?view=agenda => calendar + agenda.
+  if (rawView === 'agenda') return { view: 'calendar', mode: 'agenda' };
+
+  if (rawView === 'calendar') {
+    return { view: 'calendar', mode: rawMode === 'agenda' ? 'agenda' : 'grid' };
+  }
+
+  return { view: 'list', mode: 'grid' };
 }
 
 // Límites ISO del rango de fechas del listado. El extremo superior se extiende
@@ -293,9 +320,16 @@ export default function AppointmentsPage() {
   const [editing, setEditing] = useState<Appointment | null>(null);
   const [form, setForm] = useState(emptyAppointment);
   const [submitting, setSubmitting] = useState(false);
-  const [view, setView] = useState<ViewMode>('list');
+  // #176: `view` y `mode` se inicializan una sola vez desde la URL (deep link),
+  // sin `useEffect`; el handler es quien proyecta el estado a la URL. `mode` es
+  // dormido con `view === 'list'` y vuelve a codificarse al regresar a Calendario.
+  const initialViewState = parseViewState(searchParams);
+  const [view, setView] = useState<ViewMode>(() => initialViewState.view);
+  const [mode, setMode] = useState<CalendarSubMode>(
+    () => initialViewState.mode
+  );
   // Modo del request de datos: la agenda comparte el rango del mes con la
-  // cuadrícula, así que alternar `calendar ↔ agenda` no cambia el request.
+  // cuadrícula, así que alternar `grid ↔ agenda` no cambia el request.
   const requestMode: 'list' | 'calendar' =
     view === 'list' ? 'list' : 'calendar';
   const [visibleMonth, setVisibleMonth] = useState(() =>
@@ -400,9 +434,11 @@ export default function AppointmentsPage() {
       }
       setCalendarProviderFilter(nextProvider);
       setCalendarServiceFilter(nextService);
-      router.replace(appointmentsUrl(page, nextProvider, nextService));
+      router.replace(
+        appointmentsUrl(page, nextProvider, nextService, view, mode)
+      );
     },
-    [calendarProviderFilter, calendarServiceFilter, page, router]
+    [calendarProviderFilter, calendarServiceFilter, page, view, mode, router]
   );
 
   function toggleCalendarProvider(id: string) {
@@ -616,9 +652,15 @@ export default function AppointmentsPage() {
     if (page === 1) return;
     setPage(1);
     router.replace(
-      appointmentsUrl(1, calendarProviderFilter, calendarServiceFilter)
+      appointmentsUrl(
+        1,
+        calendarProviderFilter,
+        calendarServiceFilter,
+        view,
+        mode
+      )
     );
-  }, [page, calendarProviderFilter, calendarServiceFilter, router]);
+  }, [page, calendarProviderFilter, calendarServiceFilter, view, mode, router]);
 
   // Cambio de página: estado local como fuente de verdad, guardia de reescritura
   // redundante y `router.replace` sin agregar historial (D14, D15).
@@ -627,11 +669,48 @@ export default function AppointmentsPage() {
       if (nextPage === page) return;
       setPage(nextPage);
       router.replace(
-        appointmentsUrl(nextPage, calendarProviderFilter, calendarServiceFilter)
+        appointmentsUrl(
+          nextPage,
+          calendarProviderFilter,
+          calendarServiceFilter,
+          view,
+          mode
+        )
       );
     },
-    [page, calendarProviderFilter, calendarServiceFilter, router]
+    [page, calendarProviderFilter, calendarServiceFilter, view, mode, router]
   );
+
+  // #176: el toggle principal y el sub-toggle escriben la URL en el handler
+  // (proyección del estado), con guard de reescritura redundante. Cambiar de
+  // sub-vista no toca `requestMode`, así que no re-consulta el mes.
+  function handleViewChange(next: ViewMode) {
+    if (next === view) return;
+    setView(next);
+    router.replace(
+      appointmentsUrl(
+        page,
+        calendarProviderFilter,
+        calendarServiceFilter,
+        next,
+        mode
+      )
+    );
+  }
+
+  function handleModeChange(next: CalendarSubMode) {
+    if (next === mode || view !== 'calendar') return;
+    setMode(next);
+    router.replace(
+      appointmentsUrl(
+        page,
+        calendarProviderFilter,
+        calendarServiceFilter,
+        view,
+        next
+      )
+    );
+  }
 
   function handleServiceFilterChange(value: string) {
     setServiceFilter(value);
@@ -697,7 +776,7 @@ export default function AppointmentsPage() {
           <div className="inline-flex rounded-md shadow-sm" role="group">
             <button
               type="button"
-              onClick={() => setView('list')}
+              onClick={() => handleViewChange('list')}
               aria-pressed={view === 'list'}
               className={[
                 'rounded-l-md border px-4 py-2 text-sm font-medium',
@@ -710,29 +789,16 @@ export default function AppointmentsPage() {
             </button>
             <button
               type="button"
-              onClick={() => setView('calendar')}
+              onClick={() => handleViewChange('calendar')}
               aria-pressed={view === 'calendar'}
               className={[
-                'border px-4 py-2 text-sm font-medium',
+                'rounded-r-md border px-4 py-2 text-sm font-medium',
                 view === 'calendar'
                   ? 'border-blue-600 bg-blue-600 text-white'
                   : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50',
               ].join(' ')}
             >
               Calendario
-            </button>
-            <button
-              type="button"
-              onClick={() => setView('agenda')}
-              aria-pressed={view === 'agenda'}
-              className={[
-                'rounded-r-md border px-4 py-2 text-sm font-medium',
-                view === 'agenda'
-                  ? 'border-blue-600 bg-blue-600 text-white'
-                  : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50',
-              ].join(' ')}
-            >
-              Agenda
             </button>
           </div>
           <button
@@ -832,8 +898,41 @@ export default function AppointmentsPage() {
         </div>
       )}
 
-      {(view === 'calendar' || view === 'agenda') && (
+      {view === 'calendar' && (
         <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          {/* #176: sub-toggle Grilla/Agenda de la sub-vista del calendario. */}
+          <div
+            className="inline-flex rounded-md shadow-sm"
+            role="group"
+            aria-label="Modo de calendario"
+          >
+            <button
+              type="button"
+              onClick={() => handleModeChange('grid')}
+              aria-pressed={mode === 'grid'}
+              className={[
+                'rounded-l-md border px-3 py-1.5 text-sm font-medium',
+                mode === 'grid'
+                  ? 'border-blue-600 bg-blue-600 text-white'
+                  : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50',
+              ].join(' ')}
+            >
+              Grilla
+            </button>
+            <button
+              type="button"
+              onClick={() => handleModeChange('agenda')}
+              aria-pressed={mode === 'agenda'}
+              className={[
+                'rounded-r-md border px-3 py-1.5 text-sm font-medium',
+                mode === 'agenda'
+                  ? 'border-blue-600 bg-blue-600 text-white'
+                  : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50',
+              ].join(' ')}
+            >
+              Agenda
+            </button>
+          </div>
           <CalendarNav
             year={visibleMonth.year}
             month={visibleMonth.month}
@@ -1007,7 +1106,7 @@ export default function AppointmentsPage() {
         />
       )}
 
-      {!loading && !error && view === 'calendar' && (
+      {!loading && !error && view === 'calendar' && mode === 'grid' && (
         <MonthCalendar
           year={visibleMonth.year}
           month={visibleMonth.month}
@@ -1018,7 +1117,7 @@ export default function AppointmentsPage() {
         />
       )}
 
-      {!loading && !error && view === 'agenda' && (
+      {!loading && !error && view === 'calendar' && mode === 'agenda' && (
         <AgendaView
           year={visibleMonth.year}
           month={visibleMonth.month}
