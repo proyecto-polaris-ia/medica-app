@@ -3,6 +3,7 @@ import { NotFoundError } from './errors';
 import type {
   AppointmentStatus,
   Patient,
+  PatientAppointmentsPage,
   PatientRecord,
   PatientRecordAppointment,
 } from './types';
@@ -18,6 +19,12 @@ const INACTIVE_FUTURE_STATUSES = new Set<AppointmentStatus>([
   'no_show',
   'attended',
 ]);
+
+/**
+ * Filtro PostgREST de estados inactivos para "citas futuras". Se deriva de la
+ * misma lista que clasificaba el record en memoria: una sola fuente de verdad.
+ */
+const INACTIVE_FUTURE_STATUS_FILTER = `(${[...INACTIVE_FUTURE_STATUSES].join(',')})`;
 
 function toArray<T>(value: unknown): T[] {
   if (Array.isArray(value)) return value as T[];
@@ -68,33 +75,29 @@ function mapAppointment(row: Record<string, unknown>): PatientRecordAppointment 
   };
 }
 
-function isFutureActive(appointment: PatientRecordAppointment, now: Date): boolean {
-  return (
-    new Date(appointment.startAt).getTime() >= now.getTime() &&
-    !INACTIVE_FUTURE_STATUSES.has(appointment.status)
-  );
+/** PostgREST responde 416 cuando el `offset` solicitado excede el total. */
+function isRangeNotSatisfiable(error: { code?: string; message: string }): boolean {
+  return error.code === 'PGRST103' || /range not satisfiable/i.test(error.message);
 }
 
-export function buildPatientRecord(
-  patient: Patient,
-  appointments: PatientRecordAppointment[],
-  now = new Date()
-): PatientRecord {
-  return {
-    patient,
-    upcomingAppointments: appointments
-      .filter((appointment) => isFutureActive(appointment, now))
-      .sort((a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime()),
-    attendedAppointments: appointments
-      .filter((appointment) => appointment.status === 'attended')
-      .sort((a, b) => new Date(b.startAt).getTime() - new Date(a.startAt).getTime()),
-  };
+/**
+ * Verifica que el paciente exista antes de paginar sus citas. Un id válido
+ * que no existe se traduce a `NotFoundError`.
+ */
+async function assertPatientExists(parsedId: string): Promise<void> {
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from('patients')
+    .select('id')
+    .eq('id', parsedId)
+    .single();
+
+  if (error || !data) {
+    throw new NotFoundError('Patient');
+  }
 }
 
-export async function getPatientRecord(
-  patientId: string,
-  now = new Date()
-): Promise<PatientRecord> {
+export async function getPatientRecord(patientId: string): Promise<PatientRecord> {
   const parsedId = parseUuid(patientId, 'id');
   const supabase = getSupabaseAdmin();
 
@@ -108,19 +111,114 @@ export async function getPatientRecord(
     throw new NotFoundError('Patient');
   }
 
-  const { data: appointmentRows, error: appointmentError } = await supabase
-    .from('appointments')
-    .select(APPOINTMENT_SELECT)
-    .eq('patient_id', parsedId)
-    .order('start_at', { ascending: true });
+  // Las citas del expediente se consumen exclusivamente de los endpoints
+  // paginados (`listPatientUpcomingAppointmentsPage` /
+  // `listPatientAttendedAppointmentsPage`): el record queda acotado.
+  return { patient: mapPatient(patientRow) };
+}
 
-  if (appointmentError) {
-    throw new Error(appointmentError.message);
+/**
+ * Página de citas futuras activas del paciente: `start_at` ascendente,
+ * excluyendo estados inactivos y citas en el pasado. `total` cuenta el
+ * conjunto filtrado completo, independientemente de la página. `now` es la
+ * hora del servidor (parámetro para pruebas deterministas).
+ */
+export async function listPatientUpcomingAppointmentsPage(
+  patientId: string,
+  page: number,
+  pageSize: number,
+  now = new Date()
+): Promise<PatientAppointmentsPage> {
+  const parsedId = parseUuid(patientId, 'id');
+  const supabase = getSupabaseAdmin();
+  await assertPatientExists(parsedId);
+
+  const from = (page - 1) * pageSize;
+  const to = from + pageSize - 1;
+
+  const buildQuery = () =>
+    supabase
+      .from('appointments')
+      .select(APPOINTMENT_SELECT, { count: 'exact' })
+      .eq('patient_id', parsedId)
+      .gte('start_at', now.toISOString())
+      .not('status', 'in', INACTIVE_FUTURE_STATUS_FILTER)
+      .order('start_at', { ascending: true })
+      // Desempate estable para que la paginación no repita filas.
+      .order('id', { ascending: true });
+
+  let { data, count, error } = await buildQuery().range(from, to);
+
+  // Una página más allá del total no debe romper la respuesta: PostgREST
+  // responde 416 sin exponer el total, así que se repite la consulta con un
+  // rango válido solo para recuperar el `count` exacto.
+  let outOfRangePage = false;
+  if (error && isRangeNotSatisfiable(error)) {
+    outOfRangePage = true;
+    ({ data, count, error } = await buildQuery().range(0, 0));
   }
 
-  return buildPatientRecord(
-    mapPatient(patientRow),
-    (appointmentRows ?? []).map(mapAppointment),
-    now
-  );
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  if (outOfRangePage) {
+    return { appointments: [], total: count ?? 0 };
+  }
+
+  return {
+    appointments: ((data ?? []) as unknown as Record<string, unknown>[]).map(
+      mapAppointment
+    ),
+    total: count ?? 0,
+  };
+}
+
+/**
+ * Página del historial de citas asistidas del paciente: estado `attended` y
+ * `start_at` descendente (la más reciente primero).
+ */
+export async function listPatientAttendedAppointmentsPage(
+  patientId: string,
+  page: number,
+  pageSize: number
+): Promise<PatientAppointmentsPage> {
+  const parsedId = parseUuid(patientId, 'id');
+  const supabase = getSupabaseAdmin();
+  await assertPatientExists(parsedId);
+
+  const from = (page - 1) * pageSize;
+  const to = from + pageSize - 1;
+
+  const buildQuery = () =>
+    supabase
+      .from('appointments')
+      .select(APPOINTMENT_SELECT, { count: 'exact' })
+      .eq('patient_id', parsedId)
+      .eq('status', 'attended')
+      .order('start_at', { ascending: false })
+      .order('id', { ascending: true });
+
+  let { data, count, error } = await buildQuery().range(from, to);
+
+  let outOfRangePage = false;
+  if (error && isRangeNotSatisfiable(error)) {
+    outOfRangePage = true;
+    ({ data, count, error } = await buildQuery().range(0, 0));
+  }
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  if (outOfRangePage) {
+    return { appointments: [], total: count ?? 0 };
+  }
+
+  return {
+    appointments: ((data ?? []) as unknown as Record<string, unknown>[]).map(
+      mapAppointment
+    ),
+    total: count ?? 0,
+  };
 }
