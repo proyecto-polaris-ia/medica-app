@@ -200,7 +200,7 @@ export default function PatientRecordPage() {
       {!loading && !error && record && (
         <PatientRecordTabs
           patient={record.patient}
-          record={record}
+          syncUrl
           medicalHistory={medicalHistory}
           clinicalVisits={clinicalVisits}
           visitsLoading={visitsLoading}

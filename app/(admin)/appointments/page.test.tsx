@@ -100,8 +100,6 @@ function buildFetchMock() {
         json: () => Promise.resolve({
           record: {
             patient: { id: PATIENT_ID, fullName: 'Paciente A', phoneE164: '+5215512345678', email: 'paciente@example.com', notes: null, createdAt: '2026-09-01T10:00:00.000Z', updatedAt: '2026-09-01T10:00:00.000Z' },
-            upcomingAppointments: [],
-            attendedAppointments: [],
           },
         }),
       });

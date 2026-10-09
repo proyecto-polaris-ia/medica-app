@@ -1,10 +1,15 @@
-import type { PatientRecord } from '@/lib/admin/types';
+import type { Patient } from '@/lib/admin/types';
 import { PatientRecordView } from '@/components/admin/PatientRecordView';
 
 type PatientAppointmentsTabProps = {
-  record: PatientRecord;
+  patient: Patient;
+  /** `true` en `/patients/[id]`; el modal usa estado local. */
+  syncUrl?: boolean;
 };
 
-export function PatientAppointmentsTab({ record }: PatientAppointmentsTabProps) {
-  return <PatientRecordView record={record} />;
+export function PatientAppointmentsTab({
+  patient,
+  syncUrl,
+}: PatientAppointmentsTabProps) {
+  return <PatientRecordView patient={patient} syncUrl={syncUrl} />;
 }
