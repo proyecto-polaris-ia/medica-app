@@ -260,7 +260,7 @@ Suite: `app/(admin)/appointments/page.test.tsx`.
     → `## ADDED Requirements`.
 - [x] 5.3 Confirmar la ausencia de baseline: `ls openspec/specs/admin-appointments`
   → no existe (delta ADDED).
-- [ ] 5.4 Preparar el archive (ejecutado por el orquestador/padre, no en apply):
+- [x] 5.4 Preparar el archive (ejecutado por el orquestador/padre, no en apply):
   mover el change a
   `openspec/changes/archive/YYYY-MM-DD-buscar-paciente-autocomplete-citas/` y
   mergear el delta en `openspec/specs/admin-appointments/spec.md` preservando sin
