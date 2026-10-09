@@ -21,7 +21,6 @@ import type {
 } from "@/lib/admin/metrics/types";
 
 export const DOCTOR_DISCORD_ID = "111222333444555666";
-export const OTHER_DOCTOR_DISCORD_ID = "999888777666555444";
 export const RANGE_LABEL = "6 – 12 de octubre, 2026";
 
 /** Contexto de sesión con principal de Discord, tal como lo entrega el canal. */
