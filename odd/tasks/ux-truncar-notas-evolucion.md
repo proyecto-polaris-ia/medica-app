@@ -19,3 +19,5 @@ Branch: `eliumontoya/ux-truncar-textos-largos-en-notas-de-evoluci-n-c` (worktree
 - `dd512b3` docs(openspec): record ux-truncar-notas-evolucion SDD artifacts and verification
 - Native review: lineage `review-3abdcebea04396e0`, lente review-reliability, estado **approved**, autoridad consumida (`burned`); 4 hallazgos informativos no bloqueantes
 - Verificación: tsc, lint, `npm test` (1810 passed), `npm run build` — PASS
+
+- PR: https://github.com/proyecto-polaris-ia/medica-app/pull/215
