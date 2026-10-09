@@ -11,7 +11,7 @@ Issue: https://github.com/proyecto-polaris-ia/medica-app/issues/176
 - [x] 5. Sincronizar modo (grilla/agenda) con la URL, sin peticiones extra — ?view=calendar&mode=agenda, legacy ?view=agenda migrado, 0 refetch al alternar (tests 14.6/16.x)
 - [x] 6. Verificar: typecheck, lint, tests, build — PASS: lint 0 errores (25 warnings preexistentes), 1793 tests / 0 fail, build exit 0; review nativa approved (4 hallazgos informativos)
 - [x] 7. Archivar change OpenSpec — delta fusionado en openspec/specs/appointments-calendar-view/spec.md; carpeta movida a openspec/changes/archive/2026-10-09-agregar-vista-agenda-calendario/
-- [ ] 8. Commit(s) por unidad de trabajo, push y PR (Closes #176) — commits hechos (eabf256, 188de68); push/PR en curso
+- [x] 8. Commit(s) por unidad de trabajo, push y PR (Closes #176) — eabf256 feat, 188de68 docs archive, 972090a docs odd; PR https://github.com/proyecto-polaris-ia/medica-app/pull/214
 
 ## Notes
 
