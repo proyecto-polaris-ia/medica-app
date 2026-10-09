@@ -139,10 +139,10 @@ Archivo: `app/(admin)/business-hours/page.tsx`.
 
 ## Fase 4 — Archive y PR
 
-- [ ] 4.1 Verificar el conjunto de artefactos del change:
+- [x] 4.1 Verificar el conjunto de artefactos del change:
   `find openspec/changes/agregar-filtro-proveedor-horarios -type f | sort` →
   `proposal.md`, `design.md`, `tasks.md`, `specs/admin-panel/spec.md`.
-- [ ] 4.2 Validación estructural del delta (el repo no tiene el CLI de OpenSpec
+- [x] 4.2 Validación estructural del delta (el repo no tiene el CLI de OpenSpec
   instalado; `.opencode/skill/_shared/openspec-convention.md` describe el formato):
   encabezado `# Delta for Admin Panel` + `**Change**` + `**Baseline**`, sección
   `## ADDED Requirements`, cada requirement con al menos un escenario
@@ -150,7 +150,7 @@ Archivo: `app/(admin)/business-hours/page.tsx`.
   - Verificación: `grep -c "^### Requirement" openspec/changes/agregar-filtro-proveedor-horarios/specs/admin-panel/spec.md`
     → `4`; `grep -n "^## " openspec/changes/agregar-filtro-proveedor-horarios/specs/admin-panel/spec.md`
     → `## ADDED Requirements`.
-- [ ] 4.3 Preparar el archive (ejecutado por el orquestador/padre, no en apply):
+- [x] 4.3 Preparar el archive (ejecutado por el orquestador/padre, no en apply):
   mover el change a
   `openspec/changes/archive/YYYY-MM-DD-agregar-filtro-proveedor-horarios/` y
   mergear el delta en `openspec/specs/admin-panel/spec.md` **sin** duplicar el
