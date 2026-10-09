@@ -19,7 +19,14 @@ tools conversacionales para doctores.
 
 ## Evidence
 
-- (registro de commits por tarea)
+- 92c1bad docs(openspec): artifacts SDD del change
+- cd5edba feat(nora): esqueleto del agente raíz (agent, model, instructions, access, canal)
+- 32a761a feat(nora): 5 tools de métricas sobre el motor getDashboardMetrics
+- fadc527 docs(nora): skills metrics-reporting + data-interpretation
+- 714bdce chore(deploy): servicio eve-nora, rewrites, docs de setup Discord
+- c6986f4 fix(nora): import de MetricsTrend desde trend (ciclo de fix de verificación)
+- d6925d5 docs(openspec): archive del change + deltas promovidos
+- PR: https://github.com/proyecto-polaris-ia/medica-app/pull/208 (Closes #162)
 
 ## Decisions
 
