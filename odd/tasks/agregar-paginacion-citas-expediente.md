@@ -13,8 +13,8 @@ Estado: OpenSpec change `openspec/changes/agregar-paginacion-citas-expediente/`.
 - [ ] 3. RED rutas: pruebas de `/appointments/upcoming` y `/appointments/attended`
 - [ ] 4. RED UI: PatientRecordView con secciones independientes, URL y modal
 - [ ] 5. GREEN: capa de datos + endpoints + UI
-- [ ] 6. Verificación: unit, test:local, tsc, lint, build
-- [ ] 7. Cierre: openspec archive, PR
+- [x] 6. Verificación: unit, test:local, tsc, lint, build
+- [ ] 7. Cierre: PR (decisión del usuario) + openspec archive (CLI ausente aquí)
 
 ## Decisiones clave
 
@@ -44,3 +44,18 @@ Estado: OpenSpec change `openspec/changes/agregar-paginacion-citas-expediente/`.
 - Infra: se subió `hookTimeout` a 60s en `vitest.config.ts` — el advisory lock
   de las suites de datos locales desbordaba los 10s default con ~25 suites en
   paralelo (debilidad preexistente que el change hacía más frecuente).
+
+## Revisión nativa (Gentle AI, RDD)
+
+- Lineage `review-0377c5a34c33829f`, riesgo medio, lente `review-reliability`,
+  25 archivos / 2872 líneas. Resultado: **approved**, sin hallazgos
+  bloqueantes; acknowledgement quemado (`gentle-ai.review-acknowledged/v1`,
+  revisión `sha256:28fae6ee…`). Sugerencias informativas para después:
+  R3-appointments-shape (`PatientRecordView.tsx:85`),
+  R3-range-retry-duplication (`patient-record.ts:202`),
+  R3-url-page-domain (`PatientRecordView.tsx:54`).
+
+## Pendiente
+
+- Push + PR hacia `main` (decisión del usuario).
+- `openspec archive` del change (CLI no disponible en este entorno).

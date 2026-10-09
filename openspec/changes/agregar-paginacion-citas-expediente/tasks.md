@@ -102,6 +102,20 @@ Cada tarea cita los requirements del delta
 
 ## Fase 4 — Cierre
 
-- [ ] 6.1 Commits por unidad de trabajo (Conventional Commits) con pruebas y
-  docs juntos; registrar identidad de commits en el feature doc ODD.
-- [ ] 6.2 `openspec archive` del change y PR hacia `main` (issue #180).
+- [x] 6.1 Commits por unidad de trabajo (Conventional Commits) con pruebas y
+  docs juntos; identidad: `8fb4aca`, `e32df20`, `a00adbb`, `e72ccb1`.
+- [ ] 6.2 Push y PR hacia `main` (issue #180) — decisión del usuario.
+- [ ] 6.3 `openspec archive` del change (CLI no instalado en este entorno;
+  ejecutarlo donde exista `openspec`, tras el merge).
+
+## Revisión nativa (Gentle AI, RDD)
+
+- Lineage `review-0377c5a34c33829f`, riesgo medio, lente `review-reliability`,
+  25 archivos / 2872 líneas, presupuesto de corrección 200.
+- Resultado: **approved** sin hallazgos bloqueantes; 3 sugerencias
+  informativas (trabajo posterior, no reabren la revisión):
+  - R3-appointments-shape — `src/components/admin/PatientRecordView.tsx:85-88`
+  - R3-range-retry-duplication — `src/lib/admin/patient-record.ts:202-214`
+  - R3-url-page-domain — `src/components/admin/PatientRecordView.tsx:54-58`
+- Acknowledgement quemado (`gentle-ai.review-acknowledged/v1`, revisión
+  `sha256:28fae6ee…`); delivery por política ordinaria del repo.
