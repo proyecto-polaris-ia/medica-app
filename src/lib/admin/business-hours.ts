@@ -23,18 +23,83 @@ function mapRow(row: Record<string, unknown>): BusinessHour {
   };
 }
 
-export async function listBusinessHours(): Promise<BusinessHour[]> {
-  const supabase = getSupabaseAdmin();
-  const { data, error } = await supabase
-    .from('business_hours')
-    .select(SELECT_COLUMNS)
-    .order('created_at', { ascending: false });
+export type ListBusinessHoursPageParams = {
+  providerId?: string;
+  page: number;
+  pageSize: number;
+};
+
+export type ListBusinessHoursPageResult = {
+  businessHours: BusinessHour[];
+  total: number;
+};
+
+/** PostgREST responde 416 cuando el `offset` solicitado excede el total. */
+function isRangeNotSatisfiable(error: {
+  code?: string;
+  message: string;
+}): boolean {
+  return error.code === 'PGRST103' || /range not satisfiable/i.test(error.message);
+}
+
+/**
+ * Lectura paginada y filtrada del listado administrativo de horarios.
+ *
+ * El filtro por proveedor se aplica antes de `range()` y `total` sale del
+ * `count: 'exact'` de la misma consulta, de modo que los metadatos describen el
+ * conjunto ya filtrado. Orden estable: `created_at` desc con desempate `id`
+ * desc. Una página fuera de rango (`PGRST103`) responde con `businessHours`
+ * vacío y el `total` real, sin recortar la página solicitada.
+ */
+export async function listBusinessHoursPage(
+  params: ListBusinessHoursPageParams
+): Promise<ListBusinessHoursPageResult> {
+  const providerId =
+    params.providerId === undefined
+      ? undefined
+      : parseUuid(params.providerId, 'providerId');
+
+  const buildQuery = () => {
+    let query = getSupabaseAdmin()
+      .from('business_hours')
+      .select(SELECT_COLUMNS, { count: 'exact' });
+
+    if (providerId) {
+      query = query.eq('provider_id', providerId);
+    }
+
+    return query
+      .order('created_at', { ascending: false })
+      // Desempate estable para que la paginación no repita filas cuando
+      // `created_at` tiene valores iguales.
+      .order('id', { ascending: false });
+  };
+
+  const from = (params.page - 1) * params.pageSize;
+  const { data, count, error } = await buildQuery().range(
+    from,
+    from + params.pageSize - 1
+  );
 
   if (error) {
+    // Una página más allá del total no es un error de negocio: PostgREST
+    // responde 416 sin exponer el total, así que se repite la consulta con un
+    // rango válido solo para recuperar el `count` exacto del conjunto filtrado.
+    if (isRangeNotSatisfiable(error)) {
+      const { count: total, error: countError } = await buildQuery().range(0, 0);
+      if (countError) {
+        throw new Error(countError.message);
+      }
+      return { businessHours: [], total: total ?? 0 };
+    }
+
     throw new Error(error.message);
   }
 
-  return (data ?? []).map(mapRow);
+  return {
+    businessHours: (data ?? []).map(mapRow),
+    total: count ?? 0,
+  };
 }
 
 function validateBusinessHourInput(
