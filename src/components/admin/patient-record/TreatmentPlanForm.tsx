@@ -349,6 +349,7 @@ export function TreatmentPlanForm({
   return (
     <FormModal
       title={title}
+      size="xl"
       onClose={onClose}
       onSubmit={handleSubmit}
       submitLabel={isReadOnly ? undefined : isCreate ? 'Guardar plan' : 'Guardar cambios'}
@@ -500,7 +501,7 @@ export function TreatmentPlanForm({
                       onChange={(e) => handleItemChange(index, 'quantity', e.target.value)}
                       disabled={isReadOnly}
                       placeholder="1"
-                      className={`${tableInputClass} w-16`}
+                      className={`${tableInputClass} w-24 text-right`}
                     />
                   </td>
                   <td className="py-2 pr-2">
@@ -512,7 +513,8 @@ export function TreatmentPlanForm({
                       onChange={(e) => handleItemChange(index, 'unitPrice', e.target.value)}
                       disabled={isReadOnly}
                       placeholder="0.00"
-                      className={`${tableInputClass} w-24`}
+                      inputMode="decimal"
+                      className={`${tableInputClass} w-40 text-right`}
                     />
                   </td>
                   <td className="py-2 pr-2">
