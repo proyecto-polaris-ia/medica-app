@@ -45,9 +45,14 @@ Estado: en progreso
    líneas / 2 unidades de trabajo. Decisiones del writer documentadas:
    `providerId` malformado → 400 (mejora vs citas, que devolvía 500);
    `totalPages=0` cuando `total=0` (convención citas).
-3. [ ] Backend: `page`/`pageSize` en `GET /api/admin/business-hours` +
-   metadatos `{ total, page, pageSize, totalPages }`; paginación después de
-   filtros.
+3. [x] Backend: `listBusinessHoursPage` en `src/lib/admin/business-hours.ts`
+   (count exact, filtro providerId antes de range/count, orden
+   `created_at desc, id desc`, PGRST103 → lista vacía + total real);
+   `listBusinessHours()` retirada (0 referencias). Route con validación
+   estricta (page 1, pageSize 20, máx 100, providerId UUID → 400 si
+   malformado) y respuesta `{ businessHours, pagination }`. TDD RED→GREEN:
+   23/23 route + 15/15 datos contra Supabase local; `tsc --noEmit` limpio. —
+   commit `facf16d`.
 4. [ ] Pruebas de datos contra Supabase local (`npm run test:local`, suites del
    módulo).
 5. [ ] Frontend: controles de paginación bajo la tabla, URL deep-linkeable,
@@ -57,9 +62,18 @@ Estado: en progreso
 7. [ ] Commits de unidad de trabajo en la rama (evidencia abajo).
 8. [ ] Archive del change OpenSpec + PR (Closes #171).
 
-## Evidencia de commits
+## Revisión nativa (RDD)
 
-(por completar)
+- Candidato docs (`d6c9ab5`, target `sha256:a143a83d…`): **approved**
+  (lineage `review-5167fc2288ae8f6f`), 4 hallazgos informativos
+  (R3-validation-coverage-01 WARNING, 3 SUGGESTION) — seguimiento, no
+  bloquean.
+- Candidato docs+backend (`facf16d`, target `sha256:38b9da08…`, lineage
+  `review-5ada60024201bdd8`): captura del revisor falla determinísticamente
+  en admisión (payload escrito completo pero escaneado truncado a byte 4423;
+  el reintento re-reproduce los mismos bytes). Decisión del usuario: candidato
+  dejado **explícitamente sin revisar**; la revisión nativa correrá sobre el
+  candidato final del feature.
 
 ## Verificación
 
