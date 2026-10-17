@@ -88,13 +88,6 @@ export async function GET(request: Request): Promise<Response> {
     );
     const parsedSortDir = parseSortDirParam(searchParams.get('sortDir'));
 
-    if ((start === null) !== (end === null)) {
-      throw new ValidationError(
-        'start',
-        'start and end must be provided together'
-      );
-    }
-
     const result = await listAppointmentsPaged({
       page: parsedPage,
       pageSize: parsedPageSize,

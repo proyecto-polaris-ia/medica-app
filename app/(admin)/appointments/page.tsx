@@ -291,12 +291,11 @@ function listAppointmentsRequestUrl(params: {
   if (params.serviceFilter) search.set('serviceId', params.serviceFilter);
   if (params.patientFilter) search.set('patientId', params.patientFilter.id);
   if (params.providerFilter) search.set('providerId', params.providerFilter);
-  if (params.dateFrom || params.dateTo) {
-    const from = params.dateFrom || '2020-01-01';
-    const to = params.dateTo || '2099-12-31';
-    const { start, end } = listDateRangeBounds(from, to);
-    search.set('start', start);
-    search.set('end', end);
+  if (params.dateFrom) {
+    search.set('start', `${params.dateFrom}T00:00:00.000Z`);
+  }
+  if (params.dateTo) {
+    search.set('end', `${params.dateTo}T23:59:59.999Z`);
   }
   search.set('sort', API_SORT_FIELD[params.sortField]);
   search.set('sortDir', params.sortDirection);

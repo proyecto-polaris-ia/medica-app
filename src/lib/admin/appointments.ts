@@ -241,11 +241,12 @@ export async function listAppointmentsPaged(
 
   let startAt: Date | undefined;
   let endAt: Date | undefined;
-  if (params.startAtIso !== undefined || params.endAtIso !== undefined) {
-    if (params.startAtIso === undefined || params.endAtIso === undefined) {
-      throw new ValidationError('start', 'start and end must be provided together');
-    }
+  if (params.startAtIso !== undefined && params.endAtIso !== undefined) {
     ({ startAt, endAt } = validateDateRange(params.startAtIso, params.endAtIso));
+  } else if (params.startAtIso !== undefined) {
+    startAt = parseIsoDate(params.startAtIso, 'start');
+  } else if (params.endAtIso !== undefined) {
+    endAt = parseIsoDate(params.endAtIso, 'end');
   }
 
   const embed = SORT_EMBED[sort];
@@ -259,10 +260,11 @@ export async function listAppointmentsPaged(
     if (params.serviceId) query = query.eq('service_id', params.serviceId);
     if (params.patientId) query = query.eq('patient_id', params.patientId);
     if (params.providerId) query = query.eq('provider_id', params.providerId);
-    if (startAt && endAt) {
-      query = query
-        .gte('start_at', startAt.toISOString())
-        .lt('start_at', endAt.toISOString());
+    if (startAt) {
+      query = query.gte('start_at', startAt.toISOString());
+    }
+    if (endAt) {
+      query = query.lt('start_at', endAt.toISOString());
     }
 
     return query

@@ -246,16 +246,22 @@ describe('/api/admin/appointments', () => {
       expect(listAppointmentsPaged).not.toHaveBeenCalled();
     });
 
-    it('GET returns 400 when only start is present in list mode', async () => {
+    it('GET accepts only start in list mode', async () => {
+      mockPaged([ROW], 1);
       const res = await get('?start=2026-06-01T06:00:00.000Z');
-      expect(res.status).toBe(400);
-      expect(listAppointmentsPaged).not.toHaveBeenCalled();
+      expect(res.status).toBe(200);
+      expect(listAppointmentsPaged).toHaveBeenCalledWith(
+        expect.objectContaining({ startAtIso: '2026-06-01T06:00:00.000Z' })
+      );
     });
 
-    it('GET returns 400 when only end is present in list mode', async () => {
+    it('GET accepts only end in list mode', async () => {
+      mockPaged([ROW], 1);
       const res = await get('?page=1&end=2026-07-01T06:00:00.000Z');
-      expect(res.status).toBe(400);
-      expect(listAppointmentsPaged).not.toHaveBeenCalled();
+      expect(res.status).toBe(200);
+      expect(listAppointmentsPaged).toHaveBeenCalledWith(
+        expect.objectContaining({ endAtIso: '2026-07-01T06:00:00.000Z' })
+      );
     });
 
     it('GET accepts the pageSize upper boundary of 100', async () => {

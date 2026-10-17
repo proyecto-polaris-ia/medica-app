@@ -1985,7 +1985,7 @@ describe('/appointments list pagination', () => {
     await renderList(fetchMock);
 
     expect(
-      await screen.findByText('No hay citas en esta página.')
+      await screen.findByText('No hay citas que coincidan con los filtros.')
     ).toBeInTheDocument();
     expect(
       screen.getByRole('navigation', { name: 'Paginación de citas' })
@@ -2001,7 +2001,7 @@ describe('/appointments list pagination', () => {
     await renderList(fetchMock);
 
     expect(
-      await screen.findByText('No hay citas registradas.')
+      await screen.findByText('No hay citas que coincidan con los filtros.')
     ).toBeInTheDocument();
     expect(screen.queryByRole('navigation')).not.toBeInTheDocument();
   });
