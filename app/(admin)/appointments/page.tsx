@@ -291,8 +291,10 @@ function listAppointmentsRequestUrl(params: {
   if (params.serviceFilter) search.set('serviceId', params.serviceFilter);
   if (params.patientFilter) search.set('patientId', params.patientFilter.id);
   if (params.providerFilter) search.set('providerId', params.providerFilter);
-  if (params.dateFrom && params.dateTo) {
-    const { start, end } = listDateRangeBounds(params.dateFrom, params.dateTo);
+  if (params.dateFrom || params.dateTo) {
+    const from = params.dateFrom || '2020-01-01';
+    const to = params.dateTo || '2099-12-31';
+    const { start, end } = listDateRangeBounds(from, to);
     search.set('start', start);
     search.set('end', end);
   }
