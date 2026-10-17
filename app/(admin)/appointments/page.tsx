@@ -348,7 +348,7 @@ export default function AppointmentsPage() {
   const [calendarServiceFilter, setCalendarServiceFilter] = useState<string[]>(
     parseServiceIds(searchParams?.get('serviceId'))
   );
-  const [dateFrom, setDateFrom] = useState('');
+  const [dateFrom, setDateFrom] = useState(() => new Date().toISOString().split('T')[0]);
   const [dateTo, setDateTo] = useState('');
   const [sortField, setSortField] = useState<SortField>('startAt');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
@@ -497,7 +497,7 @@ export default function AppointmentsPage() {
 
       const [apptRes, patientRes, providerRes, serviceRes] = await Promise.all([
         fetch(requestUrl),
-        fetch('/api/admin/patients'),
+        fetch('/api/admin/patients?pageSize=100'),
         fetch('/api/admin/providers'),
         fetch('/api/admin/services'),
       ]);
